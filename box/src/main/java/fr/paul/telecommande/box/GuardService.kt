@@ -216,7 +216,12 @@ class GuardService : AccessibilityService() {
     private fun activeProfile(rules: BoxRules): fr.paul.telecommande.shared.Profile? =
         store.activeProfile()?.let { id -> rules.profiles.firstOrNull { it.id == id } }
 
-    private fun audioPlaying() = runCatching { (getSystemService(Context.AUDIO_SERVICE) as AudioManager).isMusicActive }.getOrDefault(false)
+    private fun audioPlaying() = runCatching {
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.isMusicActive || (android.os.Build.VERSION.SDK_INT >= 26 && am.activePlaybackConfigurations.any { c ->
+            // 2 = PLAYER_STATE_STARTED (lecture en cours) ; lu par réflexion, la valeur n'est pas publique avant Android 13
+            runCatching { c.javaClass.getMethod("getPlayerState").invoke(c) as Int }.getOrDefault(2) == 2 })
+    }.getOrDefault(false)
 
     private fun pickProfile(p: fr.paul.telecommande.shared.Profile) {
         val rules = store.rules()
@@ -369,6 +374,7 @@ class GuardService : AccessibilityService() {
 
     @Volatile private var progWatch = false
     private var lastFullRead = 0L
+    private var lastCueRead = 0L
     private var lastReadKey = ""
     private var progDiagUntil = 0L
     private var lastProgDiag = 0L
@@ -449,7 +455,9 @@ class GuardService : AccessibilityService() {
         fun inc(k: String) = o.put(k, o.optInt(k) + 1)
         inc("samples")
         if (title != null) inc("title")
-        val fromScreen = fr.paul.telecommande.shared.RatingReader.read(screen.texts + recentTexts())
+        val cue = fr.paul.telecommande.shared.RatingReader.playerTexts(screen.texts) + fr.paul.telecommande.shared.RatingReader.playerTexts(recentTexts())
+        if (cue.isNotEmpty()) { inc("playerCue"); o.put("lastCue", cue.take(3).joinToString(" · ").take(80)) }
+        val fromScreen = fr.paul.telecommande.shared.RatingReader.read(if (title != null) screen.texts + recentTexts() else cue)
         val fromMeta = fr.paul.telecommande.shared.RatingReader.read(meta)
         if (fromScreen.age != null || fromScreen.contents.isNotEmpty()) inc("ratingScreen")
         if (fromMeta.age != null || fromMeta.contents.isNotEmpty()) inc("ratingMeta")
@@ -494,11 +502,18 @@ class GuardService : AccessibilityService() {
 
     /** Bloque le programme en cours s'il est interdit pour ce profil. true = écran d'interdiction affiché. */
     private fun programCheck(pkg: String, rules: BoxRules, profile: fr.paul.telecommande.shared.Profile?, day: Long): Boolean {
+        val now = System.currentTimeMillis()
         val media = runCatching { Media.nowPlaying(this) }.getOrNull()?.takeIf { it.optString("pkg") == pkg }
-        val playing = media?.optBoolean("playing") == true || audioPlaying()
+        var playing = media?.optBoolean("playing") == true || audioPlaying()
+        // Sans « Titre en cours » ni son détecté : on regarde l'écran (toutes les 5 s) ; un texte de classification
+        // de lecteur (« Classé 7+ », « Rated », « Déconseillé aux moins de… ») indique qu'un programme démarre.
+        if (!playing && now - lastCueRead > 5_000) {
+            lastCueRead = now
+            val texts = readScreen(pkg).texts + recentTexts()
+            if (texts.any { fr.paul.telecommande.shared.RatingReader.isPlayerCue(it) }) playing = true
+        }
         val title = media?.optString("title")?.takeIf { it.isNotBlank() }
         val sub = media?.optString("subtitle")?.takeIf { it.isNotBlank() }
-        val now = System.currentTimeMillis()
         val key = "$pkg|" + (title?.let { fr.paul.telecommande.shared.ProgramFilter.key(it) } ?: "")
         if (!playing && progId >= 0) { progKey = null; progId = -1L }        // pause : la séance d'historique se termine
         if (key != progKey) {
@@ -508,7 +523,7 @@ class GuardService : AccessibilityService() {
         val active = rules.blockedPrograms.isNotEmpty() || rules.maxAge > 0 || (profile?.maxAge ?: 0) > 0 || rules.blockedContents.isNotEmpty()
         val diag = now < progDiagUntil
         // Écoute des textes passagers dès qu'une lecture est en cours (apprentissage permanent, en arrière-plan)
-        if (progWatch != playing) { progWatch = playing; refreshEvents() }
+        if (!progWatch) { progWatch = true; refreshEvents() }
         // La classification ne se lit que pendant une lecture (bande-annonce comprise) : pas sur l'accueil d'une appli
         // Sans règle de programmes : lecture complète de l'écran toutes les 10 s seulement (économie de la box)
         if (playing && (active || diag || now - lastFullRead > 10_000 || key != lastReadKey)) {
@@ -518,7 +533,10 @@ class GuardService : AccessibilityService() {
             // Guide des programmes : classification officielle et genre du programme qui porte ce titre
             val guide = runCatching { TvGuide.find(this, title) }.getOrNull()
             val guideTexts = guide?.let { g -> listOfNotNull(g.age?.let { if (it == 0) "Tous publics" else "$it+" }, g.genres.takeIf { it.isNotBlank() }) } ?: emptyList()
-            val r = fr.paul.telecommande.shared.RatingReader.read(screen.texts + recentTexts() + meta + guideTexts)
+            // Titre connu (lecture confirmée) : tous les textes ; sinon seulement l'annonce du lecteur (« Classé 7+ … »)
+            val shown = if (title != null) screen.texts + recentTexts()
+                else fr.paul.telecommande.shared.RatingReader.playerTexts(screen.texts) + fr.paul.telecommande.shared.RatingReader.playerTexts(recentTexts())
+            val r = fr.paul.telecommande.shared.RatingReader.read(shown + meta + guideTexts)
             if (diag) progDiag(pkg, title, sub, screen, meta, r, guide)
             learn(pkg, title, screen, meta, guide, r)
             if (r.age != null || r.contents.isNotEmpty()) {

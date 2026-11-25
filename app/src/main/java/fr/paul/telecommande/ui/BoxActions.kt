@@ -149,10 +149,11 @@ object BoxActions {
         val apps = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { it.optInt("samples") > 0 }.map { o ->
             val n = o.optInt("samples").coerceAtLeast(1)
             fun pct(k: String) = if (o.optInt(k) > 0) "✓" else "—"
-            val sources = listOf("écran" to pct("ratingScreen"), "lecteur" to pct("ratingMeta"), "guide" to pct("ratingGuide"))
+            val sources = listOf("annonce du lecteur" to pct("playerCue"), "écran" to pct("ratingScreen"), "infos média" to pct("ratingMeta"), "guide" to pct("ratingGuide"))
                 .joinToString(" · ") { "${it.first} ${it.second}" }
             "${o.optString("label")} — titre ${pct("title")} · classification : $sources" +
                 (o.optString("lastRating").takeIf { it.isNotBlank() }?.let { "\nDernière lue : $it" + (o.optString("lastRatingTitle").takeIf { t -> t.isNotBlank() }?.let { t -> " (« $t »)" } ?: "") } ?: "") +
+                (o.optString("lastCue").takeIf { it.isNotBlank() }?.let { "\nAnnonce lue : « $it »" } ?: "") +
                 "\n($n relevés)"
         }
         return head + apps.ifEmpty { listOf("Rien d'appris pour l'instant : la TV apprend toute seule pendant que vous regardez des programmes.") }

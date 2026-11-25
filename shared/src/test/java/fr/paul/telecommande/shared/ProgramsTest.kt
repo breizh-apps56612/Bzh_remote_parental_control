@@ -78,4 +78,22 @@ class RatingTest {
         assertNull(ProgramRules.blockReason(rules, Profile("p", "Parents", unlimited = true, birthYear = year - 9), "Film", null, r("18+")))
         assertEquals(year - 9, Profile.fromJson(JSONObject(nine.toJson().toString())).birthYear)
     }
+
+    @Test fun netflixRatingOverlayIsAPlayerCue() {
+        // Ce qu'affiche Netflix au début d'un épisode (photo du 25/11) : « CLASSÉ 7+ » puis « violence légère »
+        assertTrue(RatingReader.isPlayerCue("CLASSÉ 7+"))
+        assertEquals(7, r("CLASSÉ 7+", "violence légère").age)
+        assertEquals(setOf("violence"), r("CLASSÉ 7+", "violence légère").contents)
+        // Badge « 7+ » d'une page de navigation Netflix (photo du 25/11) : pas un signe de lecture
+        assertTrue(!RatingReader.isPlayerCue("7+"))
+        val browse = listOf("Top 10 des séries jeunesse aujourd'hui : France", "Série", "Documentaire", "2026", "6 Saisons", "7+")
+        assertEquals(emptyList<String>(), RatingReader.playerTexts(browse))
+        assertEquals(listOf("CLASSÉ 7+", "violence légère"), RatingReader.playerTexts(listOf("Pokémon", "CLASSÉ 7+", "violence légère")))
+        assertTrue(RatingReader.isPlayerCue("Déconseillé aux moins de 12 ans"))
+        assertTrue(!RatingReader.isPlayerCue("Pokémon Horizons"))
+        assertTrue(!RatingReader.isPlayerCue("Top 10 des séries aujourd'hui"))
+        // Nael, 4 ans : « Classé 7+ » doit être bloqué
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        assertTrue(ProgramRules.blockReason(BoxRules(enabled = true), Profile("n", "N", birthYear = year - 4), null, null, r("CLASSÉ 7+")) != null)
+    }
 }

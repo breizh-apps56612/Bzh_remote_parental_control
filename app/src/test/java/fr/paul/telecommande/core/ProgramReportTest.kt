@@ -17,7 +17,7 @@ class ProgramReportTest {
         val l = BoxActions.reportLines(res)
         assertTrue(l[0].contains("Titre en cours"))
         assertTrue(l[1].contains("Guide des programmes"))
-        assertTrue(l[2].startsWith("Netflix — titre ✓ · classification : écran ✓ · lecteur — · guide —"))
+        assertTrue(l[2].startsWith("Netflix — titre ✓ · classification : annonce du lecteur — · écran ✓ · infos média — · guide —"))
         assertTrue(l[2].contains("16+ · violence"))
     }
 

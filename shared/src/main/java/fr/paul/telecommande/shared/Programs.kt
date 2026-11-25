@@ -53,6 +53,23 @@ object RatingReader {
     private val PEGI = Regex("pegi (\\d{1,2})")
     private val TV = mapOf("tv ma" to 17, "tv 14" to 14, "tv pg" to 10, "tv y7" to 7, "tv y" to 0, "tv g" to 0)
 
+    /** Texte de classification affiché par un lecteur au début d'une lecture (« CLASSÉ 7+ », « Rated TV-14 »…). */
+    fun isPlayerCue(raw: String): Boolean {
+        val n = " " + ProgramFilter.normalize(raw) + " "
+        return CUE.containsMatchIn(n)
+    }
+
+    /**
+     * Sans titre connu : seule la classification annoncée par le lecteur compte (« Classé 7+ » et les 2 lignes qui suivent,
+     * « violence légère »), pas les badges des pages de navigation (« Série · 2026 · 7+ » sous un titre en vedette).
+     */
+    fun playerTexts(texts: List<String>): List<String> {
+        val out = mutableListOf<String>()
+        texts.forEachIndexed { i, t -> if (isPlayerCue(t)) out += texts.subList(i, minOf(i + 3, texts.size)) }
+        return out.distinct()
+    }
+    private val CUE = Regex(" (classe (tous publics|\\d)|rated|deconseille aux moins|tv (ma|14|pg|y7|y|g)) ")
+
     fun read(texts: List<String>): Rating {
         var age: Int? = null
         fun take(a: Int) { if (a == 0 || a in AGES) age = maxOf(age ?: 0, a) }
