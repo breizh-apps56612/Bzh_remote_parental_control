@@ -135,6 +135,7 @@ class GuardService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
+        devRecord(event)
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED || event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT) {
             // Classification affichée quelques secondes (« 16+ · violence » au début d'une lecture) : on la garde 30 s
             if (progWatch && event.packageName?.toString() == current) harvest(event)
@@ -191,6 +192,72 @@ class GuardService : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
+
+    // ---------- Outils de développement (appareil jumelé seulement) ----------
+
+    private val devEvents = ArrayDeque<JSONObject>()
+
+    /** Les 300 derniers événements d'accessibilité (texte des champs de mot de passe jamais gardé). */
+    private fun devRecord(e: AccessibilityEvent) = runCatching {
+        val pwd = e.isPassword
+        val o = JSONObject().put("t", System.currentTimeMillis()).put("type", AccessibilityEvent.eventTypeToString(e.eventType))
+            .put("pkg", e.packageName?.toString() ?: "").put("class", e.className?.toString()?.substringAfterLast('.') ?: "")
+        if (!pwd) {
+            e.text?.joinToString(" | ")?.takeIf { it.isNotBlank() }?.let { o.put("text", it.take(300)) }
+            e.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { o.put("desc", it.take(300)) }
+        }
+        if (e.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) o.put("changes", e.contentChangeTypes)
+        synchronized(devEvents) { devEvents.addLast(o); while (devEvents.size > 300) devEvents.removeFirst() }
+    }
+
+    private fun devEventsSince(t: Long) = JSONArray().apply { synchronized(devEvents) { devEvents.filter { it.optLong("t") > t }.forEach { put(it) } } }
+
+    /** Arbre complet de l'écran (toutes les fenêtres), pour comprendre ce qu'une appli montre à l'accessibilité. */
+    private fun devScreen(max: Int): JSONObject {
+        val out = JSONObject().put("ok", true).put("current", current ?: "")
+        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+        out.put("touchExploration", am.isTouchExplorationEnabled).put("flags", serviceInfo?.flags ?: 0).put("feedback", serviceInfo?.feedbackType ?: 0)
+        val wins = JSONArray(); var left = max
+        val list = runCatching { windows }.getOrDefault(emptyList())
+        for (w in list) {
+            val wo = JSONObject().put("title", w.title?.toString() ?: "").put("type", w.type).put("layer", w.layer).put("active", w.isActive).put("focused", w.isFocused)
+            val r = android.graphics.Rect(); w.getBoundsInScreen(r); wo.put("bounds", r.flattenToString())
+            val nodes = JSONArray()
+            w.root?.let { root ->
+                wo.put("pkg", root.packageName?.toString() ?: "")
+                val q = ArrayDeque<Pair<android.view.accessibility.AccessibilityNodeInfo, Int>>(); q.add(root to 0)
+                while (q.isNotEmpty() && left > 0) {
+                    val (n, d) = q.removeFirst(); left--
+                    val b = android.graphics.Rect(); n.getBoundsInScreen(b)
+                    val no = JSONObject().put("d", d).put("cls", n.className?.toString()?.substringAfterLast('.') ?: "").put("b", b.flattenToString())
+                    n.viewIdResourceName?.let { no.put("id", it.substringAfterLast('/')) }
+                    if (!n.isPassword) { n.text?.let { no.put("text", it.toString().take(200)) }; n.contentDescription?.let { no.put("desc", it.toString().take(200)) } }
+                    if (n.isFocused) no.put("focused", true); if (n.isAccessibilityFocused) no.put("a11yFocus", true)
+                    if (n.isClickable) no.put("click", true); if (!n.isVisibleToUser) no.put("hidden", true)
+                    if (n.childCount > 0) no.put("children", n.childCount)
+                    nodes.put(no)
+                    for (i in 0 until n.childCount) n.getChild(i)?.let { q.add(it to d + 1) }
+                }
+            }
+            wins.put(wo.put("nodes", nodes))
+        }
+        return out.put("windows", wins)
+    }
+
+    /** Action sur l'élément dont le texte contient [text] (clic, focus d'accessibilité…). */
+    private fun devAction(text: String, action: String): JSONObject {
+        val act = when (action) { "focus" -> android.view.accessibility.AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS
+            "select" -> android.view.accessibility.AccessibilityNodeInfo.ACTION_FOCUS else -> android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK }
+        for (w in runCatching { windows }.getOrDefault(emptyList())) {
+            val root = w.root ?: continue
+            val hit = root.findAccessibilityNodeInfosByText(text).firstOrNull() ?: continue
+            var n: android.view.accessibility.AccessibilityNodeInfo? = hit
+            if (act == android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK) while (n != null && !n.isClickable) n = n.parent
+            val ok = (n ?: hit).performAction(act)
+            return JSONObject().put("ok", ok).put("node", ((n ?: hit).text ?: (n ?: hit).contentDescription ?: "").toString())
+        }
+        return err("Aucun élément ne contient « $text »")
+    }
 
     private var lastFocusLabel = ""
     private var lastFocusAt = 0L
@@ -1040,6 +1107,11 @@ class GuardService : AccessibilityService() {
             JSONObject().put("ok", true)
         }
         "diag" -> JSONObject().put("ok", true).put("events", JSONArray(store.diag()))
+        "dev_screen" -> devScreen(req.optInt("max", 400).coerceIn(10, 1500))
+        "dev_events" -> JSONObject().put("ok", true).put("now", System.currentTimeMillis()).put("events", devEventsSince(req.optLong("since")))
+        "dev_action" -> devAction(req.optString("text"), req.optString("action", "click"))
+        "dev_global" -> JSONObject().put("ok", performGlobalAction(when (req.optString("action")) {
+            "home" -> GLOBAL_ACTION_HOME; "recents" -> GLOBAL_ACTION_RECENTS; "notifications" -> GLOBAL_ACTION_NOTIFICATIONS; else -> GLOBAL_ACTION_BACK }))
         "box_log" -> {
             BoxLog.log("TV", "Journal demandé par $phoneName")
             JSONObject().put("ok", true).put("log", BoxLog.tail(req.optInt("max", 300_000).coerceIn(10_000, 600_000)))

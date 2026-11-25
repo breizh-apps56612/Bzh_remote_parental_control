@@ -1,0 +1,89 @@
+{
+  "manifest_version": "0.2",
+  "name": "telecommande-dev",
+  "display_name": "Télécommande — outils de développement",
+  "version": "1.0.0",
+  "description": "Relie Claude à la box (appli Box et télécommande Android TV) depuis ce PC, pour tester le contrôle parental.",
+  "author": {
+    "name": "breizh-apps56612"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "tv_find",
+      "description": "Trouve la box sur le réseau"
+    },
+    {
+      "name": "tv_pair_start",
+      "description": "Jumelage avec l appli Box"
+    },
+    {
+      "name": "tv_pair_confirm",
+      "description": "Code de jumelage"
+    },
+    {
+      "name": "remote_pair_start",
+      "description": "Jumelage de la télécommande"
+    },
+    {
+      "name": "remote_pair_confirm",
+      "description": "Code de la télécommande"
+    },
+    {
+      "name": "tv_keys",
+      "description": "Touches de la télécommande"
+    },
+    {
+      "name": "tv_status",
+      "description": "État de la TV"
+    },
+    {
+      "name": "tv_screen",
+      "description": "Arbre d accessibilité de l écran"
+    },
+    {
+      "name": "tv_events",
+      "description": "Événements d accessibilité"
+    },
+    {
+      "name": "tv_log",
+      "description": "Journal de la TV"
+    },
+    {
+      "name": "tv_launch",
+      "description": "Ouvrir une appli"
+    },
+    {
+      "name": "tv_action",
+      "description": "Action sur un élément"
+    },
+    {
+      "name": "tv_global",
+      "description": "Retour, accueil…"
+    },
+    {
+      "name": "tv_command",
+      "description": "Commande brute"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "win32",
+      "darwin",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "license": "MIT"
+}
