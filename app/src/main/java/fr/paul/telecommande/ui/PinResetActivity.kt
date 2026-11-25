@@ -9,8 +9,8 @@ import androidx.appcompat.app.AppCompatActivity
 import fr.paul.telecommande.core.DiagLog
 
 /**
- * Code parent oublié : on le remplace UNIQUEMENT après le verrouillage du téléphone
- * (code, schéma ou empreinte du parent). Un enfant ne peut donc pas contourner le contrôle parental.
+ * Code parent oublié : on le remplace après l'empreinte du parent (ou, à défaut d'empreinte enregistrée,
+ * le verrouillage du téléphone).
  */
 class PinResetActivity : AppCompatActivity() {
     companion object {
@@ -24,6 +24,27 @@ class PinResetActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState != null) return
+        // L'empreinte du parent d'abord : le code de verrouillage du téléphone (qu'un enfant peut connaître) n'est
+        // proposé que si aucune empreinte n'est enregistrée, ou si une nouvelle empreinte vient d'être ajoutée.
+        if (ParentAuth.available(this)) {
+            ParentAuth.prompt(this, "Code parent oublié", "Votre empreinte pour créer un nouveau code parent",
+                onOk = { DiagLog.log("PARENTAL", "Identité confirmée par l'empreinte : nouveau code parent"); newPin() },
+                onCode = { DiagLog.log("PARENTAL", "Réinitialisation du code parent annulée"); finish() },
+                onNewFingerprint = { deviceCredential() })
+            return
+        }
+        deviceCredential()
+    }
+
+    private fun newPin() {
+        Ui.createPin(this) { created ->
+            if (created) { DiagLog.log("PARENTAL", "Nouveau code parent enregistré"); onDone?.invoke() }
+            onDone = null
+            finish()
+        }
+    }
+
+    private fun deviceCredential() {
         val km = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         val intent = if (km.isKeyguardSecure) km.createConfirmDeviceCredentialIntent(
             "Code parent oublié", "Déverrouillez le téléphone pour créer un nouveau code parent."
@@ -45,10 +66,6 @@ class PinResetActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode != RESULT_OK) { DiagLog.log("PARENTAL", "Réinitialisation du code parent annulée"); finish(); return }
         DiagLog.log("PARENTAL", "Identité confirmée par le verrouillage du téléphone : nouveau code parent")
-        Ui.createPin(this) { created ->
-            if (created) { DiagLog.log("PARENTAL", "Nouveau code parent enregistré"); onDone?.invoke() }
-            onDone = null
-            finish()
-        }
+        newPin()
     }
 }

@@ -121,6 +121,14 @@ class ParentalStore(context: Context) {
     }
 
     /** Empreinte du code parent envoyée à l'appli Box (jamais le code lui-même). */
+    /** Anti-devinette du code parent sur le téléphone, comme sur la TV (5 essais, puis pauses croissantes). */
+    private val pinThrottle = fr.paul.telecommande.shared.PinThrottle(
+        load = { prefs.getInt("pinFails", 0) to prefs.getLong("pinLockUntil", 0L) },
+        save = { f, u -> prefs.edit().putInt("pinFails", f).putLong("pinLockUntil", u).apply() }
+    )
+
+    fun tryPin(pin: String): fr.paul.telecommande.shared.PinThrottle.Result = pinThrottle.attempt { checkPin(pin) }
+
     val boxPinHash: String get() = prefs.getString("boxPin", "") ?: ""
 
     /** Règles complètes de l'appli Box, mémorisées aussi sur le téléphone. */

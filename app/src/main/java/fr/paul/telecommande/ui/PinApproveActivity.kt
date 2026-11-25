@@ -5,10 +5,6 @@ import android.os.Build
 import android.os.Bundle
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
-import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
-import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import fr.paul.telecommande.core.BoxClient
@@ -53,28 +49,19 @@ class PinApproveActivity : AppCompatActivity() {
 
         fun withPin() = Ui.askPinCode(this, "${device.name} : $title", cancel = { if (!done) finish() }) { approve() }
 
-        val bm = BiometricManager.from(this)
-        val auths = if (Build.VERSION.SDK_INT >= 30) BIOMETRIC_WEAK or DEVICE_CREDENTIAL else BIOMETRIC_WEAK
-        val canBio = bm.canAuthenticate(auths) == BiometricManager.BIOMETRIC_SUCCESS
+        val canBio = ParentAuth.available(this)
 
         lifecycleScope.launch {
             BoxLink.pinClosed.collect { closed -> if (closed == id && !done) { Ui.toast(this@PinApproveActivity, "Le pavé a été fermé sur la TV"); finish() } }
         }
 
-        fun biometric() {
-            val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = approve()
-                override fun onAuthenticationError(code: Int, msg: CharSequence) {
-                    if (code == BiometricPrompt.ERROR_NEGATIVE_BUTTON) withPin() else if (!done) finish()
+        fun biometric() = ParentAuth.prompt(this, "Code parent pour ${device.name}", title, onOk = { approve() },
+            onCode = { withPin() },
+            onNewFingerprint = {
+                Ui.askPinCode(this, "Une nouvelle empreinte a été ajoutée sur ce téléphone. Tapez le code parent une fois pour la confirmer.", cancel = { if (!done) finish() }) {
+                    ParentAuth.reset(); approve()
                 }
             })
-            val info = BiometricPrompt.PromptInfo.Builder()
-                .setTitle("Code parent pour ${device.name}").setSubtitle(title)
-                .setAllowedAuthenticators(auths)
-                .apply { if (Build.VERSION.SDK_INT < 30) setNegativeButtonText("Taper le code parent") }
-                .build()
-            prompt.authenticate(info)
-        }
 
         // Fenêtre claire : ce que demande la TV, un grand bouton principal, les autres choix en dessous
         val c = this

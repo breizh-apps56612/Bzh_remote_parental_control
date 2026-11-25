@@ -228,45 +228,28 @@ object Ui {
         if (ParentalStore(a).hasPin) ok() else createPin(a) { created -> if (created) ok() }
     }
 
-    /** Empreinte, visage ou verrouillage du téléphone disponibles pour confirmer que c'est bien le parent ? */
-    private fun bioAuths() = if (android.os.Build.VERSION.SDK_INT >= 30)
-        androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
-    else androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
-
-    fun canUseBiometric(c: Context) =
-        androidx.biometric.BiometricManager.from(c).canAuthenticate(bioAuths()) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+    fun canUseBiometric(c: Context) = ParentAuth.available(c)
 
     /**
      * Demande le code parent (s'il existe) avant d'exécuter [ok].
-     * Par défaut : l'empreinte (ou le visage / le verrouillage du téléphone). Le code parent reste possible :
-     * bouton « Taper le code parent », ou simplement en fermant la fenêtre de l'empreinte.
+     * Par défaut : l'empreinte (ou le visage), jamais le code de verrouillage du téléphone.
+     * Le code parent reste possible : bouton « Taper le code parent », ou en fermant la fenêtre de l'empreinte.
      */
     fun requirePin(a: Activity, reason: String, cancel: (() -> Unit)? = null, ok: () -> Unit) {
         val store = ParentalStore(a)
         if (!store.hasPin) { ok(); return }
         val fa = a as? androidx.fragment.app.FragmentActivity
-        if (fa == null || !canUseBiometric(a)) { askPinCode(a, reason, cancel, ok); return }
-        var handled = false
-        val prompt = androidx.biometric.BiometricPrompt(fa, androidx.core.content.ContextCompat.getMainExecutor(a),
-            object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
-                    if (handled) return; handled = true; ok()
-                }
-                override fun onAuthenticationError(code: Int, msg: CharSequence) {
-                    if (handled) return; handled = true
-                    // Annulé, trop d'essais, capteur indisponible… : on propose le code parent
-                    if (!a.isFinishing) askPinCode(a, reason, cancel, ok) else cancel?.invoke()
+        if (fa == null || !ParentAuth.available(a)) { askPinCode(a, reason, cancel, ok); return }
+        ParentAuth.prompt(fa, "Code parent", reason, onOk = ok,
+            onCode = { askPinCode(a, reason, cancel, ok) },
+            onNewFingerprint = {
+                askPinCode(a, "Une nouvelle empreinte a été ajoutée sur ce téléphone. Tapez le code parent une fois pour la confirmer.\n\n$reason", cancel) {
+                    ParentAuth.reset(); ok()
                 }
             })
-        val info = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
-            .setTitle("Code parent").setSubtitle(reason)
-            .setAllowedAuthenticators(bioAuths())
-            .apply { if (android.os.Build.VERSION.SDK_INT < 30) setNegativeButtonText("Taper le code parent") }
-            .build()
-        prompt.authenticate(info)
     }
 
-    /** Saisie du code parent au clavier (secours de l'empreinte). */
+    /** Saisie du code parent au clavier (secours de l'empreinte), avec essais limités. */
     fun askPinCode(a: Activity, reason: String, cancel: (() -> Unit)? = null, ok: () -> Unit) {
         val store = ParentalStore(a)
         if (!store.hasPin) { ok(); return }
@@ -277,7 +260,18 @@ object Ui {
         val box = FrameLayout(a).apply { setPadding(dp(a, 20), 0, dp(a, 20), 0); addView(input) }
         AlertDialog.Builder(a).setTitle("Code parent").setMessage(reason).setView(box)
             .setPositiveButton("Valider") { _, _ ->
-                if (store.checkPin(input.text.toString())) ok() else { toast(a, "Code incorrect"); cancel?.invoke() }
+                when (val r = store.tryPin(input.text.toString())) {
+                    fr.paul.telecommande.shared.PinThrottle.Result.Ok -> ok()
+                    is fr.paul.telecommande.shared.PinThrottle.Result.Wrong -> {
+                        toast(a, if (r.triesLeft <= 2) "Code incorrect. Encore ${r.triesLeft} essai${if (r.triesLeft > 1) "s" else ""} avant une pause." else "Code incorrect")
+                        cancel?.invoke()
+                    }
+                    is fr.paul.telecommande.shared.PinThrottle.Result.Locked -> {
+                        if (r.fails > 0) fr.paul.telecommande.core.DiagLog.log("PARENTAL", "${r.fails} codes parent faux sur le téléphone : pause de ${fr.paul.telecommande.shared.RulesEngine.fmt(r.ms)}")
+                        toast(a, "Trop d'essais. Réessayez dans ${fr.paul.telecommande.shared.RulesEngine.fmt(r.ms)}, ou utilisez l'empreinte.")
+                        cancel?.invoke()
+                    }
+                }
             }
             .setNeutralButton("Code oublié ?") { _, _ -> PinResetActivity.start(a, ok) }
             .setNegativeButton("Annuler") { _, _ -> cancel?.invoke() }
@@ -296,7 +290,7 @@ object Ui {
                 val c1 = p1.text.toString(); val c2 = p2.text.toString()
                 if (c1.length !in 4..8) { toast(a, "Le code doit faire 4 à 8 chiffres"); done(false) }
                 else if (c1 != c2) { toast(a, "Les deux codes ne correspondent pas"); done(false) }
-                else { ParentalStore(a).setPin(c1); toast(a, "Code parent enregistré"); done(true) }
+                else { ParentalStore(a).setPin(c1); ParentAuth.reset(); toast(a, "Code parent enregistré"); done(true) }
             }
             .setNegativeButton("Annuler") { _, _ -> done(false) }
             .setOnCancelListener { done(false) }
