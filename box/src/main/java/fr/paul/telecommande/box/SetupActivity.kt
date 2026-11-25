@@ -243,6 +243,7 @@ class SetupActivity : Activity() {
         val i = specialScreen(action, words)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val ok = i != null && runCatching { startActivity(i) }.isSuccess
         getSharedPreferences("box_meta", MODE_PRIVATE).edit().putString("special_$line", i?.component?.flattenToShortString() ?: i?.action ?: "aucun").apply()
+        BoxLog.init(this); BoxLog.log("CONFIG", "$line : " + (i?.component?.flattenToShortString() ?: i?.action ?: "aucun écran trouvé") + if (ok) " (ouvert)" else " (échec)")
         if (!ok || i?.component?.className?.contains("SpecialAppAccess", true) == true)
             AlertDialog.Builder(this).setTitle(line)
                 .setMessage("Dans les Paramètres de la TV : Applications › Accès spéciaux des applications › $line › « Télécommande Box » › Autoriser.\n\n" +

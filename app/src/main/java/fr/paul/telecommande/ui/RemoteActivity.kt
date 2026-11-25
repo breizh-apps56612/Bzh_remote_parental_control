@@ -906,7 +906,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
 
     private fun showJournal() {
         AlertDialog.Builder(this).setTitle("Journal de diagnostic")
-            .setMessage("Le téléphone note tout ce qu'il envoie à la TV et ce qu'elle répond. En cas de problème, envoyez ce journal pour qu'il soit analysé. Il reste sur ce téléphone tant que vous ne l'envoyez pas.")
+            .setMessage("Le téléphone note tout ce qu'il envoie à la TV et ce qu'elle répond ; le journal de la TV (ce qu'elle lit à l'écran et ce qu'elle décide) y est ajouté à l'envoi. En cas de problème, envoyez ce journal pour qu'il soit analysé. Il reste sur ce téléphone tant que vous ne l'envoyez pas.")
             .setPositiveButton("Analyser avec Claude") { _, _ -> fr.paul.telecommande.core.DiagLog.export(this, toClaude = true) }
             .setNegativeButton("Envoyer", ) { _, _ -> fr.paul.telecommande.core.DiagLog.export(this) }
             .setNeutralButton("Effacer") { _, _ -> fr.paul.telecommande.core.DiagLog.clear(); toast("Journal effacé") }

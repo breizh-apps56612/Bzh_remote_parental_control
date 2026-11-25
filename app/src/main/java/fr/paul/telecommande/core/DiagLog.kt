@@ -101,12 +101,31 @@ object DiagLog {
 
     private val CLAUDE_PROMPT = """Voici le journal de diagnostic de mon application « Télécommande » (télécommande Android pour box Android TV).
 Explique-moi en termes simples ce qui se passe et ce que je dois faire pour régler le problème.
-Repères : ATV→ = envoyé à la TV, ATV← = reçu de la TV, APK = envoi de l'appli Box par le téléphone, BT = souris Bluetooth, PARENTAL = contrôle parental, BLOQUÉ = action refusée par sécurité.
+Repères : ATV→ = envoyé à la TV, ATV← = reçu de la TV, APK = envoi de l'appli Box par le téléphone, BT = souris Bluetooth, PARENTAL = contrôle parental, BLOQUÉ = action refusée par sécurité. À la fin : le journal de la TV (APPLI, CLIC, ÉCRAN = textes lus, LECTURE, PROGRAMME, BLOCAGE).
 Le problème que je rencontre : """
 
     fun claudeInstalled(c: Context) = runCatching { c.packageManager.getPackageInfo(CLAUDE_PKG, 0); true }.getOrDefault(false)
 
+    /** Journal de chaque box appairée (appli Box), récupéré au moment de l'export. */
+    private fun boxLogs(c: Context): String = buildString {
+        val boxes = runCatching { DeviceStore(c).all().filter { it.hasBoxApp } }.getOrDefault(emptyList())
+        for (d in boxes) {
+            append("\n\n========== Journal de la TV « ${d.name} » ==========\n")
+            val res = runCatching {
+                kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeout(15_000) { BoxClient.of(c, d).call("box_log") } }
+            }
+            res.onFailure { append("TV injoignable (${it.message ?: it.javaClass.simpleName}) : allumez-la et réessayez.\n") }
+            res.getOrNull()?.let { r ->
+                if (!r.optBoolean("ok")) { append("Réponse : ${r.optString("error", "commande inconnue (mettez l'appli TV à jour)")}\n"); return@let }
+                append(r.optString("log"))
+                r.optJSONArray("learn")?.let { append("\n--- Ce que la TV a appris des applis ---\n${it.toString(1)}\n") }
+            }
+        }
+    }
+
     fun export(a: Activity, toClaude: Boolean = false) {
+        if (runCatching { DeviceStore(a).all().any { it.hasBoxApp } }.getOrDefault(false))
+            android.widget.Toast.makeText(a, "Récupération du journal de la TV…", android.widget.Toast.LENGTH_SHORT).show()
         io.execute {
             val out = File(a.cacheDir, "journal").apply { mkdirs() }
             val name = "journal-telecommande-" + SimpleDateFormat("yyyyMMdd-HHmm", Locale.FRANCE).format(Date()) + ".txt"
@@ -117,6 +136,7 @@ Le problème que je rencontre : """
                 append("Téléphone : ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}\n\n")
                 old()?.takeIf { it.exists() }?.let { append(it.readText()) }
                 current()?.takeIf { it.exists() }?.let { append(it.readText()) }
+                append(boxLogs(a))
             })
             a.runOnUiThread {
                 val uri = FileProvider.getUriForFile(a, a.packageName + ".files", file)

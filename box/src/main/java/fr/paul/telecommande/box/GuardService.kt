@@ -55,6 +55,8 @@ class GuardService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        BoxLog.init(this)
+        BoxLog.log("SERVICE", "Contrôle parental actif (accessibilité connectée)")
         instance = this
         overlays = Overlays(this)
         overlays.onPinRequest = { id, title -> if (::server.isInitialized) server.push(JSONObject().put("event", "pin_request").put("id", id).put("title", title)) }
@@ -70,6 +72,20 @@ class GuardService : AccessibilityService() {
             meta.edit().putString("fp", fp).apply()
             addDiag("start", "Démarrage : ${store.startupInfo}, ${store.phones().size} téléphone(s) appairé(s)")
             meta.getString("accessibilityOpen", null)?.let { addDiag("setup", "Bouton Activer : écran ouvert = $it") }
+            meta.all.filterKeys { it.startsWith("special_") }.forEach { (k, v) -> BoxLog.log("CONFIG", "${k.removePrefix("special_")} : écran ouvert = $v") }
+            meta.all.filterKeys { it.startsWith("special_") }.forEach { (k, v) -> addDiag("setup", "${k.removePrefix("special_")} : écran ouvert = $v") }
+            // Écrans d'accès spéciaux présents dans les Paramètres de la box (pour savoir si Free les a retirés ou seulement cachés)
+            runCatching {
+                val pm = packageManager
+                val found = listOf("com.android.tv.settings", "com.android.settings", "com.android.tv.settings.freebox").flatMap { pkg ->
+                    runCatching { pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_ACTIVITIES).activities?.toList() }.getOrNull().orEmpty()
+                        .filter { a -> listOf("otification", "sage", "pecial").any { a.name.contains(it, true) } }
+                        .map { a -> a.name.substringAfterLast('.') + if (a.exported) "" else " (fermé)" }
+                }
+                val std = listOf("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS", android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                    .joinToString { act -> act.substringAfterLast('.') + "=" + (android.content.Intent(act).resolveActivity(pm)?.className?.substringAfterLast('.') ?: "absent") }
+                addDiag("setup", "Accès spéciaux : $std ; écrans trouvés : ${found.distinct().joinToString().ifEmpty { "aucun" }}")
+            }
         }
         // Fin d'épisode en cours avant un redémarrage / une mise à jour : on reprend la même échéance (pas de temps en plus)
         store.graceState().let { (until, gp) ->
@@ -132,7 +148,10 @@ class GuardService : AccessibilityService() {
                 val label = (event.text?.joinToString(" ").orEmpty() + " " + (event.contentDescription ?: "") + " " +
                     runCatching { event.source?.let { (it.text ?: "").toString() + " " + (it.contentDescription ?: "") } }.getOrNull().orEmpty()).trim()
                 val pkg = event.packageName?.toString()
-                if (pkg != null && fr.paul.telecommande.shared.PlayButtons.isPlay(label)) main.post { playClicked(pkg) }
+                val play = pkg != null && fr.paul.telecommande.shared.PlayButtons.isPlay(label)
+                if (pkg != null && pkg != packageName && runCatching { event.source?.isEditable }.getOrNull() != true)
+                    BoxLog.log("CLIC", "${label(pkg)} : « ${label.take(120)} »" + (if (play) " → bouton Lecture reconnu" else ""))
+                if (play) main.post { playClicked(pkg!!) }
             }
             // Une zone de texte vient d'être sélectionnée : le téléphone peut ouvrir son clavier
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED && runCatching { event.source?.isEditable }.getOrNull() == true) {
@@ -151,6 +170,7 @@ class GuardService : AccessibilityService() {
         if (pkg == packageName || pkg in TRANSIENT || isIme(pkg)) return
         if (pkg == current) return
         current = pkg
+        BoxLog.log("APPLI", "${label(pkg)} ($pkg)" + (event.className?.let { " · $it" } ?: ""))
         lastBlockPkg = null
         server.push(JSONObject().put("event", "app").put("pkg", pkg).put("label", label(pkg)))
         evaluate()
@@ -516,6 +536,8 @@ class GuardService : AccessibilityService() {
         if (!playing && now - lastCueRead > 5_000) {
             lastCueRead = now
             val texts = readScreen(pkg).texts + recentTexts()
+            if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg))
+                BoxLog.change("ÉCRAN", "${label(pkg)} : ${texts.size} textes lisibles" + (if (texts.isEmpty()) " (l'appli ne montre rien à l'accessibilité)" else " : " + texts.take(30).joinToString(" | ") { it.take(60) }))
             if (texts.any { fr.paul.telecommande.shared.RatingReader.isPlayerCue(it) }) playing = true
         }
         val title = media?.optString("title")?.takeIf { it.isNotBlank() }
@@ -565,6 +587,11 @@ class GuardService : AccessibilityService() {
             }
         }
         val allowed = store.programAllowed(day, key) || onceKey == key
+        BoxLog.change("PROGRAMME", "${label(pkg)} · " + (if (playing) "lecture" else "pas de lecture détectée") +
+            " (son ${if (audioPlaying()) "oui" else "non"}, titre ${if (media != null) "« ${title ?: "?"} »" else "inconnu"})" +
+            " · règles ${if (active) "actives (âge max ${profile?.programMaxAge() ?: rules.maxAge})" else "inactives"}" +
+            " · classification ${progRating?.let { ratingLabel(it).ifBlank { "vide" } } ?: "non lue"}" +
+            (reason?.let { " · ${if (allowed) "autorisé par le parent" else "à bloquer"} : $it" } ?: ""))
         if (progId >= 0 && playing) log.extendProgram(progId, now, progRating?.let { ratingLabel(it) }, reason != null && !allowed)
         if (reason == null || allowed) return false
         blockProgram(pkg, title, reason, day, key, profile, unknown)
@@ -594,6 +621,7 @@ class GuardService : AccessibilityService() {
         performGlobalAction(GLOBAL_ACTION_HOME)
         val what = title ?: label(pkg)
         addDiag("program", "Programme bloqué sur ${label(pkg)} : $what. $reason")
+        BoxLog.log("BLOCAGE", "${label(pkg)} : $what · $reason")
         val parent: (() -> Unit)? = if (store.rules().pinHash.isNotBlank()) ({
             overlays.hideBlock()
             overlays.showPinPadEx("Autoriser « ${what.take(40)} » aujourd'hui", ::pinError,
@@ -666,6 +694,9 @@ class GuardService : AccessibilityService() {
             "ask" -> { reason = "Classification introuvable : un parent doit d'abord valider."; unknown = true }
             "block" -> reason = "Classification introuvable : les films et séries non classés sont bloqués."
         }
+        BoxLog.log("LECTURE", "${label(pkg)} : clic sur Lecture · classification de la page = " + (age?.let { "$it+" } ?: "aucune") +
+            (r.contents.takeIf { it.isNotEmpty() }?.let { " · contenus $it" } ?: "") + " · profil ${profile?.name ?: "aucun"} (âge max ${profile?.programMaxAge() ?: 0}) · " +
+            (reason?.let { "BLOQUÉ : $it" } ?: "autorisé") + " · textes : " + texts.take(25).joinToString(" | ") { it.take(60) })
         if (reason == null) return
         addDiag("program", "Lecture interceptée sur ${label(pkg)} (" + (age?.let { "$it+" } ?: "sans classification") + ")")
         blockProgram(pkg, null, reason, day, key, profile, unknown)
@@ -972,6 +1003,11 @@ class GuardService : AccessibilityService() {
             JSONObject().put("ok", true)
         }
         "diag" -> JSONObject().put("ok", true).put("events", JSONArray(store.diag()))
+        "box_log" -> {
+            BoxLog.log("TV", "Journal demandé par $phoneName")
+            JSONObject().put("ok", true).put("log", BoxLog.tail(req.optInt("max", 300_000).coerceIn(10_000, 600_000)))
+                .put("learn", learnReport())
+        }
         "get_rules" -> JSONObject().put("ok", true).put("rules", store.rules().toJson())
         "set_rules" -> {
             val incoming = BoxRules.fromJson(req.optJSONObject("rules"))
