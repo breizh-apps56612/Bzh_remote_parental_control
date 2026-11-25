@@ -51,7 +51,7 @@ class PinApproveActivity : AppCompatActivity() {
             }
         }
 
-        fun withPin() = Ui.requirePin(this, "${device.name} : $title", cancel = { if (!done) finish() }) { approve() }
+        fun withPin() = Ui.askPinCode(this, "${device.name} : $title", cancel = { if (!done) finish() }) { approve() }
 
         val bm = BiometricManager.from(this)
         val auths = if (Build.VERSION.SDK_INT >= 30) BIOMETRIC_WEAK or DEVICE_CREDENTIAL else BIOMETRIC_WEAK

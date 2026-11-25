@@ -228,7 +228,46 @@ object Ui {
         if (ParentalStore(a).hasPin) ok() else createPin(a) { created -> if (created) ok() }
     }
 
+    /** Empreinte, visage ou verrouillage du téléphone disponibles pour confirmer que c'est bien le parent ? */
+    private fun bioAuths() = if (android.os.Build.VERSION.SDK_INT >= 30)
+        androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK or androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    else androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
+
+    fun canUseBiometric(c: Context) =
+        androidx.biometric.BiometricManager.from(c).canAuthenticate(bioAuths()) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+
+    /**
+     * Demande le code parent (s'il existe) avant d'exécuter [ok].
+     * Par défaut : l'empreinte (ou le visage / le verrouillage du téléphone). Le code parent reste possible :
+     * bouton « Taper le code parent », ou simplement en fermant la fenêtre de l'empreinte.
+     */
     fun requirePin(a: Activity, reason: String, cancel: (() -> Unit)? = null, ok: () -> Unit) {
+        val store = ParentalStore(a)
+        if (!store.hasPin) { ok(); return }
+        val fa = a as? androidx.fragment.app.FragmentActivity
+        if (fa == null || !canUseBiometric(a)) { askPinCode(a, reason, cancel, ok); return }
+        var handled = false
+        val prompt = androidx.biometric.BiometricPrompt(fa, androidx.core.content.ContextCompat.getMainExecutor(a),
+            object : androidx.biometric.BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: androidx.biometric.BiometricPrompt.AuthenticationResult) {
+                    if (handled) return; handled = true; ok()
+                }
+                override fun onAuthenticationError(code: Int, msg: CharSequence) {
+                    if (handled) return; handled = true
+                    // Annulé, trop d'essais, capteur indisponible… : on propose le code parent
+                    if (!a.isFinishing) askPinCode(a, reason, cancel, ok) else cancel?.invoke()
+                }
+            })
+        val info = androidx.biometric.BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Code parent").setSubtitle(reason)
+            .setAllowedAuthenticators(bioAuths())
+            .apply { if (android.os.Build.VERSION.SDK_INT < 30) setNegativeButtonText("Taper le code parent") }
+            .build()
+        prompt.authenticate(info)
+    }
+
+    /** Saisie du code parent au clavier (secours de l'empreinte). */
+    fun askPinCode(a: Activity, reason: String, cancel: (() -> Unit)? = null, ok: () -> Unit) {
         val store = ParentalStore(a)
         if (!store.hasPin) { ok(); return }
         val input = EditText(a).apply {
