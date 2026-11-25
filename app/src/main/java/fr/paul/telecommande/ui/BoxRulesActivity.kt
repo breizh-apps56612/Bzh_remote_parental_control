@@ -249,42 +249,6 @@ class BoxRulesActivity : AppCompatActivity() {
                 remove?.let { k -> rules.allowedPrograms.removeAll { it.key == k } }; save() } })
         root.addView(prog, Ui.lp(c, 8))
 
-        // ===== Netflix : il ne montre pas ses classifications, son propre contrôle parental s'en charge =====
-        root.addView(section("Netflix"), Ui.lp(c, 26))
-        root.addView(Ui.text(c, "Netflix ne montre pas la classification de ses programmes aux autres applis. Réglez son contrôle parental (une fois, depuis votre compte Netflix) ; la TV garde le temps d'écran et les horaires.", 13f, muted = true).apply {
-            setPadding(Ui.dp(c, 6), 0, Ui.dp(c, 6), 0) }, Ui.lp(c, 4))
-        val nf = Ui.group(c)
-        val nfPrefs = getSharedPreferences("netflix_setup", MODE_PRIVATE)
-        val kidName = kids.firstOrNull()?.name ?: "l'enfant"
-        val kidAge = kids.firstOrNull()?.age()
-        val steps = listOf(
-            "kids" to ("Profil Enfant pour $kidName" to "Profils › ajouter ou modifier › « Profil Enfant »"),
-            "age" to ("Limite d'âge" to (kidAge?.let { "Contrôle parental du profil › jusqu'à « ${when { it < 7 -> "Tous publics"; it < 13 -> "7+"; it < 16 -> "13+"; else -> "16+" }} »" } ?: "Contrôle parental du profil › limite d'âge")),
-            "lock" to ("Code sur les profils adultes" to "Verrouillage du profil › code à 4 chiffres, pour chaque profil adulte"))
-        steps.forEachIndexed { i, (k, t) ->
-            val done = nfPrefs.getBoolean("${device.id}_$k", false)
-            Ui.addRow(nf, Ui.row(c, if (done) "✓" else "${i + 1}", t.first, t.second, if (done) "Fait" else "À faire") {
-                nfPrefs.edit().putBoolean("${device.id}_$k", !done).apply(); render() })
-        }
-        Ui.addRow(nf, Ui.row(c, "↗", "Ouvrir les réglages Netflix", "Profils et contrôle parental de votre compte (mot de passe Netflix demandé)") {
-            runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.netflix.com/account/profiles"))) }
-                .onFailure { Ui.toast(c, "Aucun navigateur pour ouvrir netflix.com") }
-        })
-        val allDone = steps.all { nfPrefs.getBoolean("${device.id}_${it.first}", false) }
-        Ui.addRow(nf, Ui.row(c, "❔", "Quand un enfant lance une vidéo",
-            when (rules.unknownPolicy) {
-                "ask" -> "La TV vous demande d'abord (cette fois ou aujourd'hui)"
-                "block" -> "Netflix est bloqué pour les profils enfants"
-                else -> if (allDone) "Netflix filtre lui-même" else "Autorisé sans vérification : faites d'abord les 3 réglages"
-            }, mapOf("ask" to "Demander", "allow" to "Autoriser", "block" to "Bloquer")[rules.unknownPolicy]) {
-            androidx.appcompat.app.AlertDialog.Builder(c).setTitle("Vidéo sans classification lisible (Netflix…)")
-                .setMessage(if (allDone) "Les 3 réglages Netflix sont faits : vous pouvez choisir « Autoriser »." else "Tant que le profil Enfant de Netflix n'est pas réglé, gardez « Demander ».")
-                .setPositiveButton("Demander") { _, _ -> rules.unknownPolicy = "ask"; save() }
-                .setNeutralButton("Autoriser") { _, _ -> rules.unknownPolicy = "allow"; save() }
-                .setNegativeButton("Bloquer") { _, _ -> rules.unknownPolicy = "block"; save() }.show()
-        })
-        root.addView(nf, Ui.lp(c, 8))
-
         // ===== Confort =====
         root.addView(section("Confort"), Ui.lp(c, 26))
         val comfort = Ui.group(c)

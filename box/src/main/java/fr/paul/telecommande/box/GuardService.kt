@@ -184,7 +184,6 @@ class GuardService : AccessibilityService() {
         if (pkg == packageName || pkg in TRANSIENT || isIme(pkg)) return
         if (pkg == current) return
         current = pkg
-        onceKey?.let { if (!it.startsWith("$pkg|")) onceKey = null }      // « Cette fois » : jusqu'à la sortie de l'appli
         if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg) && !progWatch) { progWatch = true; refreshEvents() }
         BoxLog.log("APPLI", "${label(pkg)} ($pkg)" + (event.className?.let { " · $it" } ?: ""))
         lastBlockPkg = null
@@ -715,8 +714,6 @@ class GuardService : AccessibilityService() {
         val title = media?.optString("title")?.takeIf { it.isNotBlank() }
         val sub = media?.optString("subtitle")?.takeIf { it.isNotBlank() }
         val key = "$pkg|" + (title?.let { fr.paul.telecommande.shared.ProgramFilter.key(it) } ?: "")
-        if (playing && !wasPlaying) playSince = now
-        wasPlaying = playing
         if (!playing && progId >= 0) { progKey = null; progId = -1L }        // pause : la séance d'historique se termine
         if (key != progKey) {
             progKey = key; keySince = now; progRating = if (title != null) ratings[key] else null
@@ -754,13 +751,10 @@ class GuardService : AccessibilityService() {
         var reason = if (active) fr.paul.telecommande.shared.ProgramRules.blockReason(rules, profile, title, sub, progRating) else null
         // Film ou série sans classification lisible après 10 s de lecture : demander au parent (ou bloquer), selon son réglage
         var unknown = false
-        // Sans titre (appli qui ne montre rien, comme Netflix) : même règle, 10 s après le début de la lecture
-        val since = if (title != null) keySince else playSince
-        if (active && reason == null && playing && now - since > 10_000) {
-            val blind = title == null
+        if (active && reason == null && title != null && playing && now - keySince > 10_000) {
             when (fr.paul.telecommande.shared.ProgramRules.unknownAction(rules, profile, pkg, title, progRating)) {
-                "ask" -> { reason = if (blind) "${label(pkg)} ne montre pas la classification de ses programmes : un parent doit valider." else "Classification introuvable : un parent doit d'abord valider."; unknown = true }
-                "block" -> reason = if (blind) "${label(pkg)} ne montre pas la classification de ses programmes : bloqué pour ce profil." else "Classification introuvable : les films et séries non classés sont bloqués."
+                "ask" -> { reason = "Classification introuvable : un parent doit d'abord valider."; unknown = true }
+                "block" -> reason = "Classification introuvable : les films et séries non classés sont bloqués."
             }
         }
         val allowed = store.programAllowed(day, key) || onceKey == key
@@ -780,8 +774,6 @@ class GuardService : AccessibilityService() {
             fr.paul.telecommande.shared.RatingReader.CONTENT_LABELS[it]?.lowercase() ?: it }).joinToString(" · ")
 
     private var lastProgramBlock = ""
-    private var wasPlaying = false
-    private var playSince = 0L
     private var keySince = 0L
     /** « Cette fois » : autorisé jusqu'au prochain programme. */
     @Volatile private var onceKey: String? = null
