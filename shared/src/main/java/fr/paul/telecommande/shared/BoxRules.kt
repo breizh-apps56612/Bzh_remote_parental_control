@@ -94,7 +94,11 @@ data class BoxRules(
     /** Âge maximum des programmes (0 = pas de limite), lu sur la classification affichée (7+, -12, 16+…). */
     var maxAge: Int = 0,
     /** Contenus interdits quand l'appli les signale : violence, peur, sexe, langage, drogues, suicide. */
-    var blockedContents: MutableList<String> = mutableListOf()
+    var blockedContents: MutableList<String> = mutableListOf(),
+    /** Film ou série sans classification lisible : "allow", "ask" (demander au parent, par défaut) ou "block". */
+    var unknownPolicy: String = "ask",
+    /** Titres « toujours autorisés » par le parent : pour un enfant (profile = son id) ou toute la famille (profile vide). */
+    var allowedPrograms: MutableList<AllowedProgram> = mutableListOf()
 ) {
     /** Règles effectives pour un profil (parent = aucune limite). */
     fun forProfile(p: Profile?): BoxRules {
@@ -115,6 +119,8 @@ data class BoxRules(
             .put("activeFrom", activeFrom).put("activeTo", activeTo).put("activeDays", activeDays)
             .put("blockedPrograms", org.json.JSONArray(blockedPrograms))
             .put("maxAge", maxAge).put("blockedContents", org.json.JSONArray(blockedContents))
+            .put("unknownPolicy", unknownPolicy)
+            .put("allowedPrograms", org.json.JSONArray().apply { allowedPrograms.forEach { put(it.toJson()) } })
     }
 
     companion object {
@@ -132,7 +138,9 @@ data class BoxRules(
                 AppRule.minuteOf(o.optInt("activeFrom")), AppRule.minuteOf(o.optInt("activeTo")), o.optInt("activeDays", AppRule.ALL_DAYS) and AppRule.ALL_DAYS,
                 o.optJSONArray("blockedPrograms")?.let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() }.take(200).toMutableList() } ?: mutableListOf(),
                 o.optInt("maxAge").coerceIn(0, 18),
-                o.optJSONArray("blockedContents")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it in RatingReader.CONTENTS.keys }.toMutableList() } ?: mutableListOf()
+                o.optJSONArray("blockedContents")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it in RatingReader.CONTENTS.keys }.toMutableList() } ?: mutableListOf(),
+                o.optString("unknownPolicy", "ask").takeIf { it in setOf("allow", "ask", "block") } ?: "ask",
+                o.optJSONArray("allowedPrograms")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it)?.let(AllowedProgram::fromJson) }.take(500).toMutableList() } ?: mutableListOf()
             )
         }
     }

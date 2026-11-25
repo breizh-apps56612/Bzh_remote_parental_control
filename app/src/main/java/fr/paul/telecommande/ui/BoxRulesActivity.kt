@@ -210,6 +210,45 @@ class BoxRulesActivity : AppCompatActivity() {
         }
         root.addView(list, Ui.lp(c, 8))
 
+        // ===== Programmes =====
+        root.addView(section("Programmes"), Ui.lp(c, 26))
+        root.addView(Ui.text(c, "La TV lit la classification (7+, -12, 16+…) au clic sur « Lecture » et au début de la lecture.", 13f, muted = true).apply {
+            setPadding(Ui.dp(c, 6), 0, Ui.dp(c, 6), 0) }, Ui.lp(c, 4))
+        val prog = Ui.group(c)
+        val kids = rules.profiles.filter { !it.unlimited }
+        Ui.addRow(prog, Ui.row(c, "🎂", "Selon l'âge de chaque enfant",
+            if (kids.isEmpty()) "Ajoutez un profil enfant avec son âge" else kids.joinToString(" · ") { "${it.name} : ${it.age()?.let { a -> "jusqu'à $a ans" } ?: "âge à renseigner"}" }) {
+            if (kids.isNotEmpty()) editProfile(rules.profiles.indexOf(kids.first()))
+        })
+        val labels = fr.paul.telecommande.shared.RatingReader.CONTENT_LABELS
+        Ui.addRow(prog, Ui.row(c, "⚠️", "Contenus interdits",
+            rules.blockedContents.mapNotNull { labels[it] }.joinToString(", ").ifEmpty { "Aucun (l'âge suffit)" }) {
+            val keys = labels.keys.toList()
+            val checked = keys.map { it in rules.blockedContents }.toBooleanArray()
+            androidx.appcompat.app.AlertDialog.Builder(c).setTitle("Interdire quand l'appli signale…")
+                .setMultiChoiceItems(keys.map { labels[it] }.toTypedArray(), checked) { _, i, on -> checked[i] = on }
+                .setPositiveButton("Enregistrer") { _, _ -> rules.blockedContents = keys.filterIndexed { i, _ -> checked[i] }.toMutableList(); save() }
+                .setNegativeButton("Annuler", null).show()
+        })
+        val policies = listOf("ask" to "Demander au parent", "allow" to "Autoriser", "block" to "Bloquer")
+        Ui.addRow(prog, Ui.row(c, "❔", "Sans classification", "Films et séries (Netflix, Disney+…)",
+            mapOf("ask" to "Demander", "allow" to "Autoriser", "block" to "Bloquer")[rules.unknownPolicy]) {
+            androidx.appcompat.app.AlertDialog.Builder(c).setTitle("Film ou série sans classification lisible")
+                .setSingleChoiceItems(policies.map { it.second }.toTypedArray(), policies.indexOfFirst { it.first == rules.unknownPolicy }) { d, i ->
+                    d.dismiss(); rules.unknownPolicy = policies[i].first; save() }
+                .setNegativeButton("Annuler", null).show()
+        })
+        Ui.addRow(prog, Ui.row(c, "🚫", "Titres et chaînes interdits",
+            rules.blockedPrograms.joinToString(", ").ifEmpty { "Aucun · ex. une série, une chaîne YouTube" }) { editWordList(
+                "Titres et chaînes interdits", rules.blockedPrograms.map { it to it }) { remove, add ->
+                remove?.let { rules.blockedPrograms.remove(it) }; add?.let { if (it !in rules.blockedPrograms) rules.blockedPrograms += it }; save() } })
+        Ui.addRow(prog, Ui.row(c, "✅", "Toujours autorisés",
+            rules.allowedPrograms.joinToString(", ") { it.title }.ifEmpty { "Aucun · ajoutés quand vous répondez « Toujours »" }) {
+            editWordList("Toujours autorisés", rules.allowedPrograms.map { a ->
+                a.key to (a.title + "  ·  " + (rules.profiles.firstOrNull { it.id == a.profile }?.name ?: "toute la famille")) }, canAdd = false) { remove, _ ->
+                remove?.let { k -> rules.allowedPrograms.removeAll { it.key == k } }; save() } })
+        root.addView(prog, Ui.lp(c, 8))
+
         // ===== Confort =====
         root.addView(section("Confort"), Ui.lp(c, 26))
         val comfort = Ui.group(c)
@@ -229,6 +268,26 @@ class BoxRulesActivity : AppCompatActivity() {
         val sec = Ui.group(c)
         Ui.addRow(sec, Ui.switchRow(c, "🔒", "Protéger les Paramètres de la TV", "Empêche de couper la protection ou de supprimer l'appli", rules.protectSettings) { rules.protectSettings = it; save() })
         root.addView(sec, Ui.lp(c, 8))
+    }
+
+    /** Liste modifiable : toucher un élément propose de le retirer ; « Ajouter » demande un titre ou une chaîne. */
+    private fun editWordList(title: String, items: List<Pair<String, String>>, canAdd: Boolean = true, done: (remove: String?, add: String?) -> Unit) {
+        val c = this
+        val b = androidx.appcompat.app.AlertDialog.Builder(c).setTitle(title)
+        if (items.isEmpty()) b.setMessage(if (canAdd) "Rien pour l'instant." else "Rien pour l'instant. Ils s'ajoutent quand vous répondez « Toujours » à une demande.")
+        else b.setItems(items.map { "✕  " + it.second }.toTypedArray()) { _, i ->
+            androidx.appcompat.app.AlertDialog.Builder(c).setMessage("Retirer « ${items[i].second.substringBefore("  ·  ")} » ?")
+                .setPositiveButton("Retirer") { _, _ -> done(items[i].first, null) }.setNegativeButton("Annuler", null).show()
+        }
+        if (canAdd) b.setPositiveButton("Ajouter") { _, _ ->
+            val input = android.widget.EditText(c).apply { hint = "Titre, chaîne ou mot"; inputType = android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES }
+            val frame = android.widget.FrameLayout(c).apply { setPadding(Ui.dp(c, 20), 0, Ui.dp(c, 20), 0); addView(input) }
+            androidx.appcompat.app.AlertDialog.Builder(c).setTitle("Interdire").setView(frame)
+                .setMessage("Comparé sans accents ni majuscules, par mots entiers : « chat » n'interdit pas « château ».")
+                .setPositiveButton("Ajouter") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let { done(null, it.take(60)) } }
+                .setNegativeButton("Annuler", null).show()
+        }
+        b.setNegativeButton("Fermer", null).show()
     }
 
     private fun summary(r: AppRule?): String {

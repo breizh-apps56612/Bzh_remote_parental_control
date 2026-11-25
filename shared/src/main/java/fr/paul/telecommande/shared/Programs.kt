@@ -92,7 +92,21 @@ object RatingReader {
 
 /** Pourquoi un programme est interdit pour ce profil, ou null. */
 object ProgramRules {
+    /** Le parent a « toujours autorisé » ce titre, pour cet enfant ou pour toute la famille. */
+    fun alwaysAllowed(rules: BoxRules, profile: Profile?, title: String?): Boolean {
+        val k = title?.let { ProgramFilter.key(it) }?.takeIf { it.isNotEmpty() } ?: return false
+        return rules.allowedPrograms.any { it.key == k && (it.profile.isEmpty() || it.profile == profile?.id) }
+    }
+
+    /** Film ou série dont la classification reste introuvable : null = rien à faire, sinon "ask" ou "block". */
+    fun unknownAction(rules: BoxRules, profile: Profile?, pkg: String, title: String?, rating: Rating?): String? {
+        if (rating?.age != null || profile?.unlimited == true || !FilmApps.isFilmApp(pkg)) return null
+        if (alwaysAllowed(rules, profile, title)) return null
+        return rules.unknownPolicy.takeIf { it != "allow" }
+    }
+
     fun blockReason(rules: BoxRules, profile: Profile?, title: String?, subtitle: String?, rating: Rating?): String? {
+        if (alwaysAllowed(rules, profile, title)) return null
         ProgramFilter.match(rules.blockedPrograms, title, subtitle)?.let { return "« $it » fait partie des programmes interdits." }
         val maxAge = profile?.programMaxAge()?.takeIf { it > 0 } ?: rules.maxAge
         val age = rating?.age
@@ -100,5 +114,29 @@ object ProgramRules {
         val banned = rating?.contents.orEmpty().intersect(rules.blockedContents.toSet())
         if (banned.isNotEmpty()) return "Contenu signalé : " + banned.joinToString(", ") { RatingReader.CONTENT_LABELS[it] ?: it }.lowercase() + "."
         return null
+    }
+}
+
+/** Titre « toujours autorisé » : [key] = titre normalisé ; [profile] vide = toute la famille. */
+data class AllowedProgram(val key: String, val title: String, val profile: String = "") {
+    fun toJson(): org.json.JSONObject = org.json.JSONObject().put("key", key).put("title", title).put("profile", profile)
+    companion object {
+        fun fromJson(o: org.json.JSONObject) = o.optString("key").takeIf { it.isNotBlank() }?.let { AllowedProgram(it, o.optString("title"), o.optString("profile")) }
+    }
+}
+
+/** Applis de films et séries : la règle « sans classification » ne s'applique qu'à elles (pas à YouTube ni à la TV en direct). */
+object FilmApps {
+    private val HINTS = listOf("netflix", "disney", "amazonvideo", "primevideo", "canal", "appletv", "atve", "hbo", "wbd", "paramount",
+        "ocs", "rakuten", "crunchyroll", "starz", "mubi", "universcine", "filmo", "adn")
+    fun isFilmApp(pkg: String): Boolean = pkg.lowercase().let { p -> HINTS.any { p.contains(it) } }
+}
+
+/** Mots des boutons qui lancent une lecture (Netflix, Disney+, Prime Video… en français et en anglais). */
+object PlayButtons {
+    private val WORDS = Regex("^(lecture|lire|regarder|reprendre|reprendre la lecture|commencer|lancer|play|resume|watch|watch now|start|continuer)\\b")
+    fun isPlay(label: String?): Boolean {
+        val n = ProgramFilter.normalize(label ?: "")
+        return n.isNotEmpty() && n.length <= 60 && (WORDS.containsMatchIn(n) || Regex("\\b(episode|ep) \\d+ (lecture|play)\\b").containsMatchIn(n))
     }
 }

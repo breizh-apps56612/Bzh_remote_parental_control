@@ -72,7 +72,7 @@ class Overlays(private val ctx: Context) {
     // ---------- Écran « Temps écoulé » ----------
 
     fun showBlock(title: String, reason: String, canRequest: Boolean, requestMinutes: Int, pending: Boolean,
-                  onParentCode: (() -> Unit)? = null, icon: String = "⏳", onRequest: () -> Unit) = ui {
+                  onParentCode: (() -> Unit)? = null, icon: String = "⏳", requestLabel: String? = null, onRequest: () -> Unit) = ui {
         remove(block)
         val root = BoxUi.Fit(ctx).apply { background = BoxUi.scrim() }
         val c = card()
@@ -83,7 +83,7 @@ class Overlays(private val ctx: Context) {
         var first: View? = null
         if (canRequest) {
             val b = if (pending) button("Demande envoyée, en attente…", false) {} .apply { isEnabled = false }
-            else button("Demander $requestMinutes min de plus", true) { onRequest() }
+            else button(requestLabel ?: "Demander $requestMinutes min de plus", true) { onRequest() }
             row.addView(b, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(16) })
             if (!pending) first = b
         }

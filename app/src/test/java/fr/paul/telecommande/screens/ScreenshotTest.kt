@@ -160,7 +160,7 @@ class ScreenshotTest {
         set(r, "unlocked", true); set(r, "syncState", "Synchronisé avec la box")
         set(r, "apps", listOf("com.netflix.ninja" to "Netflix", "com.google.android.youtube.tv" to "YouTube", "com.disney.disneyplus" to "Disney+", "com.twitch.android.app" to "Twitch", "fr.francetv.pluzz" to "france.tv"))
         call(r, "render"); layout(r)
-        for (i in 0..40) { scroller(r).scrollTo(0, i * 60); save(r, "regles-%02d".format(i)) }
+        for (i in 0..64) { scroller(r).scrollTo(0, i * 60); save(r, "regles-%02d".format(i)) }
 
         val d = Robolectric.buildActivity(BoxDashboardActivity::class.java, intent(BoxDashboardActivity::class.java, BoxDashboardActivity.EXTRA_ID)).setup().get()
         set(d, "status", status(withRequest = false)); set(d, "week", week()); set(d, "error", null)

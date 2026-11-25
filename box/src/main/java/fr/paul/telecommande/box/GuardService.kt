@@ -128,6 +128,12 @@ class GuardService : AccessibilityService() {
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             lastInteraction = System.currentTimeMillis()      // l'utilisateur se déplace avec la télécommande
+            if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+                val label = (event.text?.joinToString(" ").orEmpty() + " " + (event.contentDescription ?: "") + " " +
+                    runCatching { event.source?.let { (it.text ?: "").toString() + " " + (it.contentDescription ?: "") } }.getOrNull().orEmpty()).trim()
+                val pkg = event.packageName?.toString()
+                if (pkg != null && fr.paul.telecommande.shared.PlayButtons.isPlay(label)) main.post { playClicked(pkg) }
+            }
             // Une zone de texte vient d'être sélectionnée : le téléphone peut ouvrir son clavier
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED && runCatching { event.source?.isEditable }.getOrNull() == true) {
                 val now = System.currentTimeMillis()
@@ -517,10 +523,13 @@ class GuardService : AccessibilityService() {
         val key = "$pkg|" + (title?.let { fr.paul.telecommande.shared.ProgramFilter.key(it) } ?: "")
         if (!playing && progId >= 0) { progKey = null; progId = -1L }        // pause : la séance d'historique se termine
         if (key != progKey) {
-            progKey = key; progRating = if (title != null) ratings[key] else null
+            progKey = key; keySince = now; progRating = if (title != null) ratings[key] else null
+            if (onceKey != key) onceKey = null
             progId = if (title != null && playing) log.openProgram(pkg, title, sub ?: "", profile?.id ?: "", now) else -1L
         }
-        val active = rules.blockedPrograms.isNotEmpty() || rules.maxAge > 0 || (profile?.maxAge ?: 0) > 0 || rules.blockedContents.isNotEmpty()
+        // Règles de programmes en vigueur : mots interdits, âge (réglé ou celui de l'enfant), contenus, ou films sans classification
+        val active = profile?.unlimited != true && (rules.blockedPrograms.isNotEmpty() || rules.maxAge > 0 || (profile?.programMaxAge() ?: 0) > 0 ||
+            rules.blockedContents.isNotEmpty() || (rules.unknownPolicy != "allow" && fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg)))
         val diag = now < progDiagUntil
         // Écoute des textes passagers dès qu'une lecture est en cours (apprentissage permanent, en arrière-plan)
         if (!progWatch) { progWatch = true; refreshEvents() }
@@ -546,10 +555,19 @@ class GuardService : AccessibilityService() {
                 if (title != null) progRating?.let { ratings[key] = it }
             } else if (title == null) progRating = null
         }
-        val reason = if (active) fr.paul.telecommande.shared.ProgramRules.blockReason(rules, profile, title, sub, progRating) else null
-        if (progId >= 0 && playing) log.extendProgram(progId, now, progRating?.let { ratingLabel(it) }, reason != null && !store.programAllowed(day, key))
-        if (reason == null || store.programAllowed(day, key)) return false
-        blockProgram(pkg, title, reason, day, key)
+        var reason = if (active) fr.paul.telecommande.shared.ProgramRules.blockReason(rules, profile, title, sub, progRating) else null
+        // Film ou série sans classification lisible après 10 s de lecture : demander au parent (ou bloquer), selon son réglage
+        var unknown = false
+        if (active && reason == null && title != null && playing && now - keySince > 10_000) {
+            when (fr.paul.telecommande.shared.ProgramRules.unknownAction(rules, profile, pkg, title, progRating)) {
+                "ask" -> { reason = "Classification introuvable : un parent doit d'abord valider."; unknown = true }
+                "block" -> reason = "Classification introuvable : les films et séries non classés sont bloqués."
+            }
+        }
+        val allowed = store.programAllowed(day, key) || onceKey == key
+        if (progId >= 0 && playing) log.extendProgram(progId, now, progRating?.let { ratingLabel(it) }, reason != null && !allowed)
+        if (reason == null || allowed) return false
+        blockProgram(pkg, title, reason, day, key, profile, unknown)
         return true
     }
 
@@ -558,7 +576,16 @@ class GuardService : AccessibilityService() {
             fr.paul.telecommande.shared.RatingReader.CONTENT_LABELS[it]?.lowercase() ?: it }).joinToString(" · ")
 
     private var lastProgramBlock = ""
-    private fun blockProgram(pkg: String, title: String?, reason: String, day: Long, key: String) {
+    private var keySince = 0L
+    /** « Cette fois » : autorisé jusqu'au prochain programme. */
+    @Volatile private var onceKey: String? = null
+
+    private data class ProgReq(val id: String, val pkg: String, val key: String, val title: String?, val reason: String, val profile: String, val day: Long)
+    private val progReqs = java.util.concurrent.ConcurrentHashMap<String, ProgReq>()
+    private var pendingProgKey = ""
+
+    private fun blockProgram(pkg: String, title: String?, reason: String, day: Long, key: String,
+                             profile: fr.paul.telecommande.shared.Profile? = null, unknown: Boolean = false) {
         pauseMedia()
         if (overlays.pinVisible) return
         if (lastProgramBlock == key && overlays.blockVisible) return
@@ -573,11 +600,75 @@ class GuardService : AccessibilityService() {
                 onSuccess = {
                     store.allowProgram(day, key); lastProgramBlock = ""; lastBlockPkg = null
                     overlays.hideBlock(); overlays.showBanner("Programme autorisé pour aujourd'hui")
-                    (packageManager.getLeanbackLaunchIntentForPackage(pkg) ?: packageManager.getLaunchIntentForPackage(pkg))?.let { runCatching { startActivity(it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+                    relaunch(pkg)
                 },
                 onCancel = { lastProgramBlock = ""; main.post { evaluate() } })
         }) else null
-        overlays.showBlock("Programme non autorisé", (if (title != null) "« ${title.take(60)} »\n" else "") + reason, false, 0, false, parent, icon = "🚫") {}
+        val heading = if (unknown) "Classification inconnue" else "Programme non autorisé"
+        val body = (if (title != null) "« ${title.take(60)} »\n" else "") + reason
+        fun show(pending: Boolean): Unit = overlays.showBlock(heading, body, store.phones().isNotEmpty(), 0, pending, parent,
+            icon = if (unknown) "❔" else "🚫", requestLabel = "Demander au parent") {
+            // Demande au téléphone du parent : il choisit cette fois, aujourd'hui ou toujours
+            val id = java.util.UUID.randomUUID().toString().take(12)
+            progReqs[id] = ProgReq(id, pkg, key, title, reason, profile?.id ?: "", day)
+            pendingProgKey = key
+            val prof = store.rules().profiles.firstOrNull { it.id == profile?.id }
+            server.push(JSONObject().put("event", "program_request").put("id", id).put("pkg", pkg).put("label", label(pkg))
+                .put("title", title ?: "").put("reason", reason).put("unknown", unknown)
+                .put("profile", profile?.id ?: "").put("profileName", prof?.let { "${it.emoji} ${it.name}" } ?: ""))
+            addDiag("program", "Demande au parent : ${title ?: label(pkg)}")
+            show(true)
+        }
+        show(pendingProgKey == key && progReqs.values.any { it.key == key })
+    }
+
+    private fun relaunch(pkg: String) {
+        (packageManager.getLeanbackLaunchIntentForPackage(pkg) ?: packageManager.getLaunchIntentForPackage(pkg))
+            ?.let { runCatching { startActivity(it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+    }
+
+    /** Réponse du parent : "once", "today", "always" (la règle « toujours » arrive aussi par les règles du téléphone) ou "refuse". */
+    private fun programRespond(id: String, scope: String): JSONObject {
+        val r = progReqs.remove(id) ?: return err("Demande introuvable ou déjà traitée")
+        if (pendingProgKey == r.key) pendingProgKey = ""
+        lastProgramBlock = ""; lastBlockPkg = null
+        overlays.hideBlock()
+        when (scope) {
+            "refuse" -> { overlays.showBanner("Demande refusée"); return JSONObject().put("ok", true) }
+            "today" -> store.allowProgram(r.day, r.key)
+            "always" -> { store.allowProgram(r.day, r.key); onceKey = r.key }
+            else -> onceKey = r.key
+        }
+        overlays.showBanner(when (scope) { "today" -> "Autorisé pour aujourd'hui"; "always" -> "Autorisé pour toujours"; else -> "Autorisé cette fois" })
+        relaunch(r.pkg)
+        return JSONObject().put("ok", true)
+    }
+
+    // ---------- Clic sur « Lecture » : vérifié AVANT la première image ----------
+
+    private fun playClicked(pkg: String) {
+        if (pkg == packageName || pkg in exempt) return
+        val allRules = store.rules()
+        if (!allRules.enabled) return
+        val profile = activeProfile(allRules)
+        val rules = allRules.forProfile(profile)
+        if (!rules.enabled || profile?.unlimited == true) return
+        val texts = readScreen(pkg).texts
+        // La classification de la page : la première trouvée (celle du titre choisi, pas des suggestions plus bas)
+        val age = texts.asSequence().mapNotNull { fr.paul.telecommande.shared.RatingReader.read(listOf(it)).age }.firstOrNull()
+        val r = fr.paul.telecommande.shared.Rating(age, fr.paul.telecommande.shared.RatingReader.read(texts).contents)
+        val now = System.currentTimeMillis(); val day = Stats.startOfDay(now)
+        val key = "$pkg|clic"
+        if (store.programAllowed(day, key) || onceKey == key) return
+        var reason = fr.paul.telecommande.shared.ProgramRules.blockReason(rules, profile, null, null, r)
+        var unknown = false
+        if (reason == null) when (fr.paul.telecommande.shared.ProgramRules.unknownAction(rules, profile, pkg, null, r)) {
+            "ask" -> { reason = "Classification introuvable : un parent doit d'abord valider."; unknown = true }
+            "block" -> reason = "Classification introuvable : les films et séries non classés sont bloqués."
+        }
+        if (reason == null) return
+        addDiag("program", "Lecture interceptée sur ${label(pkg)} (" + (age?.let { "$it+" } ?: "sans classification") + ")")
+        blockProgram(pkg, null, reason, day, key, profile, unknown)
     }
 
     private fun usage(pkg: String, now: Long, allRules: BoxRules, profile: fr.paul.telecommande.shared.Profile?): UsageContext {
@@ -898,7 +989,16 @@ class GuardService : AccessibilityService() {
         }
         "pin_pending" -> {
             val p = overlays.pendingPin
-            JSONObject().put("ok", true).apply { if (p != null) { put("pin", p.first); put("title", p.second) } }
+            JSONObject().put("ok", true).apply {
+                if (p != null) { put("pin", p.first); put("title", p.second) }
+                // Demande de programme en attente (si le lien permanent avec le téléphone était coupé)
+                progReqs.values.maxByOrNull { it.id }?.let { r ->
+                    val prof = store.rules().profiles.firstOrNull { it.id == r.profile }
+                    put("program", JSONObject().put("event", "program_request").put("id", r.id).put("pkg", r.pkg).put("label", label(r.pkg))
+                        .put("title", r.title ?: "").put("reason", r.reason).put("unknown", r.reason.startsWith("Classification introuvable"))
+                        .put("profile", r.profile).put("profileName", prof?.let { "${it.emoji} ${it.name}" } ?: ""))
+                }
+            }
         }
         "pin_approve" -> {
             val ok = overlays.approvePin(req.optString("id"), req.optString("title"))
@@ -935,6 +1035,7 @@ class GuardService : AccessibilityService() {
             main.post { evaluate() }
             JSONObject().put("ok", true).put("until", progDiagUntil)
         }
+        "program_respond" -> programRespond(req.optString("id"), req.optString("scope", "once"))
         "prog_report" -> JSONObject().put("ok", true).put("apps", learnReport())
             .put("perms", JSONObject().put("media", Media.allowed(this)).put("guide", TvGuide.allowed(this)).put("guideAvailable", TvGuide.available()))
         "prog_diag_result" -> JSONObject().put("ok", true).put("until", progDiagUntil)

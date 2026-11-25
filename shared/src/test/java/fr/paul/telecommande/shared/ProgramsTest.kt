@@ -96,4 +96,35 @@ class RatingTest {
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
         assertTrue(ProgramRules.blockReason(BoxRules(enabled = true), Profile("n", "N", birthYear = year - 4), null, null, r("CLASSÉ 7+")) != null)
     }
+
+    @Test fun alwaysAllowedPerChildOrFamily() {
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        val nael = Profile("n", "Nael", birthYear = year - 4); val petit = Profile("p", "Petit", birthYear = year - 3)
+        val rules = BoxRules(enabled = true, allowedPrograms = mutableListOf(AllowedProgram(ProgramFilter.key("Pokémon Horizons"), "Pokémon Horizons", "n")))
+        assertNull(ProgramRules.blockReason(rules, nael, "POKÉMON HORIZONS", null, r("CLASSÉ 7+")))
+        assertTrue(ProgramRules.blockReason(rules, petit, "Pokémon Horizons", null, r("CLASSÉ 7+")) != null)
+        rules.allowedPrograms[0] = rules.allowedPrograms[0].copy(profile = "")
+        assertNull(ProgramRules.blockReason(rules, petit, "Pokémon Horizons", null, r("CLASSÉ 7+")))
+        assertEquals(rules.allowedPrograms, BoxRules.fromJson(JSONObject(rules.toJson().toString())).allowedPrograms)
+    }
+
+    @Test fun unknownOnlyForFilmApps() {
+        val rules = BoxRules(enabled = true)
+        val kid = Profile("k", "K", birthYear = 2020)
+        assertEquals("ask", ProgramRules.unknownAction(rules, kid, "com.netflix.ninja", "Film", null))
+        assertNull(ProgramRules.unknownAction(rules, kid, "com.google.android.youtube.tv", "Vidéo", null))
+        assertNull(ProgramRules.unknownAction(rules, kid, "com.netflix.ninja", "Film", r("7+")))
+        assertNull(ProgramRules.unknownAction(rules.copy(unknownPolicy = "allow"), kid, "com.netflix.ninja", "Film", null))
+        assertNull(ProgramRules.unknownAction(rules, Profile("p", "Parents", unlimited = true), "com.netflix.ninja", "Film", null))
+        assertEquals("ask", BoxRules.fromJson(JSONObject("{}")).unknownPolicy)
+    }
+
+    @Test fun playButtons() {
+        assertTrue(PlayButtons.isPlay("Lecture"))
+        assertTrue(PlayButtons.isPlay("Reprendre la lecture"))
+        assertTrue(PlayButtons.isPlay("Regarder l'épisode 1"))
+        assertTrue(PlayButtons.isPlay("Play"))
+        assertTrue(!PlayButtons.isPlay("Ma liste"))
+        assertTrue(!PlayButtons.isPlay("Bandes-annonces et plus"))
+    }
 }

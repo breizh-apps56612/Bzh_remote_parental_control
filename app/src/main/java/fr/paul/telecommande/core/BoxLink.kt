@@ -76,6 +76,7 @@ object BoxLink {
                                     "profile" -> _profile.update { it + (dev.id to (ev.optString("emoji") + " " + ev.optString("name")).trim()) }
                                     "diag" -> notifyDiag(ctx, dev, ev)
                                     "pin_request" -> notifyPin(ctx, dev, ev)
+                                    "program_request" -> notifyProgram(ctx, dev, ev)
                                     "grace" -> notifyGrace(ctx, dev, ev)
                                     "pin_closed" -> {
                                     (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager)?.cancel(PIN_NOTIF)
@@ -129,9 +130,38 @@ object BoxLink {
                     DiagLog.log("BOX", "Pavé du code repéré par vérification (lien permanent muet)")
                     notifyPin(ctx, dev, JSONObject().put("id", pid).put("title", r.optString("title")))
                 }
+                r.optJSONObject("program")?.let { notifyProgram(ctx, dev, it) }
             }
             delay(when { unsupported -> 120_000L; fr.paul.telecommande.App.foreground -> 3_000L; else -> 20_000L })
         }
+    }
+
+    /** Programme bloqué sur la TV, l'enfant demande : empreinte puis cette fois / aujourd'hui / toujours. */
+    fun notifyProgram(ctx: Context, d: Device, ev: JSONObject) {
+        val rid = "prog:" + ev.optString("id")
+        if (!shownPins.add(rid)) return   // déjà présentée (lien + vérification)
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(
+            NotificationChannel(CHANNEL, "Demandes de temps", NotificationManager.IMPORTANCE_HIGH))
+        val who = ev.optString("profileName").ifBlank { "Un enfant" }
+        val what = ev.optString("title").ifBlank { "un programme sur ${ev.optString("label")}" }
+        val i = Intent(ctx, fr.paul.telecommande.ui.ProgramApproveActivity::class.java)
+            .putExtra("device", d.id).putExtra("id", ev.optString("id")).putExtra("title", ev.optString("title"))
+            .putExtra("reason", ev.optString("reason")).putExtra("label", ev.optString("label")).putExtra("unknown", ev.optBoolean("unknown"))
+            .putExtra("profile", ev.optString("profile")).putExtra("profileName", ev.optString("profileName"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val nidP = PIN_NOTIF + 1
+        val pi = PendingIntent.getActivity(ctx, nidP, i, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        nm.notify(nidP, NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_notif)
+            .setContentTitle("$who veut regarder « ${what.take(40)} »")
+            .setContentText(ev.optString("reason"))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(ev.optString("reason")))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pi).setAutoCancel(true)
+            .addAction(0, "Répondre", pi)
+            .build())
+        if (fr.paul.telecommande.App.foreground) runCatching { ctx.startActivity(i) }
     }
 
     fun notifyPin(ctx: Context, d: Device, ev: JSONObject) {
