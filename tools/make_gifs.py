@@ -430,8 +430,8 @@ def install():
     tap("activer", "i7", "5. Relier le téléphone", (592, 1788))
     go("activer", "code", "i7", "i7", "Tapez le code affiché sur la TV")
     hold("code", "i7", "Tapez le code affiché sur la TV", 1.6)
-    go("code", "play", "i7", "dash", "C'est prêt. Les mises à jour se font ensuite seules.")
-    hold("play", "dash", "C'est prêt. Les mises à jour se font ensuite seules.", 2.4)
+    go("code", "play", "i7", "dash", "C'est prêt. Les mises à jour seront proposées toutes seules.")
+    hold("play", "dash", "C'est prêt. Les mises à jour seront proposées toutes seules.", 2.4)
     go("play", "play", "dash", "i1", "")
     g.save()
 
