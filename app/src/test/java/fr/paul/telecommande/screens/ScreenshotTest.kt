@@ -136,6 +136,33 @@ class ScreenshotTest {
         shot(a, "05b-regles-suite")
     }
 
+    /** Images intermédiaires pour les animations du site (défilement réel des écrans). */
+    @Test fun gifFrames() {
+        val dir = File(out, "frames").apply { mkdirs() }
+        fun save(a: Activity, name: String) {
+            val root = a.window.decorView
+            val bmp = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888)
+            root.draw(Canvas(bmp))
+            File(dir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        fun scroller(a: Activity) = (a.window.decorView.findViewById<View>(android.R.id.content) as android.view.ViewGroup).getChildAt(0)
+        fun layout(a: Activity) {
+            val root = a.window.decorView
+            root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2400, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, 1080, 2400)
+        }
+        val r = Robolectric.buildActivity(BoxRulesActivity::class.java, intent(BoxRulesActivity::class.java, BoxRulesActivity.EXTRA_ID)).setup().get()
+        ShadowDialog.getLatestDialog()?.dismiss()
+        set(r, "unlocked", true); set(r, "syncState", "Synchronisé avec la box")
+        set(r, "apps", listOf("com.netflix.ninja" to "Netflix", "com.google.android.youtube.tv" to "YouTube", "com.disney.disneyplus" to "Disney+", "com.twitch.android.app" to "Twitch", "fr.francetv.pluzz" to "france.tv"))
+        call(r, "render"); layout(r)
+        for (i in 0..40) { scroller(r).scrollTo(0, i * 60); save(r, "regles-%02d".format(i)) }
+
+        val d = Robolectric.buildActivity(BoxDashboardActivity::class.java, intent(BoxDashboardActivity::class.java, BoxDashboardActivity.EXTRA_ID)).setup().get()
+        set(d, "status", status(withRequest = false)); set(d, "week", week()); set(d, "error", null)
+        for (t in 0..2) { set(d, "tab", t); call(d, "render"); layout(d); scroller(d).scrollTo(0, if (t == 0) 1624 else 1500); save(d, "activite-$t") }
+    }
+
     @Test fun wizard() {
         val a = Robolectric.buildActivity(RulesWizardActivity::class.java, intent(RulesWizardActivity::class.java, RulesWizardActivity.EXTRA_ID)).setup().get()
         ShadowDialog.getLatestDialog()?.dismiss()
