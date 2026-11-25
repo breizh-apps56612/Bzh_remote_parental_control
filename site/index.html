@@ -56,7 +56,7 @@ ul.ticks b{color:var(--ink)}
 .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:26px}
 .gallery figure{margin:0}
 .gallery img{border-radius:14px;border:1px solid var(--stroke)}
-.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px}
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:26px}
 .card{background:linear-gradient(180deg,var(--hi),var(--surface));border:1px solid var(--stroke);border-radius:22px;padding:22px}
 .card p{color:var(--soft);margin:0;font-size:.97rem}
 .card .ico{font-size:1.6rem;margin-bottom:8px}
@@ -114,6 +114,14 @@ small{color:var(--muted)}
   <h3>Comment se passe une demande de temps</h3>
   <div class="steps"><div>Le temps de TV est écoulé : la TV le dit clairement.</div><div>L'enfant demande à continuer.</div><div>Votre téléphone reçoit la demande.</div><div>Vous validez avec l'empreinte, ou vous refusez.</div><div>La TV applique, sans que l'enfant voie le code.</div></div>
 
+  <h3 style="margin-top:40px">Pensé pour éviter les crises</h3>
+  <ul class="ticks">
+    <li><b>Prévenu avant la coupure</b> : un bandeau et un petit sablier 5 minutes avant la fin du temps, du couvre-feu ou d'une plage horaire.</li>
+    <li><b>Fin d'épisode</b> : la TV laisse finir la vidéo en cours (10 minutes au plus) avant de couper.</li>
+    <li><b>Une seule réponse suffit</b> : quand vous accordez du temps, la TV lève tout ce qui bloquait. « +30 min », ce sont vraiment 30 minutes.</li>
+    <li><b>C'est la TV qui dit non</b>, pas vous : l'enfant peut demander poliment, vous répondez depuis votre téléphone.</li>
+  </ul>
+
   <div class="trio">
     <figure><img src="demande.gif" width="360" height="780" loading="lazy" alt="Une demande de 15 minutes de YouTube arrive sur le tableau de bord et le parent l'accepte."><figcaption><b>Accepter une demande</b>« 15 min de YouTube ? » Un geste et c'est réglé.</figcaption></figure>
     <figure><img src="regles.gif" width="360" height="780" loading="lazy" alt="Défilement de l'écran des règles : temps par jour, couvre-feu, profils, règles par appli."><figcaption><b>Les règles, simplement</b>Temps par jour, couvre-feu, un profil par enfant, appli par appli.</figcaption></figure>
@@ -152,6 +160,7 @@ small{color:var(--muted)}
   <div class="cards">
     <div class="card"><div class="ico">🏠</div><h3>Aucun serveur, aucun compte</h3><p>Le téléphone et la TV se parlent directement, sur le Wi-Fi de la maison. Il n'y a pas de cloud, pas d'inscription, pas de publicité.</p></div>
     <div class="card"><div class="ico">🔒</div><h3>Tout est chiffré</h3><p>Les échanges sont chiffrés et liés à vos deux appareils. Le code parent n'est jamais envoyé, et les réglages sont chiffrés sur la TV.</p></div>
+    <div class="card"><div class="ico">🔐</div><h3>Un code parent bien gardé</h3><p>Validé par votre empreinte, jamais par le code du téléphone. Une empreinte ajoutée en douce n'est pas acceptée. Après 5 codes faux, la TV comme le téléphone imposent une pause. Les Paramètres de la TV sont protégés.</p></div>
     <div class="card"><div class="ico">🧩</div><h3>Open source</h3><p>Le code est public sous licence GPL-3.0 : tout le monde peut vérifier ce que fait l'appli, et l'améliorer.</p></div>
   </div>
 </section>
