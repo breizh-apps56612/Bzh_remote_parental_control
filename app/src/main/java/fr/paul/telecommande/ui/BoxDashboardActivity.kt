@@ -57,8 +57,23 @@ class BoxDashboardActivity : AppCompatActivity() {
             week = c.call("usage", JSONObject().put("from", from).put("to", now))
             error = null
             if (fr.paul.telecommande.core.AppIcons.stale(this, device.id)) fr.paul.telecommande.core.AppIcons.refresh(this, device)
+            logProgramReport(c)
         }.onFailure { error = it.message }
         render()
+    }
+
+    /** Ce que la TV sait lire des programmes : noté dans le journal (toutes les 10 min au plus, et seulement si ça change). */
+    private suspend fun logProgramReport(c: BoxClient) {
+        val prefs = getSharedPreferences("prog_report", MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong("at_${device.id}", 0) < 10 * 60_000L) return
+        prefs.edit().putLong("at_${device.id}", now).apply()
+        val res = runCatching { c.call("prog_report") }.getOrNull() ?: return
+        val lines = BoxActions.reportLines(res)
+        val h = lines.joinToString("|").hashCode()
+        if (h == prefs.getInt("hash_${device.id}", 0)) return
+        prefs.edit().putInt("hash_${device.id}", h).apply()
+        lines.forEach { fr.paul.telecommande.core.DiagLog.log("PROGRAMMES", "${device.name} : " + it.replace("\n", " · ")) }
     }
 
     private var tab = 0          // 0 = aujourd'hui, 1 = semaine, 2 = horaires

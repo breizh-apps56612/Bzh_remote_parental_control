@@ -139,34 +139,31 @@ object BoxActions {
 
     // ---------- Diagnostic ----------
 
-    /** Test de lecture des programmes (10 min) : ce que la TV voit du titre et de la classification, noté dans le journal. */
-    fun programTest(a: AppCompatActivity, d: Device) {
-        AlertDialog.Builder(a).setTitle("Tester la lecture des programmes")
-            .setMessage("Pendant 10 minutes, la TV note ce qu'elle arrive à lire : titre, classification (7+, -12…), contenus signalés, guide des programmes.\n\n" +
-                "Avant : dans l'appli de la TV, autorisez « Titre en cours » et « Guide des programmes ».\n\n" +
-                "Lancez quelques programmes : Netflix, Disney+, YouTube, la TV en direct… en laissant passer le début de la lecture.\n\n" +
-                "Ensuite : menu ⋮ › Journal de diagnostic › Partager. Rien n'est bloqué pendant le test.")
-            .setPositiveButton("Lancer le test") { _, _ ->
-                a.lifecycleScope.launch {
-                    runCatching { BoxClient.of(a, d).call("prog_diag", org.json.JSONObject().put("minutes", 10)) }
-                        .onSuccess { Ui.toast(a, "Test lancé pour 10 min sur ${d.name}") }
-                        .onFailure { Ui.toast(a, if (it.message?.contains("inconnue") == true) "Mettez d'abord à jour l'appli de la TV" else it.message ?: "La TV ne répond pas") }
-                }
-            }
-            .setNeutralButton("Résultat du dernier test") { _, _ -> programTestResult(a, d) }
-            .setNegativeButton("Annuler", null).show()
+    /** Lignes lisibles du rapport d'apprentissage de la TV (ce qu'elle sait lire, appli par appli). */
+    fun reportLines(res: org.json.JSONObject): List<String> {
+        val perms = res.optJSONObject("perms")
+        val head = mutableListOf<String>()
+        if (perms?.optBoolean("media") == false) head += "⚠️ Sur la TV, autorisez « Titre en cours » (appli de la TV) : sans elle, les titres ne sont pas lus."
+        if (perms?.optBoolean("guideAvailable") == true && !perms.optBoolean("guide")) head += "ℹ️ Facultatif : autorisez « Guide des programmes » sur la TV pour la classification officielle des chaînes."
+        val arr = res.optJSONArray("apps") ?: org.json.JSONArray()
+        val apps = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { it.optInt("samples") > 0 }.map { o ->
+            val n = o.optInt("samples").coerceAtLeast(1)
+            fun pct(k: String) = if (o.optInt(k) > 0) "✓" else "—"
+            val sources = listOf("écran" to pct("ratingScreen"), "lecteur" to pct("ratingMeta"), "guide" to pct("ratingGuide"))
+                .joinToString(" · ") { "${it.first} ${it.second}" }
+            "${o.optString("label")} — titre ${pct("title")} · classification : $sources" +
+                (o.optString("lastRating").takeIf { it.isNotBlank() }?.let { "\nDernière lue : $it" + (o.optString("lastRatingTitle").takeIf { t -> t.isNotBlank() }?.let { t -> " (« $t »)" } ?: "") } ?: "") +
+                "\n($n relevés)"
+        }
+        return head + apps.ifEmpty { listOf("Rien d'appris pour l'instant : la TV apprend toute seule pendant que vous regardez des programmes.") }
     }
 
-    private fun programTestResult(a: AppCompatActivity, d: Device) {
+    /** Ce que la TV a appris toute seule (en arrière-plan) : d'où viennent titres et classifications, appli par appli. */
+    fun programReport(a: AppCompatActivity, d: Device) {
         a.lifecycleScope.launch {
-            val res = runCatching { BoxClient.of(a, d).call("prog_diag_result") }.getOrElse { Ui.toast(a, it.message ?: "La TV ne répond pas"); return@launch }
-            val arr = res.optJSONArray("lines") ?: org.json.JSONArray()
-            val fmt = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.FRANCE)
-            val lines = (0 until arr.length()).map { i -> arr.getJSONObject(i) }.map { "${fmt.format(java.util.Date(it.optLong("at")))} · ${it.optString("text")}" }
-            lines.forEach { fr.paul.telecommande.core.DiagLog.log("PROGRAMMES", it) }
-            val left = res.optLong("until") - System.currentTimeMillis()
-            AlertDialog.Builder(a).setTitle("Test des programmes" + if (left > 0) " (encore ${left / 60_000 + 1} min)" else "")
-                .setItems((lines.ifEmpty { listOf("Rien de lu pour l'instant. Lancez un programme sur la TV et laissez passer le début.") }).toTypedArray(), null)
+            val res = runCatching { BoxClient.of(a, d).call("prog_report") }.getOrElse {
+                Ui.toast(a, if (it.message?.contains("inconnue") == true) "Mettez d'abord à jour l'appli de la TV" else it.message ?: "La TV ne répond pas"); return@launch }
+            AlertDialog.Builder(a).setTitle("Lecture des programmes").setItems(reportLines(res).toTypedArray(), null)
                 .setPositiveButton("Fermer", null).show()
         }
     }
@@ -183,7 +180,7 @@ object BoxActions {
                     "$what · ${fmt.format(java.util.Date(e.optLong("at")))}\n${e.optString("text")}"
                 }
             AlertDialog.Builder(a).setTitle("Santé de ${d.name}").setItems(lines.toTypedArray(), null).setPositiveButton("Fermer", null)
-                .setNeutralButton("Tester les programmes") { _, _ -> programTest(a, d) }.show()
+                .setNeutralButton("Lecture des programmes") { _, _ -> programReport(a, d) }.show()
         }
     }
 }

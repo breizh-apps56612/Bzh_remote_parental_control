@@ -276,7 +276,8 @@ class GuardService : AccessibilityService() {
         }
         if (pkg == null) { overlays.hideTimer(); return }
         // Test des programmes : aussi sans règles actives (profil Parents, contrôle désactivé) — il ne bloque rien
-        val diagOnly = { if (now < progDiagUntil && pkg !in exempt) programCheck(pkg, BoxRules(), null, Stats.startOfDay(now)) }
+        // Lecture des programmes en arrière-plan, même sans règles (profil Parents…) : apprentissage et historique, sans blocage
+        val diagOnly = { if (pkg !in exempt) programCheck(pkg, BoxRules(), null, Stats.startOfDay(now)) }
         if (!allRules.enabled) { overlays.hideTimer(); diagOnly(); return }
         val rules = allRules.forProfile(profile)
         if (!rules.enabled) { overlays.hideTimer(); diagOnly(); return }
@@ -367,6 +368,8 @@ class GuardService : AccessibilityService() {
     }
 
     @Volatile private var progWatch = false
+    private var lastFullRead = 0L
+    private var lastReadKey = ""
     private var progDiagUntil = 0L
     private var lastProgDiag = 0L
     private var lastProgDiagKey = ""
@@ -432,6 +435,38 @@ class GuardService : AccessibilityService() {
         Screen(out.distinct(), ids.distinct(), nodes, roots.size)
     }.getOrDefault(Screen(emptyList(), emptyList(), 0, 0))
 
+    /**
+     * Apprentissage en arrière-plan : pour chaque appli, d'où viennent le titre et la classification
+     * (lecteur, écran, guide des programmes). Le téléphone le consulte dans « Santé de la TV ».
+     */
+    private var lastLearn = 0L
+    private fun learn(pkg: String, title: String?, screen: Screen, meta: List<String>, guide: TvGuide.Program?, r: fr.paul.telecommande.shared.Rating) {
+        val now = System.currentTimeMillis()
+        if (now - lastLearn < 15_000) return
+        lastLearn = now
+        val prefs = getSharedPreferences("box_learn", MODE_PRIVATE)
+        val o = runCatching { JSONObject(prefs.getString(pkg, "{}")) }.getOrDefault(JSONObject())
+        fun inc(k: String) = o.put(k, o.optInt(k) + 1)
+        inc("samples")
+        if (title != null) inc("title")
+        val fromScreen = fr.paul.telecommande.shared.RatingReader.read(screen.texts + recentTexts())
+        val fromMeta = fr.paul.telecommande.shared.RatingReader.read(meta)
+        if (fromScreen.age != null || fromScreen.contents.isNotEmpty()) inc("ratingScreen")
+        if (fromMeta.age != null || fromMeta.contents.isNotEmpty()) inc("ratingMeta")
+        if (guide != null) inc("guide")
+        if (guide?.age != null) inc("ratingGuide")
+        if (screen.ratingIds.isNotEmpty()) o.put("ratingIds", screen.ratingIds.take(3).joinToString("; "))
+        if (r.age != null || r.contents.isNotEmpty()) o.put("lastRating", ratingLabel(r)).put("lastRatingTitle", title ?: "")
+        o.put("label", label(pkg)).put("last", now).put("lastTitle", title ?: "")
+        prefs.edit().putString(pkg, o.toString()).apply()
+    }
+
+    private fun learnReport(): JSONArray {
+        val prefs = getSharedPreferences("box_learn", MODE_PRIVATE)
+        return JSONArray(prefs.all.mapNotNull { (pkg, v) -> runCatching { JSONObject(v as String).put("pkg", pkg) }.getOrNull() }
+            .sortedByDescending { it.optLong("last") })
+    }
+
     /** Test des programmes (10 min, demandé depuis le téléphone) : ce que la TV arrive à lire, dans le journal du parent. */
     private fun progDiag(pkg: String, title: String?, sub: String?, screen: Screen, meta: List<String>, rating: fr.paul.telecommande.shared.Rating, guide: TvGuide.Program? = null) {
         val now = System.currentTimeMillis()
@@ -472,9 +507,12 @@ class GuardService : AccessibilityService() {
         }
         val active = rules.blockedPrograms.isNotEmpty() || rules.maxAge > 0 || (profile?.maxAge ?: 0) > 0 || rules.blockedContents.isNotEmpty()
         val diag = now < progDiagUntil
-        if (progWatch != (active || diag)) { progWatch = active || diag; refreshEvents() }
+        // Écoute des textes passagers dès qu'une lecture est en cours (apprentissage permanent, en arrière-plan)
+        if (progWatch != playing) { progWatch = playing; refreshEvents() }
         // La classification ne se lit que pendant une lecture (bande-annonce comprise) : pas sur l'accueil d'une appli
-        if (playing && (active || diag || progId >= 0)) {
+        // Sans règle de programmes : lecture complète de l'écran toutes les 10 s seulement (économie de la box)
+        if (playing && (active || diag || now - lastFullRead > 10_000 || key != lastReadKey)) {
+            lastFullRead = now; lastReadKey = key
             val screen = readScreen(pkg)
             val meta = Media.allText(this, pkg)
             // Guide des programmes : classification officielle et genre du programme qui porte ce titre
@@ -482,6 +520,7 @@ class GuardService : AccessibilityService() {
             val guideTexts = guide?.let { g -> listOfNotNull(g.age?.let { if (it == 0) "Tous publics" else "$it+" }, g.genres.takeIf { it.isNotBlank() }) } ?: emptyList()
             val r = fr.paul.telecommande.shared.RatingReader.read(screen.texts + recentTexts() + meta + guideTexts)
             if (diag) progDiag(pkg, title, sub, screen, meta, r, guide)
+            learn(pkg, title, screen, meta, guide, r)
             if (r.age != null || r.contents.isNotEmpty()) {
                 val old = progRating
                 // Avec un titre connu, on garde la classification vue au début de la lecture ; sans titre, seulement l'écran actuel
@@ -878,6 +917,8 @@ class GuardService : AccessibilityService() {
             main.post { evaluate() }
             JSONObject().put("ok", true).put("until", progDiagUntil)
         }
+        "prog_report" -> JSONObject().put("ok", true).put("apps", learnReport())
+            .put("perms", JSONObject().put("media", Media.allowed(this)).put("guide", TvGuide.allowed(this)).put("guideAvailable", TvGuide.available()))
         "prog_diag_result" -> JSONObject().put("ok", true).put("until", progDiagUntil)
             .put("lines", runCatching { JSONArray(getSharedPreferences("box_meta", MODE_PRIVATE).getString("progdiag", "[]")) }.getOrDefault(JSONArray()))
         "programs" -> {
