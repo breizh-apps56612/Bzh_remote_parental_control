@@ -72,6 +72,19 @@ class TvScreenshotTest {
         shot("tv-01-temps-ecoule")
     }
 
+    @Test fun setupFocus() {
+        val a = org.robolectric.Robolectric.buildActivity(SetupActivity::class.java).setup().get()
+        val root = a.window.decorView
+        root.measure(View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, 1920, 1080)
+        fun all(v: View): List<View> = listOf(v) + ((v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        val btn = all(root).filterIsInstance<android.widget.TextView>().first { it.isFocusable && it.text.toString() in setOf("Rechercher", "Ouvrir") && it.text.toString() == "Rechercher" }
+        btn.requestFocus(); btn.animate().cancel(); btn.scaleX = 1.06f; btn.scaleY = 1.06f
+        val bmp = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
+        root.draw(Canvas(bmp))
+        File(out, "tv-07-reglages-focus.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     @Test fun whoWatches() {
         o.showWhoWatches(listOf(Profile("leo", "Léo", "🦖", 90), Profile("emma", "Emma", "🦄", 60), Profile("par", "Parents", "👑", 0, true)), "leo") {}
         shot("tv-02-qui-regarde")

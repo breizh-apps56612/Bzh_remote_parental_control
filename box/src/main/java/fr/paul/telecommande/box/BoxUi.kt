@@ -101,10 +101,17 @@ object BoxUi {
         minHeight = c.dp(56f).toInt(); minimumHeight = c.dp(56f).toInt()
         setPadding(c.dp(32f).toInt(), c.dp(12f).toInt(), c.dp(32f).toInt(), c.dp(12f).toInt())
         setOnFocusChangeListener { v, has ->
+            if (has) unclip(v)
             v.animate().scaleX(if (has) 1.06f else 1f).scaleY(if (has) 1.06f else 1f).setDuration(140).start()
             if (has) v.elevation = c.dp(8f) else v.elevation = 0f
         }
         setOnClickListener { onClick() }
+    }
+
+    /** Un élément agrandi par le focus ne doit pas être rogné par ses parents (rangées, cartes, écran). */
+    fun unclip(v: android.view.View) {
+        var p = v.parent
+        while (p is android.view.ViewGroup) { p.clipChildren = false; p.clipToPadding = false; p = p.parent }
     }
 
     /** Barre de progression pilule dégradée. */
