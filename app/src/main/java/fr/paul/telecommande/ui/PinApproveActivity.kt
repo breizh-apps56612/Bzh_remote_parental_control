@@ -61,27 +61,43 @@ class PinApproveActivity : AppCompatActivity() {
             BoxLink.pinClosed.collect { closed -> if (closed == id && !done) { Ui.toast(this@PinApproveActivity, "Le pavé a été fermé sur la TV"); finish() } }
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("${device.name} demande le code parent")
-            .setMessage("« $title »\n\nValidez ici : l'enfant ne voit rien sur la TV.")
-            .setPositiveButton(if (canBio) "Empreinte / visage" else "Taper le code") { _, _ ->
-                if (!canBio) { withPin(); return@setPositiveButton }
-                val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = approve()
-                    override fun onAuthenticationError(code: Int, msg: CharSequence) {
-                        if (code == BiometricPrompt.ERROR_NEGATIVE_BUTTON) withPin() else if (!done) finish()
-                    }
-                })
-                val info = BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("Code parent pour ${device.name}").setSubtitle(title)
-                    .setAllowedAuthenticators(auths)
-                    .apply { if (Build.VERSION.SDK_INT < 30) setNegativeButtonText("Taper le code parent") }
-                    .build()
-                prompt.authenticate(info)
-            }
-            .setNeutralButton(if (canBio && ParentalStore(this).hasPin) "Taper le code" else null) { _, _ -> withPin() }
-            .setNegativeButton("Refuser") { _, _ -> finish() }
-            .setOnCancelListener { finish() }
-            .show()
+        fun biometric() {
+            val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = approve()
+                override fun onAuthenticationError(code: Int, msg: CharSequence) {
+                    if (code == BiometricPrompt.ERROR_NEGATIVE_BUTTON) withPin() else if (!done) finish()
+                }
+            })
+            val info = BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Code parent pour ${device.name}").setSubtitle(title)
+                .setAllowedAuthenticators(auths)
+                .apply { if (Build.VERSION.SDK_INT < 30) setNegativeButtonText("Taper le code parent") }
+                .build()
+            prompt.authenticate(info)
+        }
+
+        // Fenêtre claire : ce que demande la TV, un grand bouton principal, les autres choix en dessous
+        val c = this
+        var dialog: androidx.appcompat.app.AlertDialog? = null
+        val box = android.widget.LinearLayout(c).apply {
+            orientation = android.widget.LinearLayout.VERTICAL; gravity = android.view.Gravity.CENTER_HORIZONTAL
+            val p = Ui.dp(c, 24); setPadding(p, Ui.dp(c, 28), p, Ui.dp(c, 16))
+        }
+        box.addView(Ui.badge(c, "🔒").apply { textSize = 26f }, android.widget.LinearLayout.LayoutParams(Ui.dp(c, 64), Ui.dp(c, 64)))
+        box.addView(Ui.text(c, "${device.name} demande le code parent", 19f).apply {
+            typeface = Ui.bold; gravity = android.view.Gravity.CENTER }, Ui.lp(c, 16))
+        box.addView(Ui.text(c, "« $title »", 16f).apply { gravity = android.view.Gravity.CENTER }, Ui.lp(c, 8))
+        box.addView(Ui.text(c, "Validez ici : l'enfant ne voit rien sur la TV.", 13.5f, muted = true).apply { gravity = android.view.Gravity.CENTER }, Ui.lp(c, 6))
+        box.addView(Ui.button(c, if (canBio) "Valider avec l'empreinte" else "Taper le code parent", primary = true) {
+            dialog?.setOnCancelListener(null); dialog?.dismiss(); if (canBio) biometric() else withPin()
+        }, android.widget.LinearLayout.LayoutParams(-1, Ui.dp(c, 54)).apply { topMargin = Ui.dp(c, 22) })
+        if (canBio && ParentalStore(this).hasPin) box.addView(Ui.button(c, "Taper le code") {
+            dialog?.setOnCancelListener(null); dialog?.dismiss(); withPin()
+        }, android.widget.LinearLayout.LayoutParams(-1, Ui.dp(c, 50)).apply { topMargin = Ui.dp(c, 10) })
+        box.addView(Ui.text(c, "Refuser", 15f, muted = true).apply {
+            gravity = android.view.Gravity.CENTER; setPadding(0, Ui.dp(c, 14), 0, Ui.dp(c, 6)); minHeight = Ui.dp(c, 48)
+            isClickable = true; isFocusable = true; setOnClickListener { dialog?.dismiss(); finish() }
+        }, Ui.lp(c, 4))
+        dialog = AlertDialog.Builder(this).setView(box).setOnCancelListener { finish() }.show()
     }
 }

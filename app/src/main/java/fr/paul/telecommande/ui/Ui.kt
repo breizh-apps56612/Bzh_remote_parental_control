@@ -121,6 +121,23 @@ object Ui {
         }
     }
 
+    /** Ligne avec interrupteur : toute la ligne bascule (cible large, plus facile au doigt). */
+    fun switchRow(c: Context, emoji: String, title: String, sub: String?, checked: Boolean, onChange: (Boolean) -> Unit): LinearLayout {
+        val sw = androidx.appcompat.widget.SwitchCompat(c).apply {
+            isChecked = checked; isClickable = false; isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        return row(c, emoji, title, sub).apply {
+            addView(sw, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(c, 8) })
+            isClickable = true; isFocusable = true
+            val tv = android.util.TypedValue()
+            c.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+            setBackgroundResource(tv.resourceId)
+            contentDescription = title + if (checked) ", activé" else ", désactivé"
+            setOnClickListener { sw.isChecked = !sw.isChecked; onChange(sw.isChecked) }
+        }
+    }
+
     /** Tuile d'action : emoji + libellé court sur une ligne (jamais coupé en deux). */
     fun tile(c: Context, emoji: String, label: String, primary: Boolean = false, action: () -> Unit) = LinearLayout(c).apply {
         gravity = Gravity.CENTER

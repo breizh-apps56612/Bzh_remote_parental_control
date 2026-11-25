@@ -111,101 +111,102 @@ class BoxRulesActivity : AppCompatActivity() {
         dlg.show()
     }
 
+    private fun section(text: String) = Ui.label(this, text).apply { setPadding(Ui.dp(this@BoxRulesActivity, 6), 0, 0, 0) }
+
+    private fun minutes(m: Int) = if (m > 0) Usage.format(m * 60_000L) else "Aucune limite"
+
     private fun render() {
         val c = this
         root.removeAllViews()
         root.addView(Ui.text(c, device.name, 13f, muted = true))
-        root.addView(Ui.title(c, "Règles et limites"))
+        root.addView(Ui.title(c, "Règles et limites", 28f), Ui.lp(c, 2))
         if (!unlocked) { root.addView(Ui.text(c, "Protégé par le code parent.", 14f, muted = true), Ui.lp(c, 10)); return }
-        if (syncState.isNotBlank()) root.addView(Ui.text(c, syncState, 12f, muted = true), Ui.lp(c, 4))
-        root.addView(Ui.button(c, "✨ Assistant pas à pas", primary = true) {
-            startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
-        }, Ui.lp(c, 12))
-        root.addView(Ui.text(c, RulesEngine.activeLabel(rules) + if (rules.activeFrom != rules.activeTo) " · temps libre en dehors" else "", 13f, muted = true), Ui.lp(c, 8))
-
-        val main = Ui.card(c)
-        main.addView(switch("Activer le contrôle parental", rules.enabled) { rules.enabled = it; save() })
-        main.addView(switch("Protéger les Paramètres de la TV par le code parent", rules.protectSettings) { rules.protectSettings = it; save() }, Ui.lp(c, 8))
-        main.addView(Ui.text(c, "Empêche de désactiver la protection ou de désinstaller l'appli depuis la TV.", 12f, muted = true))
-        root.addView(main, Ui.lp(c, 12))
-
-        val total = Ui.card(c)
-        total.addView(Ui.text(c, "Temps de TV par jour", 16f))
-        total.addView(Ui.button(c, if (rules.dailyTotalMin > 0) Usage.format(rules.dailyTotalMin * 60_000L) else "Aucune limite") {
-            pick("Temps de TV par jour", listOf(0, 60, 90, 120, 180, 240, 300), rules.dailyTotalMin) { rules.dailyTotalMin = it; save() }
-        }, Ui.lp(c, 8))
-        total.addView(Ui.text(c, "Durée d'une demande de temps depuis la TV", 14f), Ui.lp(c, 14))
-        total.addView(Ui.button(c, "${rules.requestMinutes} min") {
-            pick("Durée d'une demande", listOf(5, 10, 15, 30, 60), rules.requestMinutes) { rules.requestMinutes = it; save() }
-        }, Ui.lp(c, 8))
-        root.addView(total, Ui.lp(c, 10))
-
-        val bed = Ui.card(c)
-        bed.addView(switch("Couvre-feu", rules.bedtimeEnabled) { rules.bedtimeEnabled = it; save() })
-        val times = LinearLayout(c)
-        times.addView(Ui.button(c, "De " + RulesEngine.hhmm(rules.bedtimeStart)) { time(rules.bedtimeStart) { rules.bedtimeStart = it; save() } },
-            LinearLayout.LayoutParams(0, Ui.dp(c, 48), 1f).apply { marginEnd = Ui.dp(c, 6) })
-        times.addView(Ui.button(c, "à " + RulesEngine.hhmm(rules.bedtimeEnd)) { time(rules.bedtimeEnd) { rules.bedtimeEnd = it; save() } },
-            LinearLayout.LayoutParams(0, Ui.dp(c, 48), 1f).apply { marginStart = Ui.dp(c, 6) })
-        bed.addView(times, Ui.lp(c, 10))
-        root.addView(bed, Ui.lp(c, 10))
-
-        // --- Profils « Qui regarde ? » ---
-        val prof = Ui.card(c)
-        prof.addView(Ui.text(c, "Qui regarde ?", 16f))
-        prof.addView(Ui.text(c, "À chaque allumage, la TV demande qui regarde. Chaque profil a son propre temps par jour. Le profil parent (sans limite) demande le code.", 12f, muted = true), Ui.lp(c, 2))
-        rules.profiles.forEachIndexed { i, p ->
-            val row = LinearLayout(c).apply {
-                gravity = Gravity.CENTER_VERTICAL; setPadding(0, Ui.dp(c, 10), 0, Ui.dp(c, 4))
-                isClickable = true; setOnClickListener { editProfile(i) }
-            }
-            row.addView(Ui.text(c, p.emoji, 26f), LinearLayout.LayoutParams(Ui.dp(c, 44), -2))
-            val t = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-            t.addView(Ui.text(c, p.name, 15f))
-            t.addView(Ui.text(c, when { p.unlimited -> "Parent · sans limite · code"; p.dailyTotalMin > 0 -> "${Usage.format(p.dailyTotalMin * 60_000L)} par jour"; else -> "Règles générales" }, 12f, muted = true))
-            row.addView(t, LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(Ui.text(c, "Modifier", 13f, muted = true))
-            prof.addView(row)
+        if (syncState.isNotBlank()) {
+            val ok = syncState.startsWith("Synchronisé") || syncState.startsWith("Envoyé")
+            root.addView(LinearLayout(c).apply { addView(Ui.pill(c, syncState, Ui.color(c, if (ok) R.color.ok else R.color.danger))) }, Ui.lp(c, 10))
         }
-        prof.addView(Ui.button(c, "+ Ajouter un profil") { editProfile(-1) }, Ui.lp(c, 10))
-        if (rules.profiles.none { it.unlimited }) prof.addView(Ui.button(c, "+ Profil parent (sans limite)") {
+
+        // ===== Interrupteur principal =====
+        val main = Ui.group(c)
+        Ui.addRow(main, Ui.switchRow(c, "🛡️", "Contrôle parental",
+            if (rules.enabled) "Activé : la TV applique ces règles, même téléphone éteint." else "Désactivé : la TV n'applique aucune règle.",
+            rules.enabled) { rules.enabled = it; save() })
+        root.addView(main, Ui.lp(c, 14))
+        root.addView(Ui.tile(c, "✨", "Assistant pas à pas", primary = true) {
+            startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
+        }, LinearLayout.LayoutParams(-1, Ui.dp(c, 56)).apply { topMargin = Ui.dp(c, 10) })
+
+        // ===== L'essentiel =====
+        root.addView(section("L'essentiel"), Ui.lp(c, 26))
+        val ess = Ui.group(c)
+        Ui.addRow(ess, Ui.row(c, "⏱️", "Temps de TV par jour", "Toutes applis confondues", minutes(rules.dailyTotalMin)) {
+            pick("Temps de TV par jour", listOf(0, 60, 90, 120, 180, 240, 300), rules.dailyTotalMin) { rules.dailyTotalMin = it; save() }
+        })
+        Ui.addRow(ess, Ui.switchRow(c, "🌙", "Couvre-feu",
+            if (rules.bedtimeEnabled) "De ${RulesEngine.hhmm(rules.bedtimeStart)} à ${RulesEngine.hhmm(rules.bedtimeEnd)}" else "Pas de TV la nuit", rules.bedtimeEnabled) { rules.bedtimeEnabled = it; save() })
+        if (rules.bedtimeEnabled) {
+            Ui.addRow(ess, Ui.row(c, "🕘", "Début du couvre-feu", null, RulesEngine.hhmm(rules.bedtimeStart)) { time(rules.bedtimeStart) { rules.bedtimeStart = it; save() } })
+            Ui.addRow(ess, Ui.row(c, "🌅", "Fin du couvre-feu", null, RulesEngine.hhmm(rules.bedtimeEnd)) { time(rules.bedtimeEnd) { rules.bedtimeEnd = it; save() } })
+        }
+        Ui.addRow(ess, Ui.row(c, "🙋", "Demande de temps depuis la TV", "Durée accordée si vous acceptez", "${rules.requestMinutes} min") {
+            pick("Durée d'une demande", listOf(5, 10, 15, 30, 60), rules.requestMinutes) { rules.requestMinutes = it; save() }
+        })
+        Ui.addRow(ess, Ui.row(c, "📅", "Quand les règles s'appliquent",
+            RulesEngine.activeLabel(rules) + if (rules.activeFrom != rules.activeTo) " · temps libre en dehors" else "") {
+            startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
+        })
+        root.addView(ess, Ui.lp(c, 8))
+
+        // ===== Qui regarde ? =====
+        root.addView(section("Qui regarde ?"), Ui.lp(c, 26))
+        root.addView(Ui.text(c, "À chaque allumage, la TV demande qui regarde. Chaque profil a son propre temps.", 13f, muted = true).apply {
+            setPadding(Ui.dp(c, 6), 0, Ui.dp(c, 6), 0) }, Ui.lp(c, 4))
+        val prof = Ui.group(c)
+        rules.profiles.forEachIndexed { i, p ->
+            Ui.addRow(prof, Ui.row(c, p.emoji, p.name, when {
+                p.unlimited -> "Parent · sans limite · code demandé"
+                p.dailyTotalMin > 0 -> "${Usage.format(p.dailyTotalMin * 60_000L)} par jour"
+                else -> "Règles générales"
+            }) { editProfile(i) })
+        }
+        Ui.addRow(prof, Ui.row(c, "＋", "Ajouter un profil enfant") { editProfile(-1) })
+        if (rules.profiles.none { it.unlimited }) Ui.addRow(prof, Ui.row(c, "👑", "Ajouter le profil parent", "Sans limite, protégé par le code") {
             rules.profiles.add(fr.paul.telecommande.shared.Profile(java.util.UUID.randomUUID().toString().take(8), "Parents", "👑", 0, true)); save()
-        }, Ui.lp(c, 8))
-        root.addView(prof, Ui.lp(c, 10))
+        })
+        root.addView(prof, Ui.lp(c, 8))
 
-        // --- Confort ---
-        val comfort = Ui.card(c)
-        comfort.addView(Ui.text(c, "Confort", 16f))
-        comfort.addView(switch("Fin d'épisode : finir la vidéo en cours avant de couper", rules.graceMin > 0) { rules.graceMin = if (it) 10 else 0; save() }, Ui.lp(c, 8))
-        if (rules.graceMin > 0) comfort.addView(Ui.button(c, "Au plus ${rules.graceMin} min de plus") {
-            pick("Attente maximale", listOf(10, 15, 20, 30, 45), rules.graceMin) { rules.graceMin = it; save() }
-        }, Ui.lp(c, 6))
-        comfort.addView(switch("Sablier dans un coin de l'écran (dernières 15 min)", rules.showTimer) { rules.showTimer = it; save() }, Ui.lp(c, 10))
-        comfort.addView(switch("« Vous êtes toujours là ? » puis veille", rules.stillThereMin > 0) { rules.stillThereMin = if (it) 180 else 0; save() }, Ui.lp(c, 10))
-        if (rules.stillThereMin > 0) comfort.addView(Ui.button(c, "Après ${Usage.format(rules.stillThereMin * 60_000L)} sans toucher la télécommande") {
-            pick("Sans aucune touche pendant", listOf(60, 90, 120, 180, 240), rules.stillThereMin) { rules.stillThereMin = it; save() }
-        }, Ui.lp(c, 6))
-        root.addView(comfort, Ui.lp(c, 10))
-
-        val list = Ui.card(c)
-        list.addView(Ui.text(c, "Applis de la TV", 16f))
-        list.addView(Ui.text(c, "Touchez une appli pour régler sa limite, ses jours et ses horaires.", 12f, muted = true))
+        // ===== Applis =====
+        root.addView(section("Applis de la TV"), Ui.lp(c, 26))
+        val list = Ui.group(c)
         val all = (apps + rules.apps.keys.filter { k -> apps.none { it.first == k } }.map { it to it }).distinctBy { it.first }
-        if (all.isEmpty()) list.addView(Ui.text(c, "Liste disponible quand la box est allumée.", 13f, muted = true), Ui.lp(c, 8))
+            .sortedWith(compareBy({ rules.apps[it.first]?.isDefault ?: true }, { it.second.lowercase() }))
+        if (all.isEmpty()) Ui.addRow(list, Ui.row(c, "📺", "Liste disponible quand la TV est allumée"))
         all.forEach { (pkg, label) ->
             val r = rules.apps[pkg]
-            val row = LinearLayout(c).apply {
-                orientation = LinearLayout.VERTICAL; setPadding(0, Ui.dp(c, 10), 0, Ui.dp(c, 10))
-                isClickable = true; isFocusable = true; setBackgroundResource(android.R.drawable.list_selector_background)
-                setOnClickListener { editApp(pkg, label) }
-            }
-            row.addView(Ui.text(c, label, 15f))
-            row.addView(Ui.text(c, summary(r), 12f, muted = r == null || r.isDefault).apply {
-                if (r?.blocked == true) setTextColor(Ui.color(c, R.color.danger))
-            })
-            list.addView(row)
+            val icon = runCatching { fr.paul.telecommande.core.AppIcons.icon(c, device.id, pkg) }.getOrNull()
+            Ui.addRow(list, Ui.row(c, label.take(1).uppercase(), label, summary(r), danger = r?.blocked == true, icon = icon) { editApp(pkg, label) })
         }
-        root.addView(list, Ui.lp(c, 10))
+        root.addView(list, Ui.lp(c, 8))
+
+        // ===== Confort =====
+        root.addView(section("Confort"), Ui.lp(c, 26))
+        val comfort = Ui.group(c)
+        Ui.addRow(comfort, Ui.switchRow(c, "🎬", "Finir l'épisode", "Attendre la fin de la vidéo avant de couper", rules.graceMin > 0) { rules.graceMin = if (it) 10 else 0; save() })
+        if (rules.graceMin > 0) Ui.addRow(comfort, Ui.row(c, "⏳", "Attente maximale", null, "${rules.graceMin} min") {
+            pick("Attente maximale", listOf(10, 15, 20, 30), rules.graceMin) { rules.graceMin = it; save() }
+        })
+        Ui.addRow(comfort, Ui.switchRow(c, "⌛", "Sablier à l'écran", "Pendant les 15 dernières minutes", rules.showTimer) { rules.showTimer = it; save() })
+        Ui.addRow(comfort, Ui.switchRow(c, "💤", "« Vous êtes toujours là ? »", "Puis veille si personne ne répond", rules.stillThereMin > 0) { rules.stillThereMin = if (it) 180 else 0; save() })
+        if (rules.stillThereMin > 0) Ui.addRow(comfort, Ui.row(c, "🕒", "Sans toucher la télécommande pendant", null, Usage.format(rules.stillThereMin * 60_000L)) {
+            pick("Sans aucune touche pendant", listOf(60, 90, 120, 180, 240), rules.stillThereMin) { rules.stillThereMin = it; save() }
+        })
+        root.addView(comfort, Ui.lp(c, 8))
+
+        // ===== Sécurité =====
+        root.addView(section("Sécurité"), Ui.lp(c, 26))
+        val sec = Ui.group(c)
+        Ui.addRow(sec, Ui.switchRow(c, "🔒", "Protéger les Paramètres de la TV", "Empêche de couper la protection ou de supprimer l'appli", rules.protectSettings) { rules.protectSettings = it; save() })
+        root.addView(sec, Ui.lp(c, 8))
     }
 
     private fun summary(r: AppRule?): String {

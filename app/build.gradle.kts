@@ -11,8 +11,8 @@ android {
         applicationId = "fr.paul.telecommande"
         minSdk = 21          // Android 5.0 : ~99 % des appareils en circulation
         targetSdk = 34
-        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "43").toInt()
-        versionName = "2.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "7")
+        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "44").toInt()
+        versionName = "2.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "8")
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -44,6 +44,11 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { buildConfig = true }
     lint { abortOnError = false }
+    testOptions { unitTests {
+        isIncludeAndroidResources = true
+        // Dépôt Maven de Robolectric (images Android) si le dépôt par défaut est saturé : ROBOLECTRIC_REPO=<url>
+        all { t -> System.getenv("ROBOLECTRIC_REPO")?.let { t.systemProperty("robolectric.dependency.repo.url", it) } }
+    } }
 }
 
 // L'appli Box est embarquée dans l'appli téléphone pour être installée sur la TV depuis le téléphone.
@@ -69,4 +74,7 @@ dependencies {
     implementation(project(":shared"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    // Captures d'écran réelles des écrans (Robolectric, rendu natif) : ./gradlew :app:testReleaseUnitTest -Dscreens=1
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }

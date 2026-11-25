@@ -4,6 +4,11 @@ plugins {
 }
 
 android {
+    testOptions { unitTests {
+        isIncludeAndroidResources = true
+        // Dépôt Maven de Robolectric (images Android) si le dépôt par défaut est saturé : ROBOLECTRIC_REPO=<url>
+        all { t -> System.getenv("ROBOLECTRIC_REPO")?.let { t.systemProperty("robolectric.dependency.repo.url", it) } }
+    } }
     namespace = "fr.paul.telecommande.box"
     compileSdk = 34
 
@@ -45,4 +50,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.security:security-crypto:1.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // Captures des écrans TV (Robolectric, rendu natif) : SCREENS=1 gradle :box:testReleaseUnitTest
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }
