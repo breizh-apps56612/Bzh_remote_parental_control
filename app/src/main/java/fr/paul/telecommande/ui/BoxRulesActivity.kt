@@ -58,6 +58,7 @@ class BoxRulesActivity : AppCompatActivity() {
             syncState = "Synchronisé avec la box"
         }.onFailure { syncState = "Box injoignable : les changements seront envoyés à sa prochaine connexion." }
         render()
+        if (unlocked) askMissingAges()
     }
 
     private fun save() {
@@ -76,9 +77,28 @@ class BoxRulesActivity : AppCompatActivity() {
     private val EMOJIS = listOf("🦖", "🦄", "🚒", "⚽", "🌸", "🐱", "🚀", "🎮", "🙂", "👑")
 
     /** Création / modification d'un profil (index -1 = nouveau). */
-    private fun editProfile(index: Int) {
+    /** Profils d'enfants créés avant l'âge : on le demande une fois, profil par profil. */
+    private var agesAsked = false
+    private fun askMissingAges() {
+        if (agesAsked) return
+        val i = rules.profiles.indexOfFirst { !it.unlimited && it.birthYear == 0 }
+        if (i < 0) return
+        val p = rules.profiles[i]
+        Ui.askAge(this, p.name, null) { a ->
+            rules.profiles[i] = p.copy(birthYear = Ui.birthYearFor(a)); save()
+            askMissingAges()
+        }
+        if (rules.profiles.count { !it.unlimited && it.birthYear == 0 } <= 1) agesAsked = true
+    }
+
+    private fun editProfile(index: Int, preset: fr.paul.telecommande.shared.Profile? = null) {
         val c = this
-        val p = if (index >= 0) rules.profiles[index].copy() else fr.paul.telecommande.shared.Profile(java.util.UUID.randomUUID().toString().take(8), "", EMOJIS.first())
+        // Nouvel enfant : l'âge d'abord (il fixe d'office la classification des programmes)
+        if (index < 0 && preset == null) {
+            Ui.askAge(c, "", null) { age -> editProfile(-1, fr.paul.telecommande.shared.Profile(java.util.UUID.randomUUID().toString().take(8), "", EMOJIS.first(), birthYear = Ui.birthYearFor(age))) }
+            return
+        }
+        val p = preset ?: rules.profiles[index].copy()
         val name = android.widget.EditText(c).apply { hint = "Prénom"; setText(p.name); inputType = android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS }
         val emojis = LinearLayout(c)
         var picked = p.emoji
@@ -96,10 +116,12 @@ class BoxRulesActivity : AppCompatActivity() {
         limitBtn.setOnClickListener {
             pick("Temps de TV par jour", listOf(0, 30, 45, 60, 90, 120, 180), limit) { limit = it; limitBtn.text = if (it > 0) "${Usage.format(it * 60_000L)} par jour" else "Règles générales" }
         }
+        val ageBtn = Ui.button(c, "Âge : " + Ui.ageLabel(p)) {}
+        ageBtn.setOnClickListener { Ui.askAge(c, name.text.toString().trim(), p.age()) { a -> p.birthYear = Ui.birthYearFor(a); ageBtn.text = "Âge : $a ans" } }
         val box = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(c, 22), Ui.dp(c, 4), Ui.dp(c, 22), 0)
             addView(name); addView(android.widget.HorizontalScrollView(c).apply { addView(emojis) }, Ui.lp(c, 10))
-            if (!p.unlimited) addView(limitBtn, Ui.lp(c, 12))
+            if (!p.unlimited) { addView(ageBtn, Ui.lp(c, 12)); addView(limitBtn, Ui.lp(c, 10)) }
         }
         val dlg = androidx.appcompat.app.AlertDialog.Builder(c).setTitle(if (index >= 0) "Profil" else "Nouveau profil").setView(box)
             .setPositiveButton("Enregistrer") { _, _ ->
@@ -165,8 +187,8 @@ class BoxRulesActivity : AppCompatActivity() {
         rules.profiles.forEachIndexed { i, p ->
             Ui.addRow(prof, Ui.row(c, p.emoji, p.name, when {
                 p.unlimited -> "Parent · sans limite · code demandé"
-                p.dailyTotalMin > 0 -> "${Usage.format(p.dailyTotalMin * 60_000L)} par jour"
-                else -> "Règles générales"
+                p.dailyTotalMin > 0 -> "${Ui.ageLabel(p)} · ${Usage.format(p.dailyTotalMin * 60_000L)} par jour"
+                else -> "${Ui.ageLabel(p)} · règles générales"
             }) { editProfile(i) })
         }
         Ui.addRow(prof, Ui.row(c, "＋", "Ajouter un profil enfant") { editProfile(-1) })

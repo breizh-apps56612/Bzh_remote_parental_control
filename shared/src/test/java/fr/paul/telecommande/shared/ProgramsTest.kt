@@ -67,4 +67,15 @@ class RatingTest {
         assertTrue(ProgramRules.blockReason(rules, null, "Video", "MrBeast", null) != null)
         assertNull(ProgramRules.blockReason(rules, null, "Peppa Pig", "Peppa Pig", r("Tous publics")))
     }
+
+    @Test fun childAgeAppliesRatingAutomatically() {
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        val rules = BoxRules(enabled = true)
+        val nine = Profile("a", "A", birthYear = year - 9)
+        assertEquals(9, nine.age())
+        assertTrue(ProgramRules.blockReason(rules, nine, "Film", null, r("-10")) != null)   // 9 ans : pas de « -10 »
+        assertNull(ProgramRules.blockReason(rules, nine, "Film", null, r("7+")))
+        assertNull(ProgramRules.blockReason(rules, Profile("p", "Parents", unlimited = true, birthYear = year - 9), "Film", null, r("18+")))
+        assertEquals(year - 9, Profile.fromJson(JSONObject(nine.toJson().toString())).birthYear)
+    }
 }

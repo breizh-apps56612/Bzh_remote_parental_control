@@ -200,8 +200,8 @@ class RulesWizardActivity : AppCompatActivity() {
         rules.profiles.forEachIndexed { i, p ->
             content.addView(choice("${p.emoji}  ${p.name}", when {
                 p.unlimited -> "Parent · sans limite · demande le code"
-                p.dailyTotalMin > 0 -> "${Usage.format(p.dailyTotalMin * 60_000L)} par jour"
-                else -> "Temps de la maison (étape suivante)"
+                p.dailyTotalMin > 0 -> "${Ui.ageLabel(p)} · ${Usage.format(p.dailyTotalMin * 60_000L)} par jour"
+                else -> "${Ui.ageLabel(p)} · temps de la maison (étape suivante)"
             }, true) { editProfile(i) }, gap(if (i == 0) 18 else 10))
         }
         content.addView(Ui.button(c, "+ Ajouter un enfant") { editProfile(-1) }, gap(14))
@@ -211,9 +211,14 @@ class RulesWizardActivity : AppCompatActivity() {
         content.addView(Ui.text(c, if (rules.profiles.isEmpty()) "Sans profil, les mêmes règles s'appliquent à tout le monde. Vous pourrez en ajouter plus tard." else "Touchez un profil pour le modifier.", 13f, muted = true), gap(14))
     }
 
-    private fun editProfile(i: Int) {
+    private fun editProfile(i: Int, preset: Profile? = null) {
         val c = this
-        val p = if (i >= 0) rules.profiles[i] else Profile(java.util.UUID.randomUUID().toString().take(8), "", EMOJIS.first())
+        // Nouvel enfant : l'âge d'abord (il fixe d'office la classification des programmes)
+        if (i < 0 && preset == null) {
+            Ui.askAge(c, "", null) { age -> editProfile(-1, Profile(java.util.UUID.randomUUID().toString().take(8), "", EMOJIS.first(), birthYear = Ui.birthYearFor(age))) }
+            return
+        }
+        val p = preset ?: rules.profiles[i]
         val name = EditText(c).apply { hint = "Prénom"; setText(p.name); inputType = InputType.TYPE_TEXT_FLAG_CAP_WORDS }
         var emoji = p.emoji
         val emojiRow = LinearLayout(c)
@@ -231,6 +236,9 @@ class RulesWizardActivity : AppCompatActivity() {
             addView(name); addView(HorizontalScrollView(c).apply { addView(emojiRow) }, Ui.lp(c, 8))
         }
         if (!p.unlimited) {
+            val ageBtn = Ui.button(c, "Âge : " + Ui.ageLabel(p)) {}
+            ageBtn.setOnClickListener { Ui.askAge(c, name.text.toString().trim(), p.age()) { a -> p.birthYear = Ui.birthYearFor(a); ageBtn.text = "Âge : $a ans" } }
+            box.addView(ageBtn, Ui.lp(c, 12))
             box.addView(Ui.text(c, "Temps par jour pour ce profil", 13f, muted = true), Ui.lp(c, 12))
             val holder = LinearLayout(c)
             fun draw() {

@@ -77,7 +77,7 @@ object RatingReader {
 object ProgramRules {
     fun blockReason(rules: BoxRules, profile: Profile?, title: String?, subtitle: String?, rating: Rating?): String? {
         ProgramFilter.match(rules.blockedPrograms, title, subtitle)?.let { return "« $it » fait partie des programmes interdits." }
-        val maxAge = profile?.maxAge?.takeIf { it > 0 } ?: rules.maxAge
+        val maxAge = profile?.programMaxAge()?.takeIf { it > 0 } ?: rules.maxAge
         val age = rating?.age
         if (maxAge > 0 && age != null && age > maxAge) return "Programme déconseillé aux moins de $age ans (autorisé jusqu'à $maxAge+)."
         val banned = rating?.contents.orEmpty().intersect(rules.blockedContents.toSet())

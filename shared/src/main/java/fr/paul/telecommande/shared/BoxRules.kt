@@ -42,15 +42,24 @@ data class Profile(
     var emoji: String = "🙂",
     var dailyTotalMin: Int = 0,
     var unlimited: Boolean = false,
-    /** Âge maximum des programmes pour ce profil (7 = jusqu'à 7+ ; 0 = celui des règles générales). */
-    var maxAge: Int = 0
+    /** Âge maximum des programmes pour ce profil, si le parent le fixe à la main (0 = d'après l'âge de l'enfant). */
+    var maxAge: Int = 0,
+    /** Année de naissance (0 = inconnue) : l'âge sert à appliquer d'office la classification (un enfant de 9 ans ne voit pas un « -10 »). */
+    var birthYear: Int = 0
 ) {
+    /** Âge actuel (à un an près), ou null si inconnu. */
+    fun age(year: Int = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)): Int? =
+        birthYear.takeIf { it in 1990..year }?.let { (year - it).coerceIn(0, 25) }
+
+    /** Âge maximum des programmes pour ce profil : réglage manuel, sinon l'âge de l'enfant. */
+    fun programMaxAge(): Int = if (unlimited) 0 else maxAge.takeIf { it > 0 } ?: age() ?: 0
+
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("emoji", emoji)
-        .put("dailyTotalMin", dailyTotalMin).put("unlimited", unlimited).put("maxAge", maxAge)
+        .put("dailyTotalMin", dailyTotalMin).put("unlimited", unlimited).put("maxAge", maxAge).put("birthYear", birthYear)
 
     companion object {
         fun fromJson(o: JSONObject) = Profile(o.optString("id"), o.optString("name"), o.optString("emoji", "🙂"),
-            o.optInt("dailyTotalMin").coerceIn(0, AppRule.DAY_MIN), o.optBoolean("unlimited"), o.optInt("maxAge").coerceIn(0, 18))
+            o.optInt("dailyTotalMin").coerceIn(0, AppRule.DAY_MIN), o.optBoolean("unlimited"), o.optInt("maxAge").coerceIn(0, 18), o.optInt("birthYear").let { if (it in 1990..2100) it else 0 })
     }
 }
 

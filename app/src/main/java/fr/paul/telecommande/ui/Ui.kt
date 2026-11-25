@@ -278,6 +278,19 @@ object Ui {
             .setOnCancelListener { cancel?.invoke() }.show()
     }
 
+    /** « Quel âge a l'enfant ? » : 2 à 17 ans. Sert à appliquer d'office la classification des programmes. */
+    fun askAge(c: Context, name: String, current: Int?, done: (Int) -> Unit) {
+        val ages = (2..17).toList()
+        AlertDialog.Builder(c).setTitle(if (name.isBlank()) "Quel âge a l'enfant ?" else "Quel âge a $name ?")
+            .setSingleChoiceItems(ages.map { "$it ans" }.toTypedArray(), ages.indexOf(current ?: -1)) { d, i -> d.dismiss(); done(ages[i]) }
+            .setNegativeButton("Annuler", null).show()
+    }
+
+    fun birthYearFor(age: Int) = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) - age
+
+    /** « 7 ans » ou « âge à renseigner ». */
+    fun ageLabel(p: fr.paul.telecommande.shared.Profile) = p.age()?.let { "$it ans" } ?: "âge à renseigner"
+
     /** Création du code parent (4 à 8 chiffres, saisi deux fois). */
     fun createPin(a: Activity, done: (Boolean) -> Unit) {
         val p1 = EditText(a).apply { inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD; hint = "Nouveau code (4 à 8 chiffres)"; noAutofill(this) }
