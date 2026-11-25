@@ -96,16 +96,16 @@ class SetupActivity : Activity() {
             phones.isNotEmpty(), null, null)
 
         val usageOk = usageAccess()
-        val usageAvailable = resolvable(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        val usageAvailable = specialScreen(Settings.ACTION_USAGE_ACCESS_SETTINGS, USAGE_WORDS) != null
         step("+", "Historique des jours précédents (facultatif)",
             if (usageAvailable) "Importe le temps d'écran des derniers jours. Paramètres > Accès aux données d'utilisation." else "Non proposé par cette box : le suivi démarre aujourd'hui.",
-            if (usageAvailable) usageOk else null, if (usageAvailable && !usageOk) "Autoriser" else null) { open(Settings.ACTION_USAGE_ACCESS_SETTINGS) }
+            if (usageAvailable) usageOk else null, if (usageAvailable && !usageOk) "Autoriser" else null) { openSpecial(Settings.ACTION_USAGE_ACCESS_SETTINGS, USAGE_WORDS, "Accès aux données d'utilisation") }
 
-        val mediaAvailable = resolvable("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+        val mediaAvailable = specialScreen("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS", NOTIF_WORDS) != null
         step("+", "Titre en cours sur le téléphone (facultatif)",
             if (mediaAvailable) "Affiche le titre et l'image de ce qui est regardé dans l'appli du téléphone." else "Non proposé par cette box.",
             if (mediaAvailable) Media.allowed(this) else null, if (mediaAvailable && !Media.allowed(this)) "Autoriser" else null) {
-            open("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+            openSpecial("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS", NOTIF_WORDS, "Accès aux notifications")
         }
 
         step("+", "Guide des programmes (facultatif)",
@@ -215,6 +215,40 @@ class SetupActivity : Activity() {
     }
 
     private fun resolvable(action: String) = Intent(action).resolveActivity(packageManager) != null
+
+    private val NOTIF_WORDS = listOf("NotificationAccess", "NotificationListener", "NotificationAccessSettings")
+    private val USAGE_WORDS = listOf("UsageAccess", "UsageStats", "AppUsageAccess")
+
+    /**
+     * Écran « Accès spéciaux » (notifications, données d'utilisation) : l'accès standard, sinon l'écran trouvé dans l'appli
+     * Paramètres de la TV par son nom (certaines box, dont la Freebox, ne déclarent pas l'accès standard). Null = vraiment absent.
+     */
+    private fun specialScreen(action: String, words: List<String>): Intent? {
+        Intent(action).takeIf { it.resolveActivity(packageManager) != null }?.let { return it }
+        val pkgs = listOf("com.android.tv.settings", "com.android.settings") +
+            runCatching { packageManager.getInstalledPackages(0).map { it.packageName }.filter { fr.paul.telecommande.shared.ProtectedApps.isSettings(it) } }.getOrDefault(emptyList())
+        for (pkg in pkgs.distinct()) {
+            val acts = runCatching { packageManager.getPackageInfo(pkg, android.content.pm.PackageManager.GET_ACTIVITIES).activities?.toList() }.getOrNull() ?: continue
+            acts.firstOrNull { a -> a.exported && words.any { w -> a.name.contains(w, ignoreCase = true) } }?.let { return Intent().setClassName(pkg, it.name) }
+        }
+        // Dernier recours : l'écran « Accès spéciaux des applications », d'où l'on choisit la ligne à la main
+        for (pkg in pkgs.distinct()) {
+            val acts = runCatching { packageManager.getPackageInfo(pkg, android.content.pm.PackageManager.GET_ACTIVITIES).activities?.toList() }.getOrNull() ?: continue
+            acts.firstOrNull { a -> a.exported && a.name.contains("SpecialAppAccess", ignoreCase = true) }?.let { return Intent().setClassName(pkg, it.name) }
+        }
+        return null
+    }
+
+    private fun openSpecial(action: String, words: List<String>, line: String) {
+        val i = specialScreen(action, words)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val ok = i != null && runCatching { startActivity(i) }.isSuccess
+        getSharedPreferences("box_meta", MODE_PRIVATE).edit().putString("special_$line", i?.component?.flattenToShortString() ?: i?.action ?: "aucun").apply()
+        if (!ok || i?.component?.className?.contains("SpecialAppAccess", true) == true)
+            AlertDialog.Builder(this).setTitle(line)
+                .setMessage("Dans les Paramètres de la TV : Applications › Accès spéciaux des applications › $line › « Télécommande Box » › Autoriser.\n\n" +
+                    "Si cette ligne n'existe pas, la box ne la propose pas : la TV se fiera alors à la classification affichée à l'écran.")
+                .setPositiveButton("Compris", null).show()
+    }
 
     private fun usageAccess(): Boolean {
         val ops = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager

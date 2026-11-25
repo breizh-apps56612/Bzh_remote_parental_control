@@ -34,4 +34,16 @@ class OpenAccessibilityTest {
         val started = shadowOf(a).nextStartedActivity
         assertEquals(acc, started.component)
     }
+
+    /** Freebox : l'accès standard aux notifications n'est pas déclaré, mais l'écran existe dans l'appli Paramètres. */
+    @Test fun findsHiddenNotificationAccessScreen() {
+        val a = Robolectric.buildActivity(SetupActivity::class.java).setup().get()
+        val spm = shadowOf(a.packageManager)
+        val notif = ComponentName("com.android.tv.settings", "com.android.tv.settings.device.apps.specialaccess.NotificationAccessActivity")
+        spm.addActivityIfNotPresent(notif)
+        spm.getInternalMutablePackageInfo("com.android.tv.settings").activities.forEach { it.exported = true }
+        val found = a.javaClass.getDeclaredMethod("specialScreen", String::class.java, List::class.java).apply { isAccessible = true }
+            .invoke(a, "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS", listOf("NotificationAccess", "NotificationListener")) as Intent?
+        assertEquals(notif, found?.component)
+    }
 }
