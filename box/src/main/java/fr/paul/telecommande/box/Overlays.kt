@@ -51,7 +51,15 @@ class Overlays(private val ctx: Context) {
 
     /** Dernière fenêtre ajoutée (vérifications visuelles uniquement). */
     var lastRootForTest: View? = null; private set
-    private fun add(v: View, p: WindowManager.LayoutParams) { lastRootForTest = v; runCatching { wm.addView(v, p) } }
+    private fun add(v: View, p: WindowManager.LayoutParams) { noClip(v); lastRootForTest = v; runCatching { wm.addView(v, p) } }
+
+    /** Les cartes et boutons grossissent quand ils ont le focus : on ne les rogne pas sur les bords. */
+    private fun noClip(v: View) {
+        if (v is android.view.ViewGroup) {
+            v.clipChildren = false; v.clipToPadding = false
+            for (i in 0 until v.childCount) noClip(v.getChildAt(i))
+        }
+    }
     private fun remove(v: View?) { if (v != null) runCatching { wm.removeView(v) } }
 
     private fun card() = BoxUi.card(ctx)
@@ -330,11 +338,12 @@ class Overlays(private val ctx: Context) {
 
     fun showWhoWatches(profiles: List<fr.paul.telecommande.shared.Profile>, lastId: String? = null, needsPin: (fr.paul.telecommande.shared.Profile) -> Boolean = { it.unlimited }, onPick: (fr.paul.telecommande.shared.Profile) -> Unit) = ui {
         if (who != null) return@ui
-        val root = BoxUi.Fit(ctx).apply { background = BoxUi.scrim() }
+        // écran opaque : c'est un passage obligé, rien ne doit transparaître derrière
+        val root = BoxUi.Fit(ctx).apply { background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xFF0B0912.toInt(), 0xFF050508.toInt())) }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
         col.addView(BoxUi.label(ctx, "Télécommande Box").apply { gravity = Gravity.CENTER })
         col.addView(text("Qui regarde ?", 44f, bold = true), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
-        val row = LinearLayout(ctx).apply { gravity = Gravity.CENTER }
+        val row = LinearLayout(ctx).apply { gravity = Gravity.CENTER; setPadding(dp(12), dp(20), dp(12), dp(20)) }
         var first: View? = null
         profiles.forEach { p ->
             val tile = LinearLayout(ctx).apply {
@@ -362,7 +371,7 @@ class Overlays(private val ctx: Context) {
             row.addView(tile, LinearLayout.LayoutParams(dp(210), dp(230)).apply { setMargins(dp(14), 0, dp(14), 0) })
             if (first == null || p.id == lastId) first = tile
         }
-        col.addView(row, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(36) })
+        col.addView(row, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
         root.addView(col)
         root.isFocusable = true
         root.setOnKeyListener { _, code, e -> code == KeyEvent.KEYCODE_BACK }   // on doit choisir

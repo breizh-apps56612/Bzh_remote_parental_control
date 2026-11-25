@@ -75,6 +75,10 @@ class TvScreenshotTest {
     @Test fun whoWatches() {
         o.showWhoWatches(listOf(Profile("leo", "Léo", "🦖", 90), Profile("emma", "Emma", "🦄", 60), Profile("par", "Parents", "👑", 0, true)), "leo") {}
         shot("tv-02-qui-regarde")
+        // carte avec le focus agrandie comme sur la vraie TV : elle ne doit pas être rognée
+        fun focused(v: android.view.View): android.view.View? = if (v.isFocused) v else (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { focused(g.getChildAt(it)) } }
+        o.lastRootForTest?.let { focused(it) }?.apply { animate().cancel(); scaleX = 1.08f; scaleY = 1.08f }
+        shot("tv-02b-qui-regarde-focus")
     }
 
     @Test fun pinPad() {
