@@ -178,12 +178,33 @@ object RulesEngine {
         return "Règles $h$d"
     }
 
-    /** Temps restant avant blocage (le plus court entre total du jour et limite de l'appli), ou null si illimité. */
+    /** Minutes entre [from] et la prochaine fois qu'il est [to] (0..1439). */
+    private fun minutesUntil(from: Int, to: Int) = ((to - from) % 1440 + 1440) % 1440
+
+    /** Couvre-feu ou fin de plage horaire de l'appli : temps restant avant que l'heure bloque, ou null. */
+    private fun clockLeft(rules: BoxRules, rule: AppRule?, c: UsageContext): Pair<Long, String>? {
+        var best: Pair<Long, String>? = null
+        if (!c.bedtimeOverride && rules.bedtimeEnabled && rules.bedtimeStart != rules.bedtimeEnd &&
+            !inWindow(c.minuteOfDay, rules.bedtimeStart, rules.bedtimeEnd)) {
+            best = minutesUntil(c.minuteOfDay, rules.bedtimeStart) * 60_000L to "le couvre-feu"
+        }
+        if (rule != null && !c.scheduleOverride && rule.from != rule.to && rulesActive(rules, c.minuteOfDay, c.dayOfWeek) &&
+            inWindow(c.minuteOfDay, rule.from, rule.to)) {
+            val ms = minutesUntil(c.minuteOfDay, rule.to) * 60_000L
+            if (best == null || ms < best.first) best = ms to "la fin de la plage horaire"
+        }
+        return best
+    }
+
+    /** Temps restant avant blocage : le plus court entre total du jour, limite de l'appli, couvre-feu et fin de plage horaire. */
     fun remaining(rules: BoxRules, rule: AppRule?, c: UsageContext): Long? {
         if (!rules.enabled || rule?.blocked == true) return null
-        if (!rulesActive(rules, c.minuteOfDay, c.dayOfWeek)) return null
-        var r: Long? = null
-        if (rules.dailyTotalMin > 0) r = rules.dailyTotalMin * 60_000L + c.totalBonusMs - c.totalMs
+        var r: Long? = clockLeft(rules, rule, c)?.first
+        if (!rulesActive(rules, c.minuteOfDay, c.dayOfWeek)) return r?.coerceAtLeast(0)
+        if (rules.dailyTotalMin > 0) {
+            val t = rules.dailyTotalMin * 60_000L + c.totalBonusMs - c.totalMs
+            r = if (r == null) t else minOf(r, t)
+        }
         if (rule != null && rule.limitMin > 0) {
             val a = rule.limitMin * 60_000L + c.bonusMs - c.usedMs
             r = if (r == null) a else minOf(r, a)
@@ -192,27 +213,37 @@ object RulesEngine {
     }
 
     /**
-     * Ce qu'il faut accorder pour que l'appli redevienne utilisable avec [ms] de plus : TOUTES les règles qui bloquent
-     * (couvre-feu, horaires, temps total, temps de l'appli), pas seulement la première. Sans ça, accepter une demande
-     * ne levait que la première règle et la TV redemandait aussitôt l'autorisation pour la suivante.
-     * Une appli interdite ([Verdict.KIND_BLOCKED]) n'est jamais levée.
+     * Ce qu'il faut accorder pour que l'appli redevienne utilisable pendant [ms] à partir de maintenant : TOUTES les règles
+     * qui bloquent (couvre-feu, horaires, temps total, temps de l'appli), pas seulement la première. Sans ça, accepter une
+     * demande ne levait que la première règle et la TV redemandait aussitôt l'autorisation pour la suivante.
+     * Pour les limites de temps, le montant rattrape aussi le dépassement déjà consommé (fin d'épisode), sinon « +30 min »
+     * ne donnait que 20 min. Une appli interdite ([Verdict.KIND_BLOCKED]) n'est jamais levée.
+     * Résultat : règle → durée à accorder (dans l'ordre où elles bloquent).
      */
-    fun grantsToLift(rules: BoxRules, label: String, rule: AppRule?, c: UsageContext, ms: Long): List<String> {
-        val kinds = mutableListOf<String>()
+    fun grants(rules: BoxRules, label: String, rule: AppRule?, c: UsageContext, ms: Long): Map<String, Long> {
+        val out = LinkedHashMap<String, Long>()
         var ctx = c
         repeat(5) {
-            val v = evaluate(rules, label, rule, ctx) as? Verdict.Block ?: return kinds
-            if (v.kind == Verdict.KIND_BLOCKED || v.kind in kinds) return kinds
-            kinds += v.kind
-            ctx = when (v.kind) {
-                Verdict.KIND_BEDTIME -> ctx.copy(bedtimeOverride = true)
-                Verdict.KIND_SCHEDULE -> ctx.copy(scheduleOverride = true)
-                Verdict.KIND_TOTAL -> ctx.copy(totalBonusMs = ctx.totalBonusMs + ms)
-                else -> ctx.copy(bonusMs = ctx.bonusMs + ms)
+            val v = evaluate(rules, label, rule, ctx) as? Verdict.Block ?: return out
+            if (v.kind == Verdict.KIND_BLOCKED || v.kind in out) return out
+            when (v.kind) {
+                Verdict.KIND_BEDTIME -> { out[v.kind] = ms; ctx = ctx.copy(bedtimeOverride = true) }
+                Verdict.KIND_SCHEDULE -> { out[v.kind] = ms; ctx = ctx.copy(scheduleOverride = true) }
+                Verdict.KIND_TOTAL -> {
+                    val over = (ctx.totalMs - (rules.dailyTotalMin * 60_000L + ctx.totalBonusMs)).coerceAtLeast(0)
+                    out[v.kind] = ms + over; ctx = ctx.copy(totalBonusMs = ctx.totalBonusMs + ms + over)
+                }
+                else -> {
+                    val over = (ctx.usedMs - ((rule?.limitMin ?: 0) * 60_000L + ctx.bonusMs)).coerceAtLeast(0)
+                    out[v.kind] = ms + over; ctx = ctx.copy(bonusMs = ctx.bonusMs + ms + over)
+                }
             }
         }
-        return kinds
+        return out
     }
+
+    fun grantsToLift(rules: BoxRules, label: String, rule: AppRule?, c: UsageContext, ms: Long): List<String> =
+        grants(rules, label, rule, c, ms).keys.toList()
 
     fun evaluate(rules: BoxRules, label: String, rule: AppRule?, c: UsageContext): Verdict {
         if (!rules.enabled) return Verdict.Allowed
@@ -221,8 +252,12 @@ object RulesEngine {
             inWindow(c.minuteOfDay, rules.bedtimeStart, rules.bedtimeEnd)) {
             return Verdict.Block("C'est l'heure de dormir", "La TV est disponible à partir de ${hhmm(rules.bedtimeEnd)}.", true, Verdict.KIND_BEDTIME)
         }
+        // Couvre-feu ou fin de plage horaire tout proches : on prévient 5 min avant
+        val clockWarn = clockLeft(rules, rule, c)?.takeIf { it.first <= WARN_MS }?.let { (left, what) ->
+            Verdict.Warn(left, if (what == "le couvre-feu") "Couvre-feu dans ${fmt(left)}" else "$label s'arrête dans ${fmt(left)}")
+        }
         // Temps libre : plus aucune limite
-        if (!rulesActive(rules, c.minuteOfDay, c.dayOfWeek)) return Verdict.Allowed
+        if (!rulesActive(rules, c.minuteOfDay, c.dayOfWeek)) return clockWarn ?: Verdict.Allowed
         if (rule?.blocked == true) return Verdict.Block("$label est bloquée", "Cette appli n'est pas autorisée.", false, Verdict.KIND_BLOCKED)
         if (rule != null && !c.scheduleOverride) {
             if (rule.days and (1 shl c.dayOfWeek) == 0) {
@@ -232,11 +267,12 @@ object RulesEngine {
                 return Verdict.Block("$label n'est pas disponible maintenant", "Autorisée de ${hhmm(rule.from)} à ${hhmm(rule.to)}.", true, Verdict.KIND_SCHEDULE)
             }
         }
-        var warn: Verdict.Warn? = null
+        var warn: Verdict.Warn? = clockWarn
         if (rules.dailyTotalMin > 0) {
             val limit = rules.dailyTotalMin * 60_000L + c.totalBonusMs
             if (c.totalMs >= limit) return Verdict.Block("Temps de TV terminé", "Le temps d'écran du jour (${fmt(limit)}) est écoulé.", true, Verdict.KIND_TOTAL)
-            if (limit - c.totalMs <= WARN_MS) warn = Verdict.Warn(limit - c.totalMs, "Plus que ${fmt(limit - c.totalMs)} de TV aujourd'hui")
+            if (limit - c.totalMs <= WARN_MS && (warn == null || limit - c.totalMs < warn.remainingMs))
+                warn = Verdict.Warn(limit - c.totalMs, "Plus que ${fmt(limit - c.totalMs)} de TV aujourd'hui")
         }
         if (rule != null && rule.limitMin > 0) {
             val limit = rule.limitMin * 60_000L + c.bonusMs

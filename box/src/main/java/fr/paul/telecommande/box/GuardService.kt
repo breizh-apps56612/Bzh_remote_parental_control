@@ -359,20 +359,34 @@ class GuardService : AccessibilityService() {
      * Accorde [ms] sur [pkg] en levant TOUTES les règles qui bloquent (couvre-feu, horaires, temps total, temps de l'appli),
      * pour qu'une seule autorisation suffise. [fallback] : la règle de la demande, si plus rien ne bloque déjà.
      */
-    private fun grant(pkg: String, ms: Long, fallback: String) {
+    private fun grant(pkg: String, ms: Long, fallback: String, by: String = "code parent") {
         val now = System.currentTimeMillis()
         val allRules = store.rules()
         val profile = activeProfile(allRules)
         val rules = allRules.forProfile(profile)
-        val kinds = RulesEngine.grantsToLift(rules, label(pkg), rules.apps[pkg], usage(pkg, now, allRules, profile), ms)
-            .ifEmpty { if (fallback == Verdict.KIND_BLOCKED) emptyList() else listOf(fallback) }
-        for (k in kinds) when (k) {
-            Verdict.KIND_TOTAL -> store.addBonus(Stats.startOfDay(now), "*", ms)
-            Verdict.KIND_SCHEDULE -> store.setOverride(pkg, now + ms)
-            Verdict.KIND_BEDTIME -> store.setOverride("*", now + ms)
-            else -> store.addBonus(Stats.startOfDay(now), pkg, ms)
+        val g = RulesEngine.grants(rules, label(pkg), rules.apps[pkg], usage(pkg, now, allRules, profile), ms)
+            .ifEmpty { if (fallback == Verdict.KIND_BLOCKED) emptyMap() else mapOf(fallback to ms) }
+        for ((k, amount) in g) when (k) {
+            Verdict.KIND_TOTAL -> store.addBonus(Stats.startOfDay(now), "*", amount)
+            Verdict.KIND_SCHEDULE -> store.setOverride(pkg, now + amount)
+            Verdict.KIND_BEDTIME -> store.setOverride("*", now + amount)
+            else -> store.addBonus(Stats.startOfDay(now), pkg, amount)
         }
-        if (kinds.size > 1) addDiag("grant", "Une seule autorisation pour ${label(pkg)} : ${kinds.joinToString(" + ")} levés")
+        // Les demandes encore en attente pour ce qui vient d'être levé sont réglées : sinon la notification restait sur le
+        // téléphone, et l'accepter plus tard redonnait du temps une deuxième fois.
+        val lifted = g.keys
+        val reqs = store.requests()
+        val closed = reqs.filter { r ->
+            r.optString("status") == "pending" &&
+                (r.optString("pkg") == pkg || r.optString("kind") in setOf(Verdict.KIND_TOTAL, Verdict.KIND_BEDTIME).intersect(lifted))
+        }
+        if (closed.isNotEmpty()) {
+            closed.forEach { it.put("status", "accepted").put("by", by).put("minutes", (ms / 60_000L).toInt()) }
+            store.saveRequests(reqs)
+            closed.forEach { server.push(JSONObject(it.toString()).put("event", "request_update")) }
+        }
+        if (g.size > 1 || g.values.any { it > ms })
+            addDiag("grant", "Autorisation pour ${label(pkg)} : " + g.entries.joinToString(" + ") { "${it.key} ${RulesEngine.fmt(it.value)}" })
     }
 
     private fun block(pkg: String, v: Verdict.Block, rules: BoxRules) {
@@ -456,13 +470,14 @@ class GuardService : AccessibilityService() {
     }
 
     private fun respond(id: String, accept: Boolean, minutes: Int, by: String): JSONObject {
-        val list = store.requests()
-        val r = list.firstOrNull { it.optString("id") == id } ?: return err("Demande introuvable")
-        if (r.optString("status") != "pending") return err("Demande déjà traitée")
-        val now = System.currentTimeMillis()
-        val pkg = r.optString("pkg")
+        val r0 = store.requests().firstOrNull { it.optString("id") == id } ?: return err("Demande introuvable")
+        if (r0.optString("status") != "pending") return err("Demande déjà traitée")
+        val pkg = r0.optString("pkg")
         val ms = minutes.coerceIn(1, 240) * 60_000L
-        if (accept) grant(pkg, ms, r.optString("kind"))
+        if (accept) grant(pkg, ms, r0.optString("kind"), by)
+        // relu après grant(), qui a pu régler d'autres demandes
+        val list = store.requests()
+        val r = list.firstOrNull { it.optString("id") == id } ?: r0
         r.put("status", if (accept) "accepted" else "refused").put("by", by).put("minutes", minutes)
         store.saveRequests(list)
         overlays.hideBlock()
@@ -664,8 +679,8 @@ class GuardService : AccessibilityService() {
             val shown = lastBlockPkg ?: current
             if (pkg == "*" && shown != null) {
                 val allRules = store.rules(); val profile = activeProfile(allRules); val rules = allRules.forProfile(profile)
-                val kinds = RulesEngine.grantsToLift(rules, label(shown), rules.apps[shown], usage(shown, now, allRules, profile), minutes * 60_000L)
-                if (Verdict.KIND_APP in kinds) store.addBonus(Stats.startOfDay(now), shown, minutes * 60_000L)
+                RulesEngine.grants(rules, label(shown), rules.apps[shown], usage(shown, now, allRules, profile), minutes * 60_000L)[Verdict.KIND_APP]
+                    ?.let { store.addBonus(Stats.startOfDay(now), shown, it) }
             }
             overlays.hideBlock(); lastBlockPkg = null
             val reason = req.optString("reason")

@@ -67,7 +67,8 @@ class StressTest {
                 RulesEngine.inWindow(c.minuteOfDay, rules.bedtimeStart, rules.bedtimeEnd)
             if (bed) { assertTrue("couvre-feu ignoré", v is Verdict.Block && v.kind == Verdict.KIND_BEDTIME); return@repeat }
             val active = RulesEngine.rulesActive(rules, c.minuteOfDay, c.dayOfWeek)
-            if (!active) { assertEquals("temps libre", Verdict.Allowed, v); return@repeat }
+            // Temps libre : aucune limite, seulement l'annonce du couvre-feu qui approche
+            if (!active) { assertTrue("temps libre : $v", v == Verdict.Allowed || (v is Verdict.Warn && v.message.startsWith("Couvre-feu"))); return@repeat }
             if (rule?.blocked == true) { assertTrue(v is Verdict.Block && v.kind == Verdict.KIND_BLOCKED); return@repeat }
             val totalOver = rules.dailyTotalMin > 0 && c.totalMs >= rules.dailyTotalMin * 60_000L + c.totalBonusMs
             val appOver = rule != null && rule.limitMin > 0 && c.usedMs >= rule.limitMin * 60_000L + c.bonusMs
