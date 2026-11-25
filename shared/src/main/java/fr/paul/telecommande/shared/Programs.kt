@@ -134,9 +134,12 @@ object FilmApps {
 
 /** Mots des boutons qui lancent une lecture (Netflix, Disney+, Prime Video… en français et en anglais). */
 object PlayButtons {
+    /** Noms d'applis qui commencent par « Play » (Play Store, Play Jeux…) : jamais un bouton de lecture. */
+    private val NOT_PLAY = Regex("^play (store|games|jeux|films|movies|musique|music|livres|books)\\b")
     private val WORDS = Regex("^(lecture|lire|regarder|reprendre|reprendre la lecture|commencer|lancer|play|resume|watch|watch now|start|continuer)\\b")
     fun isPlay(label: String?): Boolean {
         val n = ProgramFilter.normalize(label ?: "")
+        if (NOT_PLAY.containsMatchIn(n)) return false
         return n.isNotEmpty() && n.length <= 60 && (WORDS.containsMatchIn(n) || Regex("\\b(episode|ep) \\d+ (lecture|play)\\b").containsMatchIn(n))
     }
 }

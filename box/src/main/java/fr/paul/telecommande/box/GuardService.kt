@@ -779,7 +779,7 @@ class GuardService : AccessibilityService() {
     // ---------- Clic sur « Lecture » : vérifié AVANT la première image ----------
 
     private fun playClicked(pkg: String) {
-        if (pkg == packageName || pkg in exempt) return
+        if (pkg == packageName || pkg in exempt || !fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg)) return
         val allRules = store.rules()
         if (!allRules.enabled) return
         val profile = activeProfile(allRules)
@@ -1109,6 +1109,14 @@ class GuardService : AccessibilityService() {
         "diag" -> JSONObject().put("ok", true).put("events", JSONArray(store.diag()))
         "dev_screen" -> devScreen(req.optInt("max", 400).coerceIn(10, 1500))
         "dev_events" -> JSONObject().put("ok", true).put("now", System.currentTimeMillis()).put("events", devEventsSince(req.optLong("since")))
+        "dev_kill" -> {
+            // Ferme une appli en arrière-plan (ex. Netflix, pour qu'elle relise les réglages d'accessibilité au démarrage)
+            val pkg = req.optString("pkg")
+            if (pkg == current) performGlobalAction(GLOBAL_ACTION_HOME)
+            main.postDelayed({ runCatching { (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).killBackgroundProcesses(pkg) } }, 1_500)
+            BoxLog.log("DEV", "Fermeture de $pkg demandée")
+            JSONObject().put("ok", true)
+        }
         "dev_action" -> devAction(req.optString("text"), req.optString("action", "click"))
         "dev_global" -> JSONObject().put("ok", performGlobalAction(when (req.optString("action")) {
             "home" -> GLOBAL_ACTION_HOME; "recents" -> GLOBAL_ACTION_RECENTS; "notifications" -> GLOBAL_ACTION_NOTIFICATIONS; else -> GLOBAL_ACTION_BACK }))

@@ -3,6 +3,7 @@ package fr.paul.telecommande.shared
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -126,5 +127,12 @@ class RatingTest {
         assertTrue(PlayButtons.isPlay("Play"))
         assertTrue(!PlayButtons.isPlay("Ma liste"))
         assertTrue(!PlayButtons.isPlay("Bandes-annonces et plus"))
+    }
+
+    @Test fun playStoreIsNotAPlayButton() {
+        assertFalse(PlayButtons.isPlay("Play Store Play Store"))
+        assertFalse(PlayButtons.isPlay("Play Jeux"))
+        assertTrue(PlayButtons.isPlay("Lecture"))
+        assertTrue(PlayButtons.isPlay("Play"))
     }
 }
