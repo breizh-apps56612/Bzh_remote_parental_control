@@ -544,6 +544,8 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         views.forEach { group.addView(it, ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(40))) }
         val scroll = android.widget.HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false; clipToPadding = false
+            // Fondu sur le bord : on voit qu'il y a d'autres raccourcis à faire défiler
+            isHorizontalFadingEdgeEnabled = true; setFadingEdgeLength(dp(40))
             addView(group)
         }
         panel.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(12) })
@@ -710,7 +712,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
      */
     private fun appsRow(): View {
         val row = LinearLayout(this).apply { setPadding(0, dp(12), 0, 0) }
-        val scroll = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false; addView(row) }
+        val scroll = android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false; isHorizontalFadingEdgeEnabled = true; setFadingEdgeLength(dp(40)); addView(row) }
         val real = if (device.hasBoxApp) fr.paul.telecommande.core.AppIcons.featured(this, device.id) else emptyList()
         if (device.hasBoxApp && (real.isEmpty() || fr.paul.telecommande.core.AppIcons.stale(this, device.id)) && !iconsLoading) {
             iconsLoading = true
