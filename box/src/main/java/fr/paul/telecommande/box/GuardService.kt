@@ -433,7 +433,7 @@ class GuardService : AccessibilityService() {
     }.getOrDefault(Screen(emptyList(), emptyList(), 0, 0))
 
     /** Test des programmes (10 min, demandé depuis le téléphone) : ce que la TV arrive à lire, dans le journal du parent. */
-    private fun progDiag(pkg: String, title: String?, sub: String?, screen: Screen, meta: List<String>, rating: fr.paul.telecommande.shared.Rating) {
+    private fun progDiag(pkg: String, title: String?, sub: String?, screen: Screen, meta: List<String>, rating: fr.paul.telecommande.shared.Rating, guide: TvGuide.Program? = null) {
         val now = System.currentTimeMillis()
         val k = "$pkg|$title|${rating.age}|${rating.contents}"
         if (now - lastProgDiag < 15_000 && k == lastProgDiagKey) return
@@ -445,6 +445,7 @@ class GuardService : AccessibilityService() {
             " · classification : " + (if (rating.age != null || rating.contents.isNotEmpty()) ratingLabel(rating) else "non trouvée") +
             " · écran : ${screen.windows} fenêtre(s), ${screen.nodes} éléments, ${screen.texts.size} textes, ${recentTexts().size} textes passagers" +
             " · infos média : " + (Media.keys(this, pkg).joinToString(",").ifEmpty { if (Media.allowed(this)) "aucune" else "accès « titre en cours » non autorisé" }) +
+            " · guide TV : " + (guide?.let { "trouvé (${it.channel}, ${it.ratings.joinToString(",").ifEmpty { "sans classification" }}${if (it.genres.isNotBlank()) ", " + it.genres else ""})" } ?: runCatching { TvGuide.summary(this) }.getOrDefault("erreur")) +
             (if (screen.ratingIds.isNotEmpty()) " · éléments classification : " + screen.ratingIds.take(5).joinToString("; ") else "") +
             (if (ratingish.isNotEmpty()) " · textes repérés : " + ratingish.joinToString(" | ") { it.take(60) } else "")
         server.push(JSONObject().put("event", "progdiag").put("text", text))
@@ -476,8 +477,11 @@ class GuardService : AccessibilityService() {
         if (playing && (active || diag || progId >= 0)) {
             val screen = readScreen(pkg)
             val meta = Media.allText(this, pkg)
-            val r = fr.paul.telecommande.shared.RatingReader.read(screen.texts + recentTexts() + meta)
-            if (diag) progDiag(pkg, title, sub, screen, meta, r)
+            // Guide des programmes : classification officielle et genre du programme qui porte ce titre
+            val guide = runCatching { TvGuide.find(this, title) }.getOrNull()
+            val guideTexts = guide?.let { g -> listOfNotNull(g.age?.let { if (it == 0) "Tous publics" else "$it+" }, g.genres.takeIf { it.isNotBlank() }) } ?: emptyList()
+            val r = fr.paul.telecommande.shared.RatingReader.read(screen.texts + recentTexts() + meta + guideTexts)
+            if (diag) progDiag(pkg, title, sub, screen, meta, r, guide)
             if (r.age != null || r.contents.isNotEmpty()) {
                 val old = progRating
                 // Avec un titre connu, on garde la classification vue au début de la lecture ; sans titre, seulement l'écran actuel

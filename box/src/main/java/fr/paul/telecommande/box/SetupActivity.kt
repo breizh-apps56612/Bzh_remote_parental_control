@@ -38,6 +38,11 @@ class SetupActivity : Activity() {
         setContentView(ScrollView(this).apply { background = BoxUi.screen(this@SetupActivity); addView(root) })
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        render()
+    }
+
     override fun onResume() {
         super.onResume(); render()
         if (triedAccessibility && !GuardService.enabled(this)) { triedAccessibility = false; showAccessibilityPath() }
@@ -101,6 +106,12 @@ class SetupActivity : Activity() {
             if (mediaAvailable) "Affiche le titre et l'image de ce qui est regardé dans l'appli du téléphone." else "Non proposé par cette box.",
             if (mediaAvailable) Media.allowed(this) else null, if (mediaAvailable && !Media.allowed(this)) "Autoriser" else null) {
             open("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
+        }
+
+        step("+", "Guide des programmes (facultatif)",
+            if (TvGuide.available()) "Lit la classification officielle (-10, -12, -16…) des chaînes qui publient leur grille dans Android TV." else "Non proposé par cette box.",
+            if (TvGuide.available()) TvGuide.allowed(this) else null, if (TvGuide.available() && !TvGuide.allowed(this)) "Autoriser" else null) {
+            if (android.os.Build.VERSION.SDK_INT >= 23) requestPermissions(arrayOf(TvGuide.PERMISSION), 7)
         }
 
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager

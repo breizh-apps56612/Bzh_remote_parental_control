@@ -142,7 +142,8 @@ object BoxActions {
     /** Test de lecture des programmes (10 min) : ce que la TV voit du titre et de la classification, noté dans le journal. */
     fun programTest(a: AppCompatActivity, d: Device) {
         AlertDialog.Builder(a).setTitle("Tester la lecture des programmes")
-            .setMessage("Pendant 10 minutes, la TV note ce qu'elle arrive à lire : titre, classification (7+, -12…), contenus signalés.\n\n" +
+            .setMessage("Pendant 10 minutes, la TV note ce qu'elle arrive à lire : titre, classification (7+, -12…), contenus signalés, guide des programmes.\n\n" +
+                "Avant : dans l'appli de la TV, autorisez « Titre en cours » et « Guide des programmes ».\n\n" +
                 "Lancez quelques programmes : Netflix, Disney+, YouTube, la TV en direct… en laissant passer le début de la lecture.\n\n" +
                 "Ensuite : menu ⋮ › Journal de diagnostic › Partager. Rien n'est bloqué pendant le test.")
             .setPositiveButton("Lancer le test") { _, _ ->
