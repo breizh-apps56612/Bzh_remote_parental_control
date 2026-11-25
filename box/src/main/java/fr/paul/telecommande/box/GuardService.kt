@@ -56,7 +56,9 @@ class GuardService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         BoxLog.init(this)
-        BoxLog.log("SERVICE", "Contrôle parental actif (accessibilité connectée)")
+        BoxLog.log("SERVICE", "Contrôle parental actif (accessibilité connectée) · lecteur d'écran muet : " +
+            runCatching { val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+                "exploration ${if (am.isTouchExplorationEnabled) "oui" else "non"}, touches ${if ((serviceInfo?.flags ?: 0) and android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS != 0) "oui" else "non"}" }.getOrDefault("?"))
         instance = this
         overlays = Overlays(this)
         overlays.onPinRequest = { id, title -> if (::server.isInitialized) server.push(JSONObject().put("event", "pin_request").put("id", id).put("title", title)) }
@@ -136,6 +138,8 @@ class GuardService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED || event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT) {
             // Classification affichée quelques secondes (« 16+ · violence » au début d'une lecture) : on la garde 30 s
             if (progWatch && event.packageName?.toString() == current) harvest(event)
+            if (event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT && event.packageName?.toString() == current)
+                BoxLog.change("ANNONCE", "${label(current ?: "")} : « ${event.text?.joinToString(" ").orEmpty().take(200)} »")
             if (event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT) return
             // Pendant « finir l'épisode » : on guette l'écran « Épisode suivant »
             val now = System.currentTimeMillis()
@@ -144,6 +148,15 @@ class GuardService : AccessibilityService() {
         }
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             lastInteraction = System.currentTimeMillis()      // l'utilisateur se déplace avec la télécommande
+            // Lecteur d'écran muet : ce que l'appli de films décrit de l'élément sélectionné (titre, « Lecture », « 7+ »…)
+            val ePkg = event.packageName?.toString()
+            if (ePkg != null && ePkg == current && fr.paul.telecommande.shared.FilmApps.isFilmApp(ePkg) &&
+                event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED) {
+                harvest(event)
+                val said = (event.text?.joinToString(" ").orEmpty() + " " + (event.contentDescription ?: "")).trim()
+                if (said.isNotBlank()) { lastFocusLabel = said; lastFocusAt = System.currentTimeMillis() }
+                BoxLog.change("VU", "${label(ePkg)} · ${AccessibilityEvent.eventTypeToString(event.eventType)} : « ${said.take(160)} »")
+            }
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 val label = (event.text?.joinToString(" ").orEmpty() + " " + (event.contentDescription ?: "") + " " +
                     runCatching { event.source?.let { (it.text ?: "").toString() + " " + (it.contentDescription ?: "") } }.getOrNull().orEmpty()).trim()
@@ -170,6 +183,7 @@ class GuardService : AccessibilityService() {
         if (pkg == packageName || pkg in TRANSIENT || isIme(pkg)) return
         if (pkg == current) return
         current = pkg
+        if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg) && !progWatch) { progWatch = true; refreshEvents() }
         BoxLog.log("APPLI", "${label(pkg)} ($pkg)" + (event.className?.let { " · $it" } ?: ""))
         lastBlockPkg = null
         server.push(JSONObject().put("event", "app").put("pkg", pkg).put("label", label(pkg)))
@@ -177,6 +191,29 @@ class GuardService : AccessibilityService() {
     }
 
     override fun onInterrupt() {}
+
+    private var lastFocusLabel = ""
+    private var lastFocusAt = 0L
+
+    /**
+     * Touche OK de la télécommande : jamais bloquée (on renvoie toujours false), seulement repérée. Si l'élément sélectionné
+     * dans une appli de films est « Lecture », la classification est vérifiée avant la première image.
+     */
+    override fun onKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action != android.view.KeyEvent.ACTION_UP) return false
+        val k = event.keyCode
+        if (k != android.view.KeyEvent.KEYCODE_DPAD_CENTER && k != android.view.KeyEvent.KEYCODE_ENTER &&
+            k != android.view.KeyEvent.KEYCODE_MEDIA_PLAY && k != android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) return false
+        val pkg = current ?: return false
+        if (!fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg)) return false
+        val focus = runCatching { findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT)
+            ?.let { ((it.text ?: "").toString() + " " + (it.contentDescription ?: "")).trim() } }.getOrNull().orEmpty()
+        val sel = focus.ifBlank { lastFocusLabel.takeIf { System.currentTimeMillis() - lastFocusAt < 15_000 }.orEmpty() }
+        val play = k == android.view.KeyEvent.KEYCODE_MEDIA_PLAY || fr.paul.telecommande.shared.PlayButtons.isPlay(sel)
+        BoxLog.log("TOUCHE", "${label(pkg)} : ${android.view.KeyEvent.keyCodeToString(k)} sur « ${sel.take(100)} »" + if (play) " → Lecture" else "")
+        if (play) main.post { playClicked(pkg) }
+        return false
+    }
 
     override fun onDestroy() {
         instance = null
@@ -681,7 +718,7 @@ class GuardService : AccessibilityService() {
         val profile = activeProfile(allRules)
         val rules = allRules.forProfile(profile)
         if (!rules.enabled || profile?.unlimited == true) return
-        val texts = readScreen(pkg).texts
+        val texts = readScreen(pkg).texts.ifEmpty { recentTexts() }
         // La classification de la page : la première trouvée (celle du titre choisi, pas des suggestions plus bas)
         val age = texts.asSequence().mapNotNull { fr.paul.telecommande.shared.RatingReader.read(listOf(it)).age }.firstOrNull()
         val r = fr.paul.telecommande.shared.Rating(age, fr.paul.telecommande.shared.RatingReader.read(texts).contents)
