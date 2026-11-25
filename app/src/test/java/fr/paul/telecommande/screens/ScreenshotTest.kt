@@ -190,6 +190,8 @@ class ScreenshotTest {
         frame("install-5", "com.esaba.downloader", fr.paul.telecommande.core.ApkServer.State.DONE)
         frame("install-6", "fr.paul.telecommande.box", fr.paul.telecommande.core.ApkServer.State.DONE)
         frame("install-7", "fr.paul.telecommande.box", fr.paul.telecommande.core.ApkServer.State.DONE, boxUp = true)
+        set(a, "manualPath", true)
+        frame("install-3b", "com.esaba.downloader", fr.paul.telecommande.core.ApkServer.State.READY)
     }
 
     @Test fun wizard() {

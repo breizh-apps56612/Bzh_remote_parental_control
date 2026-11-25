@@ -61,7 +61,13 @@ class InstallBoxActivity : AppCompatActivity(), PairingUi {
         val detect: () -> Boolean = { false }
     )
 
-    private class Step(val title: String, val subs: List<Sub>)
+    /** Une étape ; [only] choisit les lignes à montrer (null = toutes). */
+    private class Step(val title: String, private val all: List<Sub>, val only: () -> List<String>? = { null }) {
+        val subs: List<Sub> get() = only()?.let { ids -> all.filter { it.id in ids } } ?: all
+    }
+
+    /** Saisie manuelle de l'adresse dans Downloader : montrée seulement si l'envoi direct n'a pas marché. */
+    private var manualPath = false
 
     private lateinit var device: Device
     private var tv: AndroidTvDriver? = null
@@ -194,7 +200,7 @@ class InstallBoxActivity : AppCompatActivity(), PairingUi {
                 "Le téléphone envoie l'appli à la TV (quelques secondes).",
                 manualLabel = "La TV propose d'installer",
                 detect = { received() })
-        )),
+        ), only = { if (manualPath) listOf("open", "bar", "paste", "go", "recv") else listOf("direct", "recv") }),
         Step("Installer l'appli Box", listOf(
             Sub("allow", "Autoriser Downloader (si demandé)",
                 "Si la TV affiche « Paramètres » : ouvrez-les, activez « Downloader », puis faites ↩ Retour.",
@@ -298,7 +304,11 @@ class InstallBoxActivity : AppCompatActivity(), PairingUi {
 
         content.addView(Ui.text(c, device.name, 13f, muted = true))
         content.addView(Ui.title(c, "Installer l'appli Box"))
-        content.addView(Ui.text(c, if (cur >= steps.size) "Terminé" else "Étape ${cur + 1} sur ${steps.size}", 14f, muted = true), Ui.lp(c, 4))
+        content.addView(Ui.text(c, when {
+            cur >= steps.size -> "Terminé"
+            cur == 0 -> "Étape 1 sur ${steps.size} · environ 10 minutes en tout"
+            else -> "Étape ${cur + 1} sur ${steps.size}"
+        }, 14f, muted = true), Ui.lp(c, 4))
         content.addView(Ui.progress(c, cur.toFloat() / steps.size, false), LinearLayout.LayoutParams(-1, Ui.dp(c, 6)).apply { topMargin = Ui.dp(c, 8) })
 
         if (!ApkServer.bundled(c)) { content.addView(Ui.text(c, "Cette version ne contient pas l'appli Box.", 15f), Ui.lp(c, 12)); renderRemote(false); return }
@@ -431,9 +441,18 @@ class InstallBoxActivity : AppCompatActivity(), PairingUi {
                 buttons.addView(Ui.button(c, if (busy == sub.id) "Envoi à la TV…" else l, primary = true) { runAction(sub) }.apply { alpha = if (busy != null) 0.6f else 1f },
                     LinearLayout.LayoutParams(-1, Ui.dp(c, 50)))
             }
-            if (sub.id != "pair") buttons.addView(Ui.button(c, sub.manualLabel, primary = sub.actionLabel == null) { manual += sub.id; note = ""; DiagLog.log("ASSISTANT", "Validé à la main : ${sub.id}"); render() },
+            if (sub.id != "pair") buttons.addView(Ui.button(c, sub.manualLabel, primary = sub.actionLabel == null) {
+                    if (sub.id == "direct") { manualPath = true; DiagLog.log("ASSISTANT", "Passage à la saisie manuelle de l'adresse") }
+                    else { manual += sub.id; DiagLog.log("ASSISTANT", "Validé à la main : ${sub.id}") }
+                    note = ""; render()
+                },
                 LinearLayout.LayoutParams(-1, Ui.dp(c, 50)).apply { topMargin = Ui.dp(c, if (sub.actionLabel != null) 8 else 0) })
             body.addView(buttons, Ui.lp(c, 12))
+            if (manualPath && sub.id in setOf("open", "bar", "paste", "go")) body.addView(TextView(c).apply {
+                text = "Revenir à l'envoi automatique"; textSize = 14f; setTextColor(Ui.color(c, R.color.accent))
+                setPadding(0, Ui.dp(c, 12), 0, Ui.dp(c, 4))
+                setOnClickListener { manualPath = false; render() }
+            })
         }
         row.addView(body, LinearLayout.LayoutParams(0, -2, 1f))
         return row
