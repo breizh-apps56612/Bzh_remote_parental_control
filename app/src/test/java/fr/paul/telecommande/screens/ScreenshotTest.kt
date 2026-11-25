@@ -134,6 +134,10 @@ class ScreenshotTest {
         call(a, "render"); shot(a, "05-regles")
         (a.window.decorView.findViewById<View>(android.R.id.content) as android.view.ViewGroup).getChildAt(0).scrollTo(0, 2300)
         shot(a, "05b-regles-suite")
+        // Règle d'une appli : Disney+ le week-end, de 14 h à 18 h
+        a.javaClass.getDeclaredMethod("editApp", String::class.java, String::class.java).apply { isAccessible = true }
+            .invoke(a, "com.disney.disneyplus", "Disney+")
+        shot(a, "05c-regle-appli", withDialog = true)
     }
 
     /** Images intermédiaires pour les animations du site (défilement réel des écrans). */

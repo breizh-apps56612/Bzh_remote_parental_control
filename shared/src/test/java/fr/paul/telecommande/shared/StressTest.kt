@@ -294,4 +294,14 @@ class ProfileSwitchTest {
         org.junit.Assert.assertFalse(ProfileSwitch.needsPin(papa, tom, true))       // parent → enfant : plus strict, libre
         org.junit.Assert.assertFalse(ProfileSwitch.needsPin(lea, tom, false))       // pas de code parent défini
     }
+
+    @Test fun parentAuthLiftsThePause() {
+        var st = 0 to 0L
+        val t = PinThrottle({ st }, { f, u -> st = f to u })
+        repeat(5) { t.attempt { false } }
+        assertTrue(t.lockedForMs() > 0)
+        t.clear()                                     // empreinte du parent
+        assertEquals(0L, t.lockedForMs())
+        assertEquals(PinThrottle.Result.Ok, t.attempt { true })
+    }
 }

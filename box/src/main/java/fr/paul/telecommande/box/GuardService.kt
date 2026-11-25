@@ -666,6 +666,8 @@ class GuardService : AccessibilityService() {
         }
         "pin_approve" -> {
             val ok = overlays.approvePin(req.optString("id"), req.optString("title"))
+            // Le parent a validé depuis son téléphone (empreinte ou code) : la pause des codes faux sur la TV ne vise que l'enfant
+            if (ok) store.pinThrottle.clear()
             addDiag("pin", (if (ok) "Code parent validé depuis le téléphone" else "Validation du téléphone refusée") + " ($phoneName) : ${overlays.lastApproveInfo}")
             JSONObject().put("ok", ok).apply { if (!ok) put("error", "Demande annulée ou expirée sur la TV") }
         }

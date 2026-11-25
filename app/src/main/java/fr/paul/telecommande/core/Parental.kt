@@ -129,6 +129,9 @@ class ParentalStore(context: Context) {
 
     fun tryPin(pin: String): fr.paul.telecommande.shared.PinThrottle.Result = pinThrottle.attempt { checkPin(pin) }
 
+    /** Empreinte du parent réussie : la pause des codes faux est levée. */
+    fun clearPinPause() = pinThrottle.clear()
+
     val boxPinHash: String get() = prefs.getString("boxPin", "") ?: ""
 
     /** Règles complètes de l'appli Box, mémorisées aussi sur le téléphone. */

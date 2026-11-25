@@ -93,6 +93,8 @@ object ParentAuth {
                 // Avec la clé : on s'en sert vraiment, preuve que c'est une empreinte enregistrée AVANT la clé
                 val c = result.cryptoObject?.cipher
                 if (crypto != null && (c == null || runCatching { c.doFinal(byteArrayOf(1)) }.isFailure)) { onCode(); return }
+                // C'est le parent : la pause imposée après des codes faux (un enfant qui devine) est levée
+                fr.paul.telecommande.core.ParentalStore(a).clearPinPause()
                 onOk()
             }
             override fun onAuthenticationError(code: Int, msg: CharSequence) {

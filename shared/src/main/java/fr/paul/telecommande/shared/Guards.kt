@@ -30,6 +30,9 @@ class PinThrottle(
         return if (lock > 0) Result.Locked(lock, fails) else Result.Wrong(FREE_TRIES - fails, fails)
     }
 
+    /** Le parent s'est authentifié autrement (empreinte, validation depuis son téléphone) : la pause ne vise que l'enfant. */
+    fun clear() = save(0, 0)
+
     sealed class Result {
         object Ok : Result()
         data class Wrong(val triesLeft: Int, val fails: Int) : Result()
