@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape><solid android:color="@color/bg" /></shape></item>
+    <!-- halo violet discret en haut de l'écran -->
+    <item android:gravity="top" android:height="420dp">
+        <shape>
+            <gradient android:type="radial" android:gradientRadius="420dp" android:centerX="0.5" android:centerY="0"
+                android:startColor="@color/bg_glow" android:endColor="#00000000" />
+        </shape>
+    </item>
+</layer-list>

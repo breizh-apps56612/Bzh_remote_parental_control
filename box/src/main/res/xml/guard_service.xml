@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Événements : changement d'écran (appli ouverte), focus/clic (activité à la télécommande, « toujours là ? »),
+     fenêtres de plantage (diagnostic). Contenu des fenêtres : uniquement pour écrire le texte envoyé par le
+     téléphone dans le champ sélectionné et repérer « l'appli s'est arrêtée ». Gestes : vraie souris. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewFocused|typeViewClicked|typeViewSelected"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="true"
+    android:description="@string/a11y_desc"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="150" />

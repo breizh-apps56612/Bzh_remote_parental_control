@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Télécommande Box</title>
+<style>
+:root{--bg:#08080c;--surface:#13131b;--hi:#1c1c28;--stroke:rgba(255,255,255,.12);--ink:#f3f2fa;--muted:#8f8ca6;--accent:#8b6cff;--accent2:#c46bff}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);line-height:1.55;
+  background:radial-gradient(900px 480px at 50% -80px,rgba(58,42,140,.55),transparent 70%),var(--bg);min-height:100vh}
+main{max-width:660px;margin:0 auto;padding:56px 20px 40px}
+.kicker{color:var(--accent);font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:.78rem}
+h1{font-size:2.4rem;letter-spacing:-.02em;margin:.25em 0 .2em}
+p.lead{color:var(--muted);margin:0 0 30px;font-size:1.05rem}
+.card{background:linear-gradient(180deg,var(--hi),var(--surface));border:1px solid var(--stroke);border-radius:24px;padding:22px 24px;margin:16px 0}
+.card h2{font-size:1.1rem;margin:0 0 10px}
+ol{margin:0 0 6px;padding-left:1.2em;color:#d6d3e6}li{margin:5px 0}
+.btn{display:inline-block;background:linear-gradient(90deg,var(--accent),var(--accent2));color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:999px;margin:10px 8px 0 0}
+.btn.alt{background:var(--surface);border:1px solid var(--stroke)}
+code{background:#0b0b12;border:1px solid var(--stroke);border-radius:10px;padding:3px 10px;font-size:1.02em;color:#fff}
+small{color:var(--muted)}
+</style></head><body><main>
+<div class="kicker">Télécommande</div>
+<h1>Télécommande Box</h1>
+<p class="lead">Contrôle parental et temps d'écran pour box Android TV, piloté depuis le téléphone.</p>
+
+<div class="card"><h2>Sur la TV (box Android TV / Google TV)</h2>
+<ol>
+<li>Installez <b>Downloader</b> depuis le Play Store de la TV.</li>
+<li>Ouvrez Downloader et tapez l'adresse : <code>telecommande-box.netlify.app/b</code></li>
+<li>Autorisez l'installation si la TV le demande, puis <b>Installer</b> › <b>Ouvrir</b>.</li>
+</ol>
+<a class="btn" href="TelecommandeBox.apk">Télécharger l'appli Box (TV)</a></div>
+
+<div class="card"><h2>Sur le téléphone (Android 5 et plus)</h2>
+<p>L'appli Télécommande sert de télécommande et de tableau de bord parent.</p>
+<a class="btn alt" href="Telecommande.apk">Télécharger l'appli téléphone</a></div>
+
+<p><small>Les données d'usage restent chez vous : sur la box et sur le téléphone, échangées en chiffré sur le réseau de la maison.</small></p>
+</main></body></html>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Télécommande</string>
+    <string name="add">Ajouter</string>
+    <string name="scan">Rechercher sur le réseau</string>
+    <string name="manual">Ajouter manuellement</string>
+    <string name="empty">Aucun appareil.\n\nAppuyez sur « + » pour rechercher vos TV et box sur le Wi-Fi, ou pour utiliser l\'émetteur infrarouge du téléphone.</string>
+</resources>
