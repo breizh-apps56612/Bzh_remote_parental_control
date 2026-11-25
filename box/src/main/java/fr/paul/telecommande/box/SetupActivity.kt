@@ -148,30 +148,55 @@ class SetupActivity : Activity() {
 
     private var triedAccessibility = false
 
-    /** Ouvre l'accessibilité ; certaines box (Freebox…) refusent l'accès direct : on essaie plusieurs chemins. */
+    /**
+     * Ouvre l'écran Accessibilité de la TV. L'accès standard (ACTION_ACCESSIBILITY_SETTINGS) est redirigé par certaines
+     * box (Freebox…) vers les Paramètres généraux : on cherche donc d'abord, dans l'appli Paramètres de la TV, l'écran
+     * dont le nom parle d'accessibilité, et on ne retombe sur les Paramètres généraux qu'en dernier recours.
+     */
     private fun openAccessibility() {
         triedAccessibility = true
-        val candidates = listOf(
-            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
-            Intent().setClassName("com.android.tv.settings", "com.android.tv.settings.accessibility.AccessibilityActivity"),
-            Intent().setClassName("com.android.tv.settings", "com.android.tv.settings.MainSettings"),
-            Intent(Settings.ACTION_SETTINGS)
-        )
-        val ok = candidates.any { i ->
+        val me = android.content.ComponentName(this, GuardService::class.java).flattenToString()
+        val candidates = mutableListOf<Intent>()
+        // Android 11+ : directement la page de NOTRE service
+        if (android.os.Build.VERSION.SDK_INT >= 30)
+            candidates += Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS").putExtra(Intent.EXTRA_COMPONENT_NAME, me)
+        candidates += accessibilityScreens()
+        candidates += Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        val opened = candidates.firstOrNull { i ->
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            i.resolveActivity(packageManager) != null && runCatching { startActivity(i); true }.getOrDefault(false)
+            val target = i.resolveActivity(packageManager) ?: return@firstOrNull false
+            // Un accès standard redirigé vers un autre écran (Paramètres généraux) ne compte pas
+            if (i.component == null && i.action == Settings.ACTION_ACCESSIBILITY_SETTINGS && !target.className.contains("ccessibility")) return@firstOrNull false
+            runCatching { startActivity(i); true }.getOrDefault(false)
         }
-        if (!ok) showAccessibilityPath()
+        getSharedPreferences("box_meta", MODE_PRIVATE).edit()
+            .putString("accessibilityOpen", opened?.let { it.component?.flattenToShortString() ?: it.action } ?: "aucun").apply()
+        if (opened == null) showAccessibilityPath()
+    }
+
+    /** Écrans « Accessibilité » déclarés par l'appli Paramètres de la TV (noms différents selon les fabricants). */
+    private fun accessibilityScreens(): List<Intent> {
+        val pkgs = listOf("com.android.tv.settings", "com.android.settings") +
+            runCatching { packageManager.getInstalledPackages(0).map { it.packageName }.filter { fr.paul.telecommande.shared.ProtectedApps.isSettings(it) } }.getOrDefault(emptyList())
+        return pkgs.distinct().flatMap { pkg ->
+            val acts = runCatching { packageManager.getPackageInfo(pkg, android.content.pm.PackageManager.GET_ACTIVITIES).activities?.toList() }.getOrNull() ?: emptyList()
+            acts.filter { it.exported && it.name.contains("ccessibility") && !it.name.contains("Shortcut") && !it.name.contains("Service") }
+                // l'écran principal d'abord : « AccessibilityActivity », « AccessibilitySettings… »
+                .sortedBy { n -> when { n.name.endsWith("AccessibilityActivity") -> 0; n.name.contains("AccessibilitySettings") -> 1; else -> 2 } }
+                .map { Intent().setClassName(pkg, it.name) }
+        }
     }
 
     private fun showAccessibilityPath() {
-        AlertDialog.Builder(this).setTitle("Activer la protection à la main")
-            .setMessage("Avec la télécommande de la box :\n\n1. Ouvrez les Paramètres (roue dentée en haut à droite de l'accueil).\n" +
-                "2. Préférences de l'appareil › Accessibilité.\n3. Choisissez « Télécommande Box », puis Activer › OK.\n\n" +
+        AlertDialog.Builder(this).setTitle("Activer la protection")
+            .setMessage("Cette TV n'ouvre pas directement l'écran Accessibilité. Dans les Paramètres :\n\n" +
+                "1. Préférences de l'appareil › Accessibilité.\n2. Choisissez « Télécommande Box », puis Activer › OK.\n\n" +
                 "Revenez ensuite dans cette appli : l'étape se cochera toute seule.")
-            .setPositiveButton("Compris", null).show()
+            .setPositiveButton("Ouvrir les Paramètres") { _, _ ->
+                runCatching { startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            }
+            .setNegativeButton("Plus tard", null).show()
     }
-
 
     private fun open(action: String) {
         runCatching { startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

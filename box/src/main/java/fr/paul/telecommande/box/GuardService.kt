@@ -69,6 +69,7 @@ class GuardService : AccessibilityService() {
             if (before != null && before != fp) addDiag("identity", "Identité de la box changée (${store.startupInfo}) : réappairage du téléphone nécessaire")
             meta.edit().putString("fp", fp).apply()
             addDiag("start", "Démarrage : ${store.startupInfo}, ${store.phones().size} téléphone(s) appairé(s)")
+            meta.getString("accessibilityOpen", null)?.let { addDiag("setup", "Bouton Activer : écran ouvert = $it") }
         }
         // Fin d'épisode en cours avant un redémarrage / une mise à jour : on reprend la même échéance (pas de temps en plus)
         store.graceState().let { (until, gp) ->
