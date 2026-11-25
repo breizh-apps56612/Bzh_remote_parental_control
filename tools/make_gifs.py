@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fabrique les GIF animés du site à partir des vraies captures (lancer ScreenshotTest avec SCREENS=1 avant)."""
+"""Fabrique les GIF animés du site à partir des vraies captures de l'appli (Robolectric)."""
 import math, os, shutil, subprocess, sys
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
@@ -344,7 +344,99 @@ def stats():
     g.save()
 
 
+# ---------- 6. L'installation guidée par le téléphone ----------
+def note_tv(lines, w=600):
+    """Écran de TV d'illustration (applis tierces qu'on ne reproduit pas) : simple panneau d'explication."""
+    W, H = 1920, 1080
+    im = Image.new("RGB", (W, H), (14, 14, 22))
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle((360, 300, 1560, 780), 40, outline=(110, 100, 150), width=4)
+    f1 = ImageFont.truetype(FONT, 64)
+    f2 = ImageFont.truetype("/usr/share/fonts/opentype/inter/Inter-Medium.otf", 44)
+    f3 = ImageFont.truetype("/usr/share/fonts/opentype/inter/Inter-Medium.otf", 34)
+    d.text((W / 2, 400), lines[0], font=f1, fill=(243, 242, 250), anchor="mm")
+    y = 520
+    for l in lines[1:]:
+        d.text((W / 2, y), l, font=f2, fill=(200, 197, 220), anchor="mm"); y += 70
+    d.text((W / 2, 980), "Sur la TV", font=f3, fill=(120, 116, 140), anchor="mm")
+    return im
+
+
+def install():
+    g = Gif("installation", 960, 540)
+    tvs = {
+        "store": note_tv(["Play Store", "La page de Downloader s'ouvre"]),
+        "dl": note_tv(["Downloader", "Installer › Ouvrir"]),
+        "recv": note_tv(["Downloader", "Téléchargement de l'appli Box…"]),
+        "inst": note_tv(["Installation", "Installer › Ouvrir"]),
+        "activer": load("tv-08-activer"),
+        "play": load("tv-05-sablier"),
+    }
+    p = tvs["play"].copy(); p.paste(p.crop((1100, 40, 1500, 180)), (1480, 40)); tvs["play"] = p
+    code = load("tv-09-code-appairage")
+    tvs["code"] = code
+    tvb = {k: tv(v, 600)[0] for k, v in tvs.items()}
+    phs = {f"i{i}": load(f"install-{i}") for i in range(1, 8)}
+    phs["dash"] = load("02-tableau-de-bord-sans-demande")
+    phb = {}
+    for kk, v in phs.items():
+        phb[kk], pk = phone(v, 200)
+    tx, ty = 36 * S, 70 * S
+    px, py = 712 * S, 26 * S
+    cy = 470 * S
+
+    def frame(ta, tb, tt, pa, pb, pt, text, fing=None):
+        c = g.canvas()
+        c.alpha_composite(blend(tvb[ta], tvb[tb], tt), (tx, ty))
+        c.alpha_composite(blend(phb[pa], phb[pb], pt), (px, py))
+        if fing:
+            finger(c, *fing[:2], alpha=fing[2], ripple=fing[3])
+        caption(c, text, cy, size=18)
+        return c
+
+    def at(x, y):
+        return px + 9 * S + x * pk, py + 9 * S + y * pk
+
+    def hold(t, ph, text, s):
+        for _ in range(sec(s)):
+            g.add(frame(t, t, 0, ph, ph, 0, text))
+
+    def tap(t, ph, text, xy):
+        m = sec(0.8)
+        for i in range(m):
+            k = i / (m - 1)
+            g.add(frame(t, t, 0, ph, ph, 0, text, (*at(*xy), 1 if k < 0.7 else (1 - k) / 0.3, min(1, k * 1.6))))
+
+    def go(t0, t1, p0, p1, text):
+        n = sec(0.45)
+        for i in range(n):
+            e = ease(i / (n - 1))
+            g.add(frame(t0, t1, e if t0 != t1 else 0, p0, p1, e if p0 != p1 else 0, text))
+
+    T = "1. Le téléphone ouvre Downloader sur la TV"
+    hold("play", "i1", "Sur le téléphone : Installer l'appli Box", 1.4)
+    tap("play", "i1", T, (592, 976))
+    go("play", "store", "i1", "i2", T)
+    hold("store", "i2", "Installez Downloader : la case se coche seule", 1.6)
+    go("store", "dl", "i2", "i3", "2. Le téléphone envoie l'appli à la TV")
+    tap("dl", "i3", "2. Le téléphone envoie l'appli à la TV", (592, 1288))
+    go("dl", "recv", "i3", "i4", "La TV la télécharge depuis le téléphone")
+    hold("recv", "i4", "La TV la télécharge depuis le téléphone", 1.5)
+    go("recv", "inst", "i4", "i5", "3. Installer, puis ouvrir")
+    hold("inst", "i5", "3. Installer, puis ouvrir", 1.4)
+    go("inst", "activer", "i5", "i6", "4. Activer la protection sur la TV")
+    hold("activer", "i6", "4. Activer la protection sur la TV", 1.8)
+    go("activer", "activer", "i6", "i7", "5. Relier le téléphone")
+    tap("activer", "i7", "5. Relier le téléphone", (592, 1788))
+    go("activer", "code", "i7", "i7", "Tapez le code affiché sur la TV")
+    hold("code", "i7", "Tapez le code affiché sur la TV", 1.6)
+    go("code", "play", "i7", "dash", "C'est prêt. Les mises à jour se font ensuite seules.")
+    hold("play", "dash", "C'est prêt. Les mises à jour se font ensuite seules.", 2.4)
+    go("play", "play", "dash", "i1", "")
+    g.save()
+
+
 if __name__ == "__main__":
-    which = sys.argv[2:] or ["remote", "pin", "request", "rules", "stats"]
+    which = sys.argv[2:] or ["remote", "pin", "request", "rules", "stats", "install"]
     for w in which:
         globals()[w]()

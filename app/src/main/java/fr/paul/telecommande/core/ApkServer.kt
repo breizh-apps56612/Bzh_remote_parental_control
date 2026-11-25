@@ -115,6 +115,9 @@ class ApkServer(private val context: Context) {
                 .firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
         }.getOrNull()
 
-        fun bundled(context: Context) = runCatching { context.assets.openFd("box.apk").close(); true }.getOrDefault(false)
+        /** Uniquement pour les captures d'écran automatiques (les tests ne voient pas les fichiers embarqués). */
+        @JvmStatic var bundledForTest: Boolean? = null
+
+        fun bundled(context: Context) = bundledForTest ?: runCatching { context.assets.openFd("box.apk").close(); true }.getOrDefault(false)
     }
 }

@@ -142,25 +142,38 @@ small{color:var(--muted)}
 
 <section id="installer">
   <div class="kicker">4 · Installer</div>
-  <h2>Prêt en une dizaine de minutes.</h2>
+  <h2>Le téléphone installe l'appli sur la TV, avec vous.</h2>
+  <p class="lead">Installez l'appli sur votre téléphone : un assistant vous guide ensuite pour la TV. Il ouvre Downloader sur la TV, lui envoie l'appli et coche chaque étape tout seul dès qu'il la voit faite. Rien ne part vers la TV sans un appui de votre part.</p>
+  <img class="wide" src="installation.gif" width="960" height="540" loading="lazy" alt="L'assistant du téléphone : il ouvre Downloader sur la TV, envoie l'appli, puis guide l'installation, l'activation de la protection et la liaison par code ; chaque étape se coche toute seule.">
   <div class="install">
-    <div class="card"><h3>📺 Sur la TV (box Android TV / Google TV)</h3>
-      <ol>
-        <li>Installez <b>Downloader</b> depuis le Play Store de la TV.</li>
-        <li>Ouvrez Downloader et tapez l'adresse : <code>telecommande-box.netlify.app/b</code></li>
-        <li>Autorisez l'installation si la TV le demande, puis <b>Installer</b> › <b>Ouvrir</b>.</li>
-        <li>Activez l'option demandée : <b>Paramètres › Accessibilité › Télécommande Box</b>. C'est elle qui permet à la TV d'appliquer les règles.</li>
-      </ol>
-      <a class="btn" href="TelecommandeBox.apk">Télécharger l'appli TV</a></div>
-    <div class="card"><h3>📱 Sur le téléphone (Android 5 et plus)</h3>
+    <div class="card"><h3>📱 1. Sur le téléphone (Android 5 et plus)</h3>
       <ol>
         <li>Téléchargez l'appli et autorisez l'installation depuis le navigateur.</li>
         <li>Ouvrez-la : elle trouve la TV sur le Wi-Fi de la maison.</li>
-        <li>Pour le contrôle parental : <b>Temps d'écran › Appairer l'appli Box</b>, puis tapez le code affiché sur la TV.</li>
+        <li>Onglet <b>Temps d'écran</b> › <b>Installer l'appli Box sur la TV</b>, puis suivez l'assistant.</li>
       </ol>
-      <a class="btn alt" href="Telecommande.apk">Télécharger l'appli téléphone</a>
+      <a class="btn" href="Telecommande.apk">Télécharger l'appli téléphone</a>
       <p><small>Raccourci à taper dans un navigateur : <code>telecommande-box.netlify.app/t</code></small></p></div>
+    <div class="card"><h3>📺 2. Sur la TV : ce que fait l'assistant</h3>
+      <ol>
+        <li><b>Installer Downloader</b> : le téléphone ouvre sa page dans le Play Store de la TV.</li>
+        <li><b>Télécharger l'appli Box</b> : le téléphone l'envoie directement à Downloader, par le Wi-Fi de la maison.</li>
+        <li><b>Installer, puis ouvrir</b> l'appli sur la TV.</li>
+        <li><b>Activer la protection</b> : Paramètres › Accessibilité › Télécommande Box.</li>
+        <li><b>Relier au téléphone</b> : tapez le code affiché sur la TV.</li>
+      </ol>
+      <p><small>Une case ne se coche pas ? Un bouton « C'est fait » permet toujours de passer à la suite.</small></p></div>
   </div>
+  <details><summary>Installer sans l'assistant (à la main sur la TV)</summary>
+    <ol>
+      <li>Installez <b>Downloader</b> depuis le Play Store de la TV.</li>
+      <li>Ouvrez Downloader et tapez l'adresse : <code>telecommande-box.netlify.app/b</code></li>
+      <li>Autorisez l'installation si la TV le demande, puis <b>Installer</b> › <b>Ouvrir</b>.</li>
+      <li>Activez l'option : <b>Paramètres › Accessibilité › Télécommande Box</b>.</li>
+      <li>Sur le téléphone : <b>Temps d'écran › Déjà installée : appairer</b>, puis tapez le code affiché sur la TV.</li>
+    </ol>
+    <p><a class="btn alt" href="TelecommandeBox.apk">Télécharger l'appli TV</a></p>
+  </details>
   <p class="compat">Ensuite, les deux applis se mettent à jour seules depuis ce site, après vérification de leur empreinte.</p>
 
   <h3 style="margin-top:44px">Questions fréquentes</h3>

@@ -85,6 +85,18 @@ class TvScreenshotTest {
         File(out, "tv-07-reglages-focus.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    @Test fun setupAndPairing() {
+        val a = org.robolectric.Robolectric.buildActivity(SetupActivity::class.java).setup().get()
+        val root = a.window.decorView
+        root.measure(View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY))
+        root.layout(0, 0, 1920, 1080)
+        val bmp = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
+        root.draw(Canvas(bmp))
+        File(out, "tv-08-activer.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        o.showPairingCode("482913", 120_000)
+        shot("tv-09-code-appairage", fullscreen = false)
+    }
+
     @Test fun whoWatches() {
         o.showWhoWatches(listOf(Profile("leo", "Léo", "🦖", 90), Profile("emma", "Emma", "🦄", 60), Profile("par", "Parents", "👑", 0, true)), "leo") {}
         shot("tv-02-qui-regarde")

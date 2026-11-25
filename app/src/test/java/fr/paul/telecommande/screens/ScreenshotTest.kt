@@ -163,6 +163,35 @@ class ScreenshotTest {
         for (t in 0..2) { set(d, "tab", t); call(d, "render"); layout(d); scroller(d).scrollTo(0, if (t == 0) 1624 else 1500); save(d, "activite-$t") }
     }
 
+    /** Assistant d'installation de l'appli TV : les étapes se cochent au fil de ce que le téléphone observe sur la TV. */
+    @Test fun installFrames() {
+        val dir = File(out, "frames").apply { mkdirs() }
+        fr.paul.telecommande.core.ApkServer.bundledForTest = true
+        val i = Intent(ctx, fr.paul.telecommande.ui.InstallBoxActivity::class.java).putExtra(fr.paul.telecommande.ui.InstallBoxActivity.EXTRA_ID, device.id)
+        val a = Robolectric.buildActivity(fr.paul.telecommande.ui.InstallBoxActivity::class.java, i).setup().get()
+        val srv = a.javaClass.getDeclaredField("server").apply { isAccessible = true }.get(a) as fr.paul.telecommande.core.ApkServer
+        @Suppress("UNCHECKED_CAST")
+        val st = srv.javaClass.getDeclaredField("_state").apply { isAccessible = true }.get(srv) as kotlinx.coroutines.flow.MutableStateFlow<fr.paul.telecommande.core.ApkServer.State>
+        fun frame(name: String, tvApp: String, state: fr.paul.telecommande.core.ApkServer.State, boxUp: Boolean = false) {
+            set(a, "tvConnected", true); set(a, "tvApp", tvApp); set(a, "boxUp", boxUp); set(a, "busy", null); set(a, "note", "")
+            st.value = state
+            call(a, "render")
+            val root = a.window.decorView
+            root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2400, View.MeasureSpec.EXACTLY))
+            root.layout(0, 0, 1080, 2400)
+            val bmp = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888)
+            root.draw(Canvas(bmp))
+            File(dir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        frame("install-1", "", fr.paul.telecommande.core.ApkServer.State.READY)
+        frame("install-2", "com.android.vending", fr.paul.telecommande.core.ApkServer.State.READY)
+        frame("install-3", "com.esaba.downloader", fr.paul.telecommande.core.ApkServer.State.READY)
+        frame("install-4", "com.esaba.downloader", fr.paul.telecommande.core.ApkServer.State.DOWNLOADING)
+        frame("install-5", "com.esaba.downloader", fr.paul.telecommande.core.ApkServer.State.DONE)
+        frame("install-6", "fr.paul.telecommande.box", fr.paul.telecommande.core.ApkServer.State.DONE)
+        frame("install-7", "fr.paul.telecommande.box", fr.paul.telecommande.core.ApkServer.State.DONE, boxUp = true)
+    }
+
     @Test fun wizard() {
         val a = Robolectric.buildActivity(RulesWizardActivity::class.java, intent(RulesWizardActivity::class.java, RulesWizardActivity.EXTRA_ID)).setup().get()
         ShadowDialog.getLatestDialog()?.dismiss()
