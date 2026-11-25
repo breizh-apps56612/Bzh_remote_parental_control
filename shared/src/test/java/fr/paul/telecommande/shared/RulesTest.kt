@@ -71,4 +71,31 @@ class RulesTest {
         assertNotEquals(p, BoxProtocol.proof("123456", "aa", "cc"))   // box usurpée (MITM)
         assertEquals(6, BoxProtocol.newPairingCode().length)
     }
+
+    /** Bug signalé : temps total ET limite de l'appli dépassés → accepter ne levait que le premier, la TV redemandait. */
+    @Test fun oneApprovalLiftsEveryBlockingRule() {
+        val rule = AppRule(limitMin = 45)
+        val r = BoxRules(enabled = true, dailyTotalMin = 60, apps = mutableMapOf("nf" to rule))
+        val c = ctx(used = 50 * min, total = 61 * min)
+        val first = RulesEngine.evaluate(r, "Netflix", rule, c) as Verdict.Block
+        assertEquals(Verdict.KIND_TOTAL, first.kind)
+        // Ancien comportement : on n'accordait que le temps total → la limite de l'appli bloquait aussitôt
+        assertTrue(RulesEngine.evaluate(r, "Netflix", rule, c.copy(totalBonusMs = 30 * min)) is Verdict.Block)
+        val kinds = RulesEngine.grantsToLift(r, "Netflix", rule, c, 30 * min)
+        assertEquals(listOf(Verdict.KIND_TOTAL, Verdict.KIND_APP), kinds)
+        assertTrue(RulesEngine.evaluate(r, "Netflix", rule, c.copy(totalBonusMs = 30 * min, bonusMs = 30 * min)) !is Verdict.Block)
+    }
+
+    @Test fun approvalAtBedtimeAlsoLiftsLimits() {
+        val rule = AppRule(limitMin = 45)
+        val r = BoxRules(enabled = true, dailyTotalMin = 60, bedtimeEnabled = true, bedtimeStart = 20 * 60, bedtimeEnd = 7 * 60, apps = mutableMapOf("nf" to rule))
+        val kinds = RulesEngine.grantsToLift(r, "Netflix", rule, ctx(minute = 21 * 60, used = 50 * min, total = 70 * min), 30 * min)
+        assertEquals(listOf(Verdict.KIND_BEDTIME, Verdict.KIND_TOTAL, Verdict.KIND_APP), kinds)
+    }
+
+    @Test fun forbiddenAppIsNeverLifted() {
+        val rule = AppRule(blocked = true)
+        val r = BoxRules(enabled = true, dailyTotalMin = 60, apps = mutableMapOf("tw" to rule))
+        assertEquals(emptyList<String>(), RulesEngine.grantsToLift(r, "Twitch", rule, ctx(total = 10 * min), 30 * min))
+    }
 }

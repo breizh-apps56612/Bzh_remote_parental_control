@@ -191,6 +191,29 @@ object RulesEngine {
         return r?.coerceAtLeast(0)
     }
 
+    /**
+     * Ce qu'il faut accorder pour que l'appli redevienne utilisable avec [ms] de plus : TOUTES les règles qui bloquent
+     * (couvre-feu, horaires, temps total, temps de l'appli), pas seulement la première. Sans ça, accepter une demande
+     * ne levait que la première règle et la TV redemandait aussitôt l'autorisation pour la suivante.
+     * Une appli interdite ([Verdict.KIND_BLOCKED]) n'est jamais levée.
+     */
+    fun grantsToLift(rules: BoxRules, label: String, rule: AppRule?, c: UsageContext, ms: Long): List<String> {
+        val kinds = mutableListOf<String>()
+        var ctx = c
+        repeat(5) {
+            val v = evaluate(rules, label, rule, ctx) as? Verdict.Block ?: return kinds
+            if (v.kind == Verdict.KIND_BLOCKED || v.kind in kinds) return kinds
+            kinds += v.kind
+            ctx = when (v.kind) {
+                Verdict.KIND_BEDTIME -> ctx.copy(bedtimeOverride = true)
+                Verdict.KIND_SCHEDULE -> ctx.copy(scheduleOverride = true)
+                Verdict.KIND_TOTAL -> ctx.copy(totalBonusMs = ctx.totalBonusMs + ms)
+                else -> ctx.copy(bonusMs = ctx.bonusMs + ms)
+            }
+        }
+        return kinds
+    }
+
     fun evaluate(rules: BoxRules, label: String, rule: AppRule?, c: UsageContext): Verdict {
         if (!rules.enabled) return Verdict.Allowed
         // Le couvre-feu reste prioritaire, même pendant le temps libre

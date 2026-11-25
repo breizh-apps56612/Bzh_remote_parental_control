@@ -289,13 +289,7 @@ class GuardService : AccessibilityService() {
 
         val day = Stats.startOfDay(now)
         if (day != warnedDay) { warned.clear(); warnedDay = day; store.purge(day); endGrace() }
-        val totals = if (allRules.profiles.isEmpty()) log.totals(day, now) else log.totals(day, now, profile?.id ?: "")
-        val ctx = UsageContext(
-            minuteOfDay = Stats.minuteOfDay(now), dayOfWeek = Stats.dayOfWeek(now),
-            usedMs = totals[pkg] ?: 0L, totalMs = totals.values.sum(),
-            bonusMs = store.bonusMs(day, pkg), totalBonusMs = store.bonusMs(day, "*"),
-            scheduleOverride = store.overrideUntil(pkg) > now, bedtimeOverride = store.overrideUntil("*") > now
-        )
+        val ctx = usage(pkg, now, allRules, profile)
 
         // Sablier discret : moins de 15 minutes restantes
         val left = RulesEngine.remaining(rules, rules.apps[pkg], ctx)
@@ -350,6 +344,37 @@ class GuardService : AccessibilityService() {
         }
     }
 
+    private fun usage(pkg: String, now: Long, allRules: BoxRules, profile: fr.paul.telecommande.shared.Profile?): UsageContext {
+        val day = Stats.startOfDay(now)
+        val totals = if (allRules.profiles.isEmpty()) log.totals(day, now) else log.totals(day, now, profile?.id ?: "")
+        return UsageContext(
+            minuteOfDay = Stats.minuteOfDay(now), dayOfWeek = Stats.dayOfWeek(now),
+            usedMs = totals[pkg] ?: 0L, totalMs = totals.values.sum(),
+            bonusMs = store.bonusMs(day, pkg), totalBonusMs = store.bonusMs(day, "*"),
+            scheduleOverride = store.overrideUntil(pkg) > now, bedtimeOverride = store.overrideUntil("*") > now
+        )
+    }
+
+    /**
+     * Accorde [ms] sur [pkg] en levant TOUTES les règles qui bloquent (couvre-feu, horaires, temps total, temps de l'appli),
+     * pour qu'une seule autorisation suffise. [fallback] : la règle de la demande, si plus rien ne bloque déjà.
+     */
+    private fun grant(pkg: String, ms: Long, fallback: String) {
+        val now = System.currentTimeMillis()
+        val allRules = store.rules()
+        val profile = activeProfile(allRules)
+        val rules = allRules.forProfile(profile)
+        val kinds = RulesEngine.grantsToLift(rules, label(pkg), rules.apps[pkg], usage(pkg, now, allRules, profile), ms)
+            .ifEmpty { if (fallback == Verdict.KIND_BLOCKED) emptyList() else listOf(fallback) }
+        for (k in kinds) when (k) {
+            Verdict.KIND_TOTAL -> store.addBonus(Stats.startOfDay(now), "*", ms)
+            Verdict.KIND_SCHEDULE -> store.setOverride(pkg, now + ms)
+            Verdict.KIND_BEDTIME -> store.setOverride("*", now + ms)
+            else -> store.addBonus(Stats.startOfDay(now), pkg, ms)
+        }
+        if (kinds.size > 1) addDiag("grant", "Une seule autorisation pour ${label(pkg)} : ${kinds.joinToString(" + ")} levés")
+    }
+
     private fun block(pkg: String, v: Verdict.Block, rules: BoxRules) {
         pauseMedia()
         if (overlays.pinVisible) return   // le parent est en train de valider : on ne recouvre pas le pavé
@@ -370,13 +395,8 @@ class GuardService : AccessibilityService() {
         overlays.hideBlock()
         overlays.showPinPadEx("Continuer la lecture (+30 min)", ::pinError,
             onSuccess = {
-                val now = System.currentTimeMillis(); val ms = 30 * 60_000L
-                when (v.kind) {
-                    Verdict.KIND_TOTAL -> store.addBonus(Stats.startOfDay(now), "*", ms)
-                    Verdict.KIND_SCHEDULE -> store.setOverride(pkg, now + ms)
-                    Verdict.KIND_BEDTIME -> store.setOverride("*", now + ms)
-                    else -> store.addBonus(Stats.startOfDay(now), pkg, ms)
-                }
+                val now = System.currentTimeMillis()
+                grant(pkg, 30 * 60_000L, v.kind)
                 lastBlockPkg = null
                 overlays.hideBlock()
                 overlays.showBanner("Code parent accepté : +30 min sur ${label(pkg)}")
@@ -442,12 +462,7 @@ class GuardService : AccessibilityService() {
         val now = System.currentTimeMillis()
         val pkg = r.optString("pkg")
         val ms = minutes.coerceIn(1, 240) * 60_000L
-        if (accept) when (r.optString("kind")) {
-            Verdict.KIND_TOTAL -> store.addBonus(Stats.startOfDay(now), "*", ms)
-            Verdict.KIND_SCHEDULE -> store.setOverride(pkg, now + ms)
-            Verdict.KIND_BEDTIME -> store.setOverride("*", now + ms)
-            else -> store.addBonus(Stats.startOfDay(now), pkg, ms)
-        }
+        if (accept) grant(pkg, ms, r.optString("kind"))
         r.put("status", if (accept) "accepted" else "refused").put("by", by).put("minutes", minutes)
         store.saveRequests(list)
         overlays.hideBlock()
@@ -644,6 +659,14 @@ class GuardService : AccessibilityService() {
             val pkg = req.optString("pkg", "*").ifBlank { "*" }
             val minutes = req.optInt("minutes").coerceIn(1, 240)
             store.addBonus(Stats.startOfDay(now), pkg, minutes * 60_000L)
+            // Bonus sur le temps total : si l'appli à l'écran a aussi atteint sa propre limite, on la lève aussi
+            // (sinon la TV restait bloquée malgré le bonus). Le couvre-feu et les horaires ne sont pas touchés.
+            val shown = lastBlockPkg ?: current
+            if (pkg == "*" && shown != null) {
+                val allRules = store.rules(); val profile = activeProfile(allRules); val rules = allRules.forProfile(profile)
+                val kinds = RulesEngine.grantsToLift(rules, label(shown), rules.apps[shown], usage(shown, now, allRules, profile), minutes * 60_000L)
+                if (Verdict.KIND_APP in kinds) store.addBonus(Stats.startOfDay(now), shown, minutes * 60_000L)
+            }
             overlays.hideBlock(); lastBlockPkg = null
             val reason = req.optString("reason")
             val who = activeProfile(store.rules())?.name
