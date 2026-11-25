@@ -184,6 +184,7 @@ class GuardService : AccessibilityService() {
         if (pkg == packageName || pkg in TRANSIENT || isIme(pkg)) return
         if (pkg == current) return
         current = pkg
+        onceKey?.let { if (!it.startsWith("$pkg|")) onceKey = null }      // « Cette fois » : jusqu'à la sortie de l'appli
         if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg) && !progWatch) { progWatch = true; refreshEvents() }
         BoxLog.log("APPLI", "${label(pkg)} ($pkg)" + (event.className?.let { " · $it" } ?: ""))
         lastBlockPkg = null
@@ -242,6 +243,73 @@ class GuardService : AccessibilityService() {
             wins.put(wo.put("nodes", nodes))
         }
         return out.put("windows", wins)
+    }
+
+    /** Sources possibles du titre et de la classification hors écran (diagnostic). */
+    private fun devProbe(): JSONObject {
+        val out = JSONObject().put("ok", true)
+        fun q(name: String, uri: android.net.Uri) {
+            out.put(name, runCatching {
+                val arr = JSONArray()
+                contentResolver.query(uri, null, null, null, null)?.use { c ->
+                    arr.put(JSONObject().put("count", c.count).put("columns", c.columnNames.joinToString(",")))
+                    var n = 0
+                    while (c.moveToNext() && n++ < 8) {
+                        val o = JSONObject()
+                        for (col in listOf("package_name", "title", "episode_title", "content_rating", "genre", "type", "watch_next_type", "last_engagement_time_utc_millis", "intent_uri", "internal_provider_id"))
+                            c.getColumnIndex(col).takeIf { it >= 0 }?.let { i -> runCatching { c.getString(i) }.getOrNull()?.let { o.put(col, it.take(160)) } }
+                        arr.put(o)
+                    }
+                } ?: arr.put("null")
+                arr
+            }.getOrElse { JSONArray().put("${it.javaClass.simpleName}: ${it.message}") })
+        }
+        q("watchNext", android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI)
+        q("previewPrograms", android.media.tv.TvContract.PreviewPrograms.CONTENT_URI)
+        q("channels", android.media.tv.TvContract.Channels.CONTENT_URI)
+        out.put("sessions", runCatching {
+            val msm = getSystemService(Context.MEDIA_SESSION_SERVICE) as android.media.session.MediaSessionManager
+            JSONArray(msm.getActiveSessions(android.content.ComponentName(this, MediaListener::class.java)).map {
+                "${it.packageName} : ${it.metadata?.description?.title} / ${it.playbackState?.state}" })
+        }.getOrElse { JSONArray().put("${it.javaClass.simpleName}: ${it.message}") })
+        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+        out.put("a11yServices", JSONArray(am.installedAccessibilityServiceList.map { "${it.id} feedback=${it.feedbackType}" }))
+        out.put("a11yEnabled", android.provider.Settings.Secure.getString(contentResolver, "enabled_accessibility_services") ?: "")
+        out.put("ttsEngines", runCatching { JSONArray(packageManager.queryIntentServices(android.content.Intent("android.intent.action.TTS_SERVICE"), 0).map { it.serviceInfo.packageName }) }.getOrElse { JSONArray() })
+        out.put("ttsDefault", android.provider.Settings.Secure.getString(contentResolver, "tts_default_synth") ?: "")
+        for (k in listOf("adb_enabled", "development_settings_enabled", "adb_wifi_enabled"))
+            out.put("global_$k", android.provider.Settings.Global.getString(contentResolver, k) ?: "")
+        out.put("adbPorts", JSONArray(listOf(5555, 5037).map { port ->
+            "$port=" + runCatching { java.net.Socket().use { it.connect(java.net.InetSocketAddress("127.0.0.1", port), 800) }; "ouvert" }.getOrElse { it.javaClass.simpleName } }))
+        out.put("props", runCatching { JSONArray(listOf("service.adb.tcp.port", "persist.adb.tcp.port", "ro.debuggable", "ro.build.type", "ro.adb.secure").map { k ->
+            "$k=" + (Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, k) as String) }) }.getOrElse { JSONArray() })
+        out.put("devActivities", runCatching { JSONArray(packageManager.getPackageInfo("com.android.tv.settings", android.content.pm.PackageManager.GET_ACTIVITIES).activities
+            .filter { it.exported && Regex("(?i)develop|special|notif|usage|access").containsMatchIn(it.name) }.map { it.name.substringAfterLast("settings.") }) }.getOrElse { JSONArray() })
+        out.put("netflixProviders", runCatching { JSONArray(packageManager.getPackageInfo("com.netflix.ninja", android.content.pm.PackageManager.GET_PROVIDERS).providers?.map { "${it.authority} exported=${it.exported} read=${it.readPermission}" } ?: emptyList<String>()) }.getOrElse { JSONArray() })
+        return out
+    }
+
+    /** Lignes d'une table du fournisseur TV (watch_next, preview_programs, channels) pour une appli, les plus récentes d'abord. */
+    private fun devTvQuery(table: String, pkg: String, limit: Int): JSONObject {
+        val uri = when (table) { "preview_programs" -> android.media.tv.TvContract.PreviewPrograms.CONTENT_URI
+            "channels" -> android.media.tv.TvContract.Channels.CONTENT_URI else -> android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI }
+        val rows = JSONArray()
+        return runCatching {
+            // Le fournisseur TV refuse les filtres (« selection ») : on trie et on filtre ici
+            val all = ArrayList<JSONObject>()
+            contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val pi = c.getColumnIndex("package_name")
+                while (c.moveToNext()) {
+                    if (pkg.isNotBlank() && (pi < 0 || c.getString(pi) != pkg)) continue
+                    val o = JSONObject()
+                    for (i in 0 until c.columnCount) if (c.getType(i) != android.database.Cursor.FIELD_TYPE_NULL && c.getType(i) != android.database.Cursor.FIELD_TYPE_BLOB)
+                        runCatching { c.getString(i) }.getOrNull()?.takeIf { it.isNotBlank() }?.let { o.put(c.getColumnName(i), it.take(200)) }
+                    all += o
+                }
+            }
+            all.sortedByDescending { it.optLong("last_engagement_time_utc_millis", it.optLong("_id")) }.take(limit).forEach { rows.put(it) }
+            JSONObject().put("ok", true).put("rows", rows)
+        }.getOrElse { err("${it.javaClass.simpleName}: ${it.message}") }
     }
 
     /** Action sur l'élément dont le texte contient [text] (clic, focus d'accessibilité…). */
@@ -647,6 +715,8 @@ class GuardService : AccessibilityService() {
         val title = media?.optString("title")?.takeIf { it.isNotBlank() }
         val sub = media?.optString("subtitle")?.takeIf { it.isNotBlank() }
         val key = "$pkg|" + (title?.let { fr.paul.telecommande.shared.ProgramFilter.key(it) } ?: "")
+        if (playing && !wasPlaying) playSince = now
+        wasPlaying = playing
         if (!playing && progId >= 0) { progKey = null; progId = -1L }        // pause : la séance d'historique se termine
         if (key != progKey) {
             progKey = key; keySince = now; progRating = if (title != null) ratings[key] else null
@@ -684,10 +754,13 @@ class GuardService : AccessibilityService() {
         var reason = if (active) fr.paul.telecommande.shared.ProgramRules.blockReason(rules, profile, title, sub, progRating) else null
         // Film ou série sans classification lisible après 10 s de lecture : demander au parent (ou bloquer), selon son réglage
         var unknown = false
-        if (active && reason == null && title != null && playing && now - keySince > 10_000) {
+        // Sans titre (appli qui ne montre rien, comme Netflix) : même règle, 10 s après le début de la lecture
+        val since = if (title != null) keySince else playSince
+        if (active && reason == null && playing && now - since > 10_000) {
+            val blind = title == null
             when (fr.paul.telecommande.shared.ProgramRules.unknownAction(rules, profile, pkg, title, progRating)) {
-                "ask" -> { reason = "Classification introuvable : un parent doit d'abord valider."; unknown = true }
-                "block" -> reason = "Classification introuvable : les films et séries non classés sont bloqués."
+                "ask" -> { reason = if (blind) "${label(pkg)} ne montre pas la classification de ses programmes : un parent doit valider." else "Classification introuvable : un parent doit d'abord valider."; unknown = true }
+                "block" -> reason = if (blind) "${label(pkg)} ne montre pas la classification de ses programmes : bloqué pour ce profil." else "Classification introuvable : les films et séries non classés sont bloqués."
             }
         }
         val allowed = store.programAllowed(day, key) || onceKey == key
@@ -707,6 +780,8 @@ class GuardService : AccessibilityService() {
             fr.paul.telecommande.shared.RatingReader.CONTENT_LABELS[it]?.lowercase() ?: it }).joinToString(" · ")
 
     private var lastProgramBlock = ""
+    private var wasPlaying = false
+    private var playSince = 0L
     private var keySince = 0L
     /** « Cette fois » : autorisé jusqu'au prochain programme. */
     @Volatile private var onceKey: String? = null
@@ -1109,6 +1184,8 @@ class GuardService : AccessibilityService() {
         "diag" -> JSONObject().put("ok", true).put("events", JSONArray(store.diag()))
         "dev_screen" -> devScreen(req.optInt("max", 400).coerceIn(10, 1500))
         "dev_events" -> JSONObject().put("ok", true).put("now", System.currentTimeMillis()).put("events", devEventsSince(req.optLong("since")))
+        "dev_probe" -> devProbe()
+        "dev_tvquery" -> devTvQuery(req.optString("table", "watch_next"), req.optString("pkg"), req.optInt("limit", 10))
         "dev_kill" -> {
             // Ferme une appli en arrière-plan (ex. Netflix, pour qu'elle relise les réglages d'accessibilité au démarrage)
             val pkg = req.optString("pkg")
