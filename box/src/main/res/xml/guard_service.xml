@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Événements : changement d'écran (appli ouverte), focus/clic (activité à la télécommande, « toujours là ? »),
-     fenêtres de plantage (diagnostic). Contenu des fenêtres : uniquement pour écrire le texte envoyé par le
-     téléphone dans le champ sélectionné et repérer « l'appli s'est arrêtée ». Gestes : vraie souris. -->
+     fenêtres de plantage (diagnostic). Contenu des fenêtres : écrire le texte envoyé par le téléphone, repérer
+     « l'appli s'est arrêtée », et lire le titre et la classification (7+, -12, violence…) quand le parent a fixé
+     des règles de programmes. Rien n'est envoyé ailleurs qu'au téléphone du parent. Gestes : vraie souris. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeViewFocused|typeViewClicked|typeViewSelected"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows|flagReportViewIds"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
     android:description="@string/a11y_desc"

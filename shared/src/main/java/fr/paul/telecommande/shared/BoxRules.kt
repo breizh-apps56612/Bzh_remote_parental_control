@@ -41,14 +41,16 @@ data class Profile(
     var name: String = "",
     var emoji: String = "🙂",
     var dailyTotalMin: Int = 0,
-    var unlimited: Boolean = false
+    var unlimited: Boolean = false,
+    /** Âge maximum des programmes pour ce profil (7 = jusqu'à 7+ ; 0 = celui des règles générales). */
+    var maxAge: Int = 0
 ) {
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("emoji", emoji)
-        .put("dailyTotalMin", dailyTotalMin).put("unlimited", unlimited)
+        .put("dailyTotalMin", dailyTotalMin).put("unlimited", unlimited).put("maxAge", maxAge)
 
     companion object {
         fun fromJson(o: JSONObject) = Profile(o.optString("id"), o.optString("name"), o.optString("emoji", "🙂"),
-            o.optInt("dailyTotalMin").coerceIn(0, AppRule.DAY_MIN), o.optBoolean("unlimited"))
+            o.optInt("dailyTotalMin").coerceIn(0, AppRule.DAY_MIN), o.optBoolean("unlimited"), o.optInt("maxAge").coerceIn(0, 18))
     }
 }
 
@@ -77,7 +79,13 @@ data class BoxRules(
      */
     var activeFrom: Int = 0,
     var activeTo: Int = 0,
-    var activeDays: Int = AppRule.ALL_DAYS
+    var activeDays: Int = AppRule.ALL_DAYS,
+    /** Programmes interdits : titres, chaînes (YouTube…) ou mots, comparés sans accents et par mots entiers. */
+    var blockedPrograms: MutableList<String> = mutableListOf(),
+    /** Âge maximum des programmes (0 = pas de limite), lu sur la classification affichée (7+, -12, 16+…). */
+    var maxAge: Int = 0,
+    /** Contenus interdits quand l'appli les signale : violence, peur, sexe, langage, drogues, suicide. */
+    var blockedContents: MutableList<String> = mutableListOf()
 ) {
     /** Règles effectives pour un profil (parent = aucune limite). */
     fun forProfile(p: Profile?): BoxRules {
@@ -96,6 +104,8 @@ data class BoxRules(
             .put("profiles", org.json.JSONArray().apply { profiles.forEach { put(it.toJson()) } })
             .put("graceMin", graceMin).put("showTimer", showTimer).put("stillThereMin", stillThereMin)
             .put("activeFrom", activeFrom).put("activeTo", activeTo).put("activeDays", activeDays)
+            .put("blockedPrograms", org.json.JSONArray(blockedPrograms))
+            .put("maxAge", maxAge).put("blockedContents", org.json.JSONArray(blockedContents))
     }
 
     companion object {
@@ -110,7 +120,10 @@ data class BoxRules(
                 o.optLong("version"),
                 o.optJSONArray("profiles")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it)?.let(Profile::fromJson) }.toMutableList() } ?: mutableListOf(),
                 o.optInt("graceMin", 10).let { if (it == 20) 10 else it }.coerceIn(0, 30), o.optBoolean("showTimer", true), o.optInt("stillThereMin", 180).coerceIn(0, 600),
-                AppRule.minuteOf(o.optInt("activeFrom")), AppRule.minuteOf(o.optInt("activeTo")), o.optInt("activeDays", AppRule.ALL_DAYS) and AppRule.ALL_DAYS
+                AppRule.minuteOf(o.optInt("activeFrom")), AppRule.minuteOf(o.optInt("activeTo")), o.optInt("activeDays", AppRule.ALL_DAYS) and AppRule.ALL_DAYS,
+                o.optJSONArray("blockedPrograms")?.let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() }.take(200).toMutableList() } ?: mutableListOf(),
+                o.optInt("maxAge").coerceIn(0, 18),
+                o.optJSONArray("blockedContents")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it in RatingReader.CONTENTS.keys }.toMutableList() } ?: mutableListOf()
             )
         }
     }

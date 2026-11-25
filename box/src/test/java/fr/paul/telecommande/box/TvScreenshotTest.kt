@@ -97,6 +97,11 @@ class TvScreenshotTest {
         shot("tv-09-code-appairage", fullscreen = false)
     }
 
+    @Test fun programBlocked() {
+        o.showBlock("Programme non autorisé", "« Les Ombres de minuit »\nProgramme déconseillé aux moins de 16 ans (autorisé jusqu'à 7+).", false, 0, false, {}, icon = "🚫") {}
+        shot("tv-10-programme-interdit")
+    }
+
     @Test fun whoWatches() {
         o.showWhoWatches(listOf(Profile("leo", "Léo", "🦖", 90), Profile("emma", "Emma", "🦄", 60), Profile("par", "Parents", "👑", 0, true)), "leo") {}
         shot("tv-02-qui-regarde")

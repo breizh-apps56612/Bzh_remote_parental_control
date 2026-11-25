@@ -136,6 +136,10 @@ class BoxStore private constructor(context: Context) {
     @Synchronized
     fun setOverride(pkg: String, until: Long) = prefs.edit().putLong("override|$pkg", until).apply()
 
+    /** Programme autorisé exceptionnellement par le parent, pour la journée. */
+    fun programAllowed(day: Long, key: String) = prefs.getBoolean("progok|$day|$key", false)
+    fun allowProgram(day: Long, key: String) = prefs.edit().putBoolean("progok|$day|$key", true).apply()
+
     // ---------- « Finir l'épisode » : gardé sur le disque, pour qu'un redémarrage ou une mise à jour ne redonne pas de temps ----------
 
     /** Vrai si la fin d'épisode n'avait pas encore été accordée pour cette clé (jour|profil|appli) — et la marque comme utilisée. */
@@ -152,6 +156,7 @@ class BoxStore private constructor(context: Context) {
         val e = prefs.edit()
         prefs.all.keys.filter { it.startsWith("grace|") && (it.split("|").getOrNull(1)?.toLongOrNull() ?: 0) < today }.forEach { e.remove(it) }
         prefs.all.keys.filter { it.startsWith("bonus|") && (it.split("|").getOrNull(1)?.toLongOrNull() ?: 0) < today }.forEach { e.remove(it) }
+        prefs.all.keys.filter { it.startsWith("progok|") && (it.split("|").getOrNull(1)?.toLongOrNull() ?: 0) < today }.forEach { e.remove(it) }
         e.apply()
     }
 

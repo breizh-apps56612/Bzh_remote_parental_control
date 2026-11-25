@@ -117,8 +117,11 @@ class GuardService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
-            // N'est écouté que pendant « finir l'épisode » : on guette l'écran « Épisode suivant »
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED || event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT) {
+            // Classification affichée quelques secondes (« 16+ · violence » au début d'une lecture) : on la garde 30 s
+            if (progWatch && event.packageName?.toString() == current) harvest(event)
+            if (event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT) return
+            // Pendant « finir l'épisode » : on guette l'écran « Épisode suivant »
             val now = System.currentTimeMillis()
             if (graceUntil > 0 && now - lastContentCheck > 1_500) { lastContentCheck = now; evaluate() }
             return
@@ -173,10 +176,14 @@ class GuardService : AccessibilityService() {
     private var nextSeenSince = 0L
 
     /** Écoute des changements de contenu uniquement pendant la grâce (économie de ressources le reste du temps). */
-    private fun watchContent(on: Boolean) = runCatching {
+    private fun watchContent(@Suppress("UNUSED_PARAMETER") on: Boolean) = refreshEvents()
+
+    /** Changements de contenu et annonces : écoutés pendant la grâce, ou quand des règles de programmes / le test sont actifs. */
+    private fun refreshEvents() = runCatching {
         val info = serviceInfo ?: return@runCatching
-        val want = if (on) info.eventTypes or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-                   else info.eventTypes and AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED.inv()
+        val extra = AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_ANNOUNCEMENT
+        val on = graceUntil > 0 || progWatch
+        val want = if (on) info.eventTypes or extra else info.eventTypes and extra.inv()
         if (want != info.eventTypes) { info.eventTypes = want; serviceInfo = info }
     }
 
@@ -268,9 +275,11 @@ class GuardService : AccessibilityService() {
             return
         }
         if (pkg == null) { overlays.hideTimer(); return }
-        if (!allRules.enabled) { overlays.hideTimer(); return }
+        // Test des programmes : aussi sans règles actives (profil Parents, contrôle désactivé) — il ne bloque rien
+        val diagOnly = { if (now < progDiagUntil && pkg !in exempt) programCheck(pkg, BoxRules(), null, Stats.startOfDay(now)) }
+        if (!allRules.enabled) { overlays.hideTimer(); diagOnly(); return }
         val rules = allRules.forProfile(profile)
-        if (!rules.enabled) { overlays.hideTimer(); return }
+        if (!rules.enabled) { overlays.hideTimer(); diagOnly(); return }
 
         // Début / fin du temps libre : on le dit à l'écran et au téléphone
         val activeNow = RulesEngine.rulesActive(rules, Stats.minuteOfDay(now), Stats.dayOfWeek(now))
@@ -298,7 +307,9 @@ class GuardService : AccessibilityService() {
             overlays.showTimer("Encore ${RulesEngine.fmt(left)}", urgent = left <= 5 * 60_000L)
         } else overlays.hideTimer()
 
-        when (val v = RulesEngine.evaluate(rules, label(pkg), rules.apps[pkg], ctx)) {
+        val verdict = RulesEngine.evaluate(rules, label(pkg), rules.apps[pkg], ctx)
+        if (verdict !is Verdict.Block && programCheck(pkg, rules, profile, day)) return
+        when (val v = verdict) {
             is Verdict.Block -> {
                 // Fin d'épisode : une vidéo est en cours → on attend qu'elle se termine (silence) ou la grâce max
                 val timeKind = v.kind == Verdict.KIND_APP || v.kind == Verdict.KIND_TOTAL
@@ -343,6 +354,169 @@ class GuardService : AccessibilityService() {
             }
             Verdict.Allowed -> { if (gracePkg == pkg) endGrace() }
         }
+    }
+
+    // ---------- Programmes : titres, chaînes, classification (7+, -12, violence…) ----------
+
+    private var progKey: String? = null
+    private var progId = -1L
+    private var progRating: fr.paul.telecommande.shared.Rating? = null
+    /** Classification vue pour chaque titre (Netflix ne l'affiche qu'au début de la lecture). */
+    private val ratings = object : LinkedHashMap<String, fr.paul.telecommande.shared.Rating>(64, 0.75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, fr.paul.telecommande.shared.Rating>?) = size > 200
+    }
+
+    @Volatile private var progWatch = false
+    private var progDiagUntil = 0L
+    private var lastProgDiag = 0L
+    private var lastProgDiagKey = ""
+    private val recent = ArrayDeque<Pair<Long, String>>()     // textes vus par événements, 30 s
+    private var lastHarvest = 0L
+    private val RATING_ID = Regex("(?i)(rating|maturity|advisory|classif|certif|parental|age_?limit|agerating|pegi|csa)")
+
+    private fun remember(t: CharSequence?) {
+        val v = t?.toString()?.trim() ?: return
+        if (v.isEmpty() || v.length > 200) return
+        val now = System.currentTimeMillis()
+        synchronized(recent) {
+            while (recent.isNotEmpty() && now - recent.first().first > 30_000) recent.removeFirst()
+            if (recent.none { it.second == v }) { recent.addLast(now to v); if (recent.size > 300) recent.removeFirst() }
+        }
+    }
+
+    private fun harvest(e: AccessibilityEvent) {
+        e.text?.forEach { remember(it) }
+        remember(e.contentDescription)
+        val now = System.currentTimeMillis()
+        if (now - lastHarvest < 400) return
+        lastHarvest = now
+        runCatching { e.source?.let { walk(it, 120) { t, _ -> remember(t) } } }
+    }
+
+    private fun recentTexts(): List<String> = synchronized(recent) {
+        val now = System.currentTimeMillis(); recent.filter { now - it.first < 30_000 }.map { it.second }
+    }
+
+    /** Parcourt un arbre de l'écran : [visit](texte, nom de l'élément). */
+    private fun walk(root: android.view.accessibility.AccessibilityNodeInfo, max: Int, visit: (CharSequence, String?) -> Unit): Int {
+        val q = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+        q.add(root); var seen = 0
+        while (q.isNotEmpty() && seen < max) {
+            val n = q.removeFirst(); seen++
+            val id = runCatching { n.viewIdResourceName }.getOrNull()
+            n.text?.let { visit(it, id) }
+            n.contentDescription?.let { visit(it, id) }
+            if (android.os.Build.VERSION.SDK_INT >= 26) n.hintText?.let { visit(it, id) }
+            if (android.os.Build.VERSION.SDK_INT >= 28) { n.paneTitle?.let { visit(it, id) }; n.tooltipText?.let { visit(it, id) } }
+            if (android.os.Build.VERSION.SDK_INT >= 30) n.stateDescription?.let { visit(it, id) }
+            for (i in 0 until minOf(n.childCount, 60)) n.getChild(i)?.let { q.add(it) }
+        }
+        return seen
+    }
+
+    private class Screen(val texts: List<String>, val ratingIds: List<String>, val nodes: Int, val windows: Int)
+
+    /** Tous les textes de toutes les fenêtres à l'écran (lecteur, incrustations), comme un lecteur d'écran. */
+    private fun readScreen(pkg: String): Screen = runCatching {
+        val out = ArrayList<String>(); val ids = ArrayList<String>()
+        val roots = runCatching { windows.mapNotNull { it.root } }.getOrDefault(emptyList()).ifEmpty { listOfNotNull(rootInActiveWindow) }
+            .filter { it.packageName?.toString() == pkg || it.packageName == null }
+        var nodes = 0
+        for (r in roots) nodes += walk(r, 700 - nodes) { t, id ->
+            val v = t.toString().trim()
+            if (v.isEmpty() || v.length > 200) return@walk
+            out += v
+            // Badge de classification sans « + » (« 13 » dans un élément nommé maturity_rating) : on le lit comme « 13+ »
+            if (id != null && RATING_ID.containsMatchIn(id)) { ids += id.substringAfterLast('/') + "=" + v.take(30); Regex("^(\\d{1,2})$").find(v)?.let { out += "${it.groupValues[1]}+" } }
+        }
+        Screen(out.distinct(), ids.distinct(), nodes, roots.size)
+    }.getOrDefault(Screen(emptyList(), emptyList(), 0, 0))
+
+    /** Test des programmes (10 min, demandé depuis le téléphone) : ce que la TV arrive à lire, dans le journal du parent. */
+    private fun progDiag(pkg: String, title: String?, sub: String?, screen: Screen, meta: List<String>, rating: fr.paul.telecommande.shared.Rating) {
+        val now = System.currentTimeMillis()
+        val k = "$pkg|$title|${rating.age}|${rating.contents}"
+        if (now - lastProgDiag < 15_000 && k == lastProgDiagKey) return
+        lastProgDiag = now; lastProgDiagKey = k
+        val ratingish = (screen.texts + recentTexts() + meta).filter { t ->
+            val r = fr.paul.telecommande.shared.RatingReader.read(listOf(t)); r.age != null || r.contents.isNotEmpty()
+        }.distinct().take(8)
+        val text = "${label(pkg)} · titre : ${title ?: "—"}" + (sub?.let { " / $it" } ?: "") +
+            " · classification : " + (if (rating.age != null || rating.contents.isNotEmpty()) ratingLabel(rating) else "non trouvée") +
+            " · écran : ${screen.windows} fenêtre(s), ${screen.nodes} éléments, ${screen.texts.size} textes, ${recentTexts().size} textes passagers" +
+            " · infos média : " + (Media.keys(this, pkg).joinToString(",").ifEmpty { if (Media.allowed(this)) "aucune" else "accès « titre en cours » non autorisé" }) +
+            (if (screen.ratingIds.isNotEmpty()) " · éléments classification : " + screen.ratingIds.take(5).joinToString("; ") else "") +
+            (if (ratingish.isNotEmpty()) " · textes repérés : " + ratingish.joinToString(" | ") { it.take(60) } else "")
+        server.push(JSONObject().put("event", "progdiag").put("text", text))
+        // Gardé aussi sur la TV (40 dernières lignes) : le téléphone peut le récupérer même s'il était fermé
+        val meta = getSharedPreferences("box_meta", MODE_PRIVATE)
+        val arr = runCatching { JSONArray(meta.getString("progdiag", "[]")) }.getOrDefault(JSONArray())
+        arr.put(JSONObject().put("at", now).put("text", text))
+        val keep = JSONArray(); for (i in maxOf(0, arr.length() - 40) until arr.length()) keep.put(arr.get(i))
+        meta.edit().putString("progdiag", keep.toString()).apply()
+    }
+
+    /** Bloque le programme en cours s'il est interdit pour ce profil. true = écran d'interdiction affiché. */
+    private fun programCheck(pkg: String, rules: BoxRules, profile: fr.paul.telecommande.shared.Profile?, day: Long): Boolean {
+        val media = runCatching { Media.nowPlaying(this) }.getOrNull()?.takeIf { it.optString("pkg") == pkg }
+        val playing = media?.optBoolean("playing") == true || audioPlaying()
+        val title = media?.optString("title")?.takeIf { it.isNotBlank() }
+        val sub = media?.optString("subtitle")?.takeIf { it.isNotBlank() }
+        val now = System.currentTimeMillis()
+        val key = "$pkg|" + (title?.let { fr.paul.telecommande.shared.ProgramFilter.key(it) } ?: "")
+        if (!playing && progId >= 0) { progKey = null; progId = -1L }        // pause : la séance d'historique se termine
+        if (key != progKey) {
+            progKey = key; progRating = if (title != null) ratings[key] else null
+            progId = if (title != null && playing) log.openProgram(pkg, title, sub ?: "", profile?.id ?: "", now) else -1L
+        }
+        val active = rules.blockedPrograms.isNotEmpty() || rules.maxAge > 0 || (profile?.maxAge ?: 0) > 0 || rules.blockedContents.isNotEmpty()
+        val diag = now < progDiagUntil
+        if (progWatch != (active || diag)) { progWatch = active || diag; refreshEvents() }
+        // La classification ne se lit que pendant une lecture (bande-annonce comprise) : pas sur l'accueil d'une appli
+        if (playing && (active || diag || progId >= 0)) {
+            val screen = readScreen(pkg)
+            val meta = Media.allText(this, pkg)
+            val r = fr.paul.telecommande.shared.RatingReader.read(screen.texts + recentTexts() + meta)
+            if (diag) progDiag(pkg, title, sub, screen, meta, r)
+            if (r.age != null || r.contents.isNotEmpty()) {
+                val old = progRating
+                // Avec un titre connu, on garde la classification vue au début de la lecture ; sans titre, seulement l'écran actuel
+                progRating = if (old != null && title != null) fr.paul.telecommande.shared.Rating(maxOf(old.age ?: 0, r.age ?: 0).takeIf { old.age != null || r.age != null }, old.contents + r.contents) else r
+                if (title != null) progRating?.let { ratings[key] = it }
+            } else if (title == null) progRating = null
+        }
+        val reason = if (active) fr.paul.telecommande.shared.ProgramRules.blockReason(rules, profile, title, sub, progRating) else null
+        if (progId >= 0 && playing) log.extendProgram(progId, now, progRating?.let { ratingLabel(it) }, reason != null && !store.programAllowed(day, key))
+        if (reason == null || store.programAllowed(day, key)) return false
+        blockProgram(pkg, title, reason, day, key)
+        return true
+    }
+
+    private fun ratingLabel(r: fr.paul.telecommande.shared.Rating) =
+        listOfNotNull(r.age?.let { if (it == 0) "Tous publics" else "$it+" }, r.contents.takeIf { it.isNotEmpty() }?.joinToString(", ") {
+            fr.paul.telecommande.shared.RatingReader.CONTENT_LABELS[it]?.lowercase() ?: it }).joinToString(" · ")
+
+    private var lastProgramBlock = ""
+    private fun blockProgram(pkg: String, title: String?, reason: String, day: Long, key: String) {
+        pauseMedia()
+        if (overlays.pinVisible) return
+        if (lastProgramBlock == key && overlays.blockVisible) return
+        lastProgramBlock = key
+        lastBlockPkg = pkg
+        performGlobalAction(GLOBAL_ACTION_HOME)
+        val what = title ?: label(pkg)
+        addDiag("program", "Programme bloqué sur ${label(pkg)} : $what. $reason")
+        val parent: (() -> Unit)? = if (store.rules().pinHash.isNotBlank()) ({
+            overlays.hideBlock()
+            overlays.showPinPadEx("Autoriser « ${what.take(40)} » aujourd'hui", ::pinError,
+                onSuccess = {
+                    store.allowProgram(day, key); lastProgramBlock = ""; lastBlockPkg = null
+                    overlays.hideBlock(); overlays.showBanner("Programme autorisé pour aujourd'hui")
+                    (packageManager.getLeanbackLaunchIntentForPackage(pkg) ?: packageManager.getLaunchIntentForPackage(pkg))?.let { runCatching { startActivity(it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+                },
+                onCancel = { lastProgramBlock = ""; main.post { evaluate() } })
+        }) else null
+        overlays.showBlock("Programme non autorisé", (if (title != null) "« ${title.take(60)} »\n" else "") + reason, false, 0, false, parent, icon = "🚫") {}
     }
 
     private fun usage(pkg: String, now: Long, allRules: BoxRules, profile: fr.paul.telecommande.shared.Profile?): UsageContext {
@@ -691,6 +865,26 @@ class GuardService : AccessibilityService() {
             if (reason.isNotBlank()) overlays.showReward("Bravo${if (who != null) " $who" else ""} ! +$minutes min", reason)
             else overlays.showBanner("Bonus : +$minutes min" + if (pkg == "*") "" else " sur ${label(pkg)}")
             JSONObject().put("ok", true)
+        }
+        "prog_diag" -> {
+            val min = req.optInt("minutes", 10).coerceIn(1, 30)
+            progDiagUntil = System.currentTimeMillis() + min * 60_000L
+            getSharedPreferences("box_meta", MODE_PRIVATE).edit().putString("progdiag", "[]").apply()
+            addDiag("progdiag", "Test des programmes lancé pour $min min ($phoneName)")
+            main.post { evaluate() }
+            JSONObject().put("ok", true).put("until", progDiagUntil)
+        }
+        "prog_diag_result" -> JSONObject().put("ok", true).put("until", progDiagUntil)
+            .put("lines", runCatching { JSONArray(getSharedPreferences("box_meta", MODE_PRIVATE).getString("progdiag", "[]")) }.getOrDefault(JSONArray()))
+        "programs" -> {
+            val days = req.optInt("days", 7).coerceIn(1, 30)
+            val from = Stats.startOfDay(System.currentTimeMillis()) - (days - 1) * 86_400_000L
+            val allRules = store.rules()
+            JSONObject().put("ok", true).put("programs", JSONArray(log.programs(from).map { p ->
+                JSONObject().put("pkg", p.pkg).put("label", label(p.pkg)).put("title", p.title).put("subtitle", p.subtitle)
+                    .put("profile", allRules.profiles.firstOrNull { it.id == p.profile }?.let { "${it.emoji} ${it.name}" } ?: "")
+                    .put("ms", p.ms).put("last", p.last).put("rating", p.rating).put("blocked", p.blocked)
+            }))
         }
         "requests" -> JSONObject().put("ok", true).put("requests", JSONArray(store.requests().map { it }))
         "respond" -> respond(req.optString("rid"), req.optBoolean("accept"), req.optInt("minutes", 15), phoneName)

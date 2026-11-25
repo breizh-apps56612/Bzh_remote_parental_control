@@ -72,11 +72,11 @@ class Overlays(private val ctx: Context) {
     // ---------- Écran « Temps écoulé » ----------
 
     fun showBlock(title: String, reason: String, canRequest: Boolean, requestMinutes: Int, pending: Boolean,
-                  onParentCode: (() -> Unit)? = null, onRequest: () -> Unit) = ui {
+                  onParentCode: (() -> Unit)? = null, icon: String = "⏳", onRequest: () -> Unit) = ui {
         remove(block)
         val root = BoxUi.Fit(ctx).apply { background = BoxUi.scrim() }
         val c = card()
-        c.addView(BoxUi.badge(ctx, "⏳", false, 76f).apply { textSize = 30f })
+        c.addView(BoxUi.badge(ctx, icon, false, 76f).apply { textSize = 30f })
         c.addView(text(title, 34f, bold = true), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(20) })
         c.addView(text(reason, 19f, muted), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) })
         val row = LinearLayout(ctx).apply { gravity = Gravity.CENTER }

@@ -41,6 +41,27 @@ object Media {
         return o
     }
 
+    /** Tous les textes publiés par l'appli sur ce qui est lu (titre, chaîne, description, classification éventuelle). */
+    fun allText(ctx: Context, pkg: String): List<String> {
+        if (!allowed(ctx)) return emptyList()
+        val msm = ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager ?: return emptyList()
+        val c = runCatching { msm.getActiveSessions(ComponentName(ctx, MediaListener::class.java)) }.getOrNull()
+            ?.firstOrNull { it.packageName == pkg } ?: return emptyList()
+        val out = mutableListOf<String>()
+        c.metadata?.let { md -> md.keySet().forEach { k -> runCatching { md.getText(k)?.toString() }.getOrNull()?.takeIf { it.isNotBlank() }?.let { out += it } } }
+        c.metadata?.description?.let { d -> listOfNotNull(d.title, d.subtitle, d.description).forEach { out += it.toString() } }
+        c.playbackState?.extras?.let { e -> e.keySet().forEach { k -> (e.get(k) as? CharSequence)?.toString()?.let { out += it } } }
+        return out.distinct()
+    }
+
+    /** Noms des informations publiées (pour le diagnostic). */
+    fun keys(ctx: Context, pkg: String): List<String> = runCatching {
+        if (!allowed(ctx)) return emptyList()
+        val msm = ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+        msm.getActiveSessions(ComponentName(ctx, MediaListener::class.java)).firstOrNull { it.packageName == pkg }
+            ?.metadata?.keySet()?.map { it.substringAfterLast('.') }?.sorted() ?: emptyList()
+    }.getOrDefault(emptyList())
+
     private fun thumb(b: Bitmap): String {
         val w = 240; val h = (b.height * w / b.width.coerceAtLeast(1)).coerceIn(1, 400)
         val s = Bitmap.createScaledBitmap(b, w, h, true)

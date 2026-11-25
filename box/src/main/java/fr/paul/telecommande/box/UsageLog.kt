@@ -9,17 +9,44 @@ import android.database.sqlite.SQLiteOpenHelper
 import java.util.Calendar
 
 /** Journal local des sessions par appli, sur la box. Rien n'est envoyé ailleurs qu'aux téléphones appairés. */
-class UsageLog private constructor(context: Context) : SQLiteOpenHelper(context, "box_usage.db", null, 2) {
+class UsageLog private constructor(context: Context) : SQLiteOpenHelper(context, "box_usage.db", null, 3) {
 
     data class Session(val pkg: String, val start: Long, val end: Long, val profile: String = "")
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE s (id INTEGER PRIMARY KEY AUTOINCREMENT, pkg TEXT NOT NULL, start INTEGER NOT NULL, end INTEGER NOT NULL, imported INTEGER NOT NULL DEFAULT 0, profile TEXT NOT NULL DEFAULT '')")
         db.execSQL("CREATE INDEX s_end ON s(end)")
+        createPrograms(db)
+    }
+
+    private fun createPrograms(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS p (id INTEGER PRIMARY KEY AUTOINCREMENT, pkg TEXT NOT NULL, title TEXT NOT NULL, subtitle TEXT NOT NULL DEFAULT '', " +
+            "profile TEXT NOT NULL DEFAULT '', start INTEGER NOT NULL, end INTEGER NOT NULL, rating TEXT NOT NULL DEFAULT '', blocked INTEGER NOT NULL DEFAULT 0)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS p_end ON p(end)")
+    }
+
+    data class Program(val pkg: String, val title: String, val subtitle: String, val profile: String, val ms: Long, val last: Long, val rating: String, val blocked: Boolean)
+
+    @Synchronized fun openProgram(pkg: String, title: String, subtitle: String, profile: String, at: Long): Long =
+        writableDatabase.insert("p", null, ContentValues().apply { put("pkg", pkg); put("title", title.take(200)); put("subtitle", subtitle.take(200)); put("profile", profile); put("start", at); put("end", at) })
+
+    @Synchronized fun extendProgram(id: Long, end: Long, rating: String?, blocked: Boolean) {
+        writableDatabase.update("p", ContentValues().apply { put("end", end); if (rating != null) put("rating", rating); if (blocked) put("blocked", 1) }, "id=?", arrayOf(id.toString()))
+    }
+
+    /** Programmes regardés depuis [from], regroupés par titre, du plus récent au plus ancien. */
+    @Synchronized fun programs(from: Long, limit: Int = 60): List<Program> {
+        val out = mutableListOf<Program>()
+        readableDatabase.rawQuery("SELECT pkg,title,MAX(subtitle),profile,SUM(end-start),MAX(end),MAX(rating),MAX(blocked) FROM p WHERE end>? " +
+            "GROUP BY pkg,title,profile ORDER BY MAX(end) DESC LIMIT ?", arrayOf(from.toString(), limit.toString())).use { c ->
+            while (c.moveToNext()) out += Program(c.getString(0), c.getString(1), c.getString(2) ?: "", c.getString(3), c.getLong(4), c.getLong(5), c.getString(6) ?: "", c.getInt(7) == 1)
+        }
+        return out
     }
 
     override fun onUpgrade(db: SQLiteDatabase, o: Int, n: Int) {
         if (o < 2) db.execSQL("ALTER TABLE s ADD COLUMN profile TEXT NOT NULL DEFAULT ''")
+        if (o < 3) createPrograms(db)
     }
 
     @Synchronized fun open(pkg: String, at: Long, profile: String = ""): Long =
