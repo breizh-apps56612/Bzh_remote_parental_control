@@ -32,10 +32,15 @@ object VestelSetup {
     @Suppress("DEPRECATION")
     private fun probe(activity: AppCompatActivity, device: Device, onDone: () -> Unit) {
         val progress = ProgressDialog(activity).apply { setMessage("Recherche de la TV…"); setCancelable(false); show() }
+        // Écran tourné ou fermé pendant la recherche : la fenêtre d'attente part avec l'ancien écran (sinon plantage)
+        activity.lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) { runCatching { progress.dismiss() } }
+        })
         activity.lifecycleScope.launch {
             val driver = DriverHub.driver(activity, device) as? VestelDriver
             val methods = driver?.available().orEmpty()
-            progress.dismiss()
+            if (activity.isFinishing || activity.isDestroyed) return@launch
+            runCatching { if (progress.isShowing) progress.dismiss() }
             if (driver == null || methods.isEmpty()) { failed(activity, device, onDone, unreachable = true); return@launch }
             tryMethod(activity, device, driver, methods, 0, onDone)
         }

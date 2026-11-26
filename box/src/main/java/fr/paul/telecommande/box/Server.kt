@@ -42,6 +42,12 @@ class Server(private val guard: GuardService) {
 
     fun start() {
         if (running) return
+        // Un seul serveur par processus : si le service d'accessibilité est reconnecté sans être détruit,
+        // l'ancien serveur (et son fil « box-ping ») est arrêté au lieu de s'empiler.
+        synchronized(Server::class.java) {
+            current?.takeIf { it !== this }?.stop()
+            current = this
+        }
         running = true
         // Signal de vie toutes les 20 s : le téléphone repère tout de suite un lien mort et se reconnecte.
         Thread {
@@ -68,7 +74,7 @@ class Server(private val guard: GuardService) {
                         }
                         pool.execute { try { handle(c) } finally { if (n.decrementAndGet() <= 0) perIp.remove(ip, n) } }
                     }
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
                     if (running) SystemClock.sleep(3000)   // port occupé, réseau pas prêt… on réessaie
                 } finally {
                     runCatching { socket?.close() }
@@ -131,7 +137,8 @@ class Server(private val guard: GuardService) {
                         }
                         else -> guard.command(cmd, req, store.phones()[clientFp] ?: "téléphone", clientFp)
                     }
-                } catch (e: Exception) {
+                } catch (e: Throwable) {
+                    // Throwable et pas seulement Exception : une erreur (pile, mémoire) ne doit jamais tuer l'appli Box
                     err(e.message ?: "Erreur")
                 }
                 synchronized(out) { BoxProtocol.write(out, res.put("id", id)) }
@@ -143,7 +150,8 @@ class Server(private val guard: GuardService) {
                 }
             }
         } catch (_: SocketException) {
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
+            // Message piégé (trop imbriqué, trop long, illisible) : on ferme cette connexion, rien d'autre.
         } finally {
             subscribed?.let { subscribers.remove(it) }
             if (countedUntrusted) untrusted.decrementAndGet()
@@ -155,6 +163,7 @@ class Server(private val guard: GuardService) {
     private fun err(msg: String) = JSONObject().put("ok", false).put("error", msg)
 
     companion object {
+        @Volatile private var current: Server? = null
         const val MAX_UNTRUSTED = 3
         const val MAX_ACTIVE = 24
         const val MAX_PER_IP = 6

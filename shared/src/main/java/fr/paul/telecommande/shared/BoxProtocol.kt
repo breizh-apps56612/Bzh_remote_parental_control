@@ -79,12 +79,45 @@ object BoxProtocol {
             val sb = StringBuilder()
             while (true) {
                 val c = r.read()
-                if (c < 0) return if (sb.isEmpty()) null else JSONObject(sb.toString())
+                if (c < 0) return if (sb.isEmpty()) null else parse(sb)
                 if (c == '\n'.code) break
                 sb.append(c.toChar())
                 if (sb.length > maxLen) throw IllegalStateException("Message trop long")
             }
+            return parse(sb)
+        }
+
+        private fun parse(sb: StringBuilder): JSONObject {
+            checkDepth(sb)
             return JSONObject(sb.toString())
+        }
+    }
+
+    /** Profondeur d'imbrication maximale d'un message (les vrais messages en ont moins de 10). */
+    const val MAX_DEPTH = 32
+
+    /**
+     * Refuse un message trop imbriqué AVANT de l'analyser : org.json est récursif, et un message
+     * « [[[[… » de quelques Ko suffisait à faire déborder la pile (StackOverflowError) et à tuer l'appli Box.
+     */
+    fun checkDepth(s: CharSequence, max: Int = MAX_DEPTH) {
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (ch in s) {
+            if (inString) {
+                when {
+                    escaped -> escaped = false
+                    ch == '\\' -> escaped = true
+                    ch == '"' -> inString = false
+                }
+                continue
+            }
+            when (ch) {
+                '"' -> inString = true
+                '{', '[' -> if (++depth > max) throw IllegalStateException("Message trop imbriqué")
+                '}', ']' -> depth--
+            }
         }
     }
 }

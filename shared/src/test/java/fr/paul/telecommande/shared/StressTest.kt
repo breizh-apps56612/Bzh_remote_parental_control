@@ -234,6 +234,22 @@ class StressTest {
         assertEquals(null, r.next())
     }
 
+    /** Message « [[[[… » (20 000 niveaux, ~40 Ko) : faisait planter l'appli Box (StackOverflowError dans org.json). */
+    @Test fun deeplyNestedMessageIsRefusedBeforeParsing() {
+        for (open in listOf("[", "{\"a\":")) {
+            val deep = "{\"a\":" + open.repeat(20_000) + "\n"
+            try { BoxProtocol.LineReader(ByteArrayInputStream(deep.toByteArray())).next(); fail("message imbriqué accepté") }
+            catch (e: IllegalStateException) { assertTrue(e.message!!.contains("imbriqué")) }
+        }
+        // Les crochets dans du texte ne comptent pas
+        val text = JSONObject().put("cmd", "message").put("title", "[".repeat(500) + "\"{{{").toString() + "\n"
+        assertEquals("[".repeat(500) + "\"{{{", BoxProtocol.LineReader(ByteArrayInputStream(text.toByteArray())).next()!!.getString("title"))
+        // Un vrai message (règles avec profils et applis) passe largement sous la limite
+        val rules = JSONObject().put("cmd", "set_rules").put("rules", JSONObject().put("profiles",
+            JSONArray().put(JSONObject().put("apps", JSONObject().put("x", JSONObject().put("days", JSONArray().put(JSONArray().put(1))))))))
+        assertEquals("set_rules", BoxProtocol.LineReader(ByteArrayInputStream((rules.toString() + "\n").toByteArray())).next()!!.getString("cmd"))
+    }
+
     @Test(timeout = 120_000) fun fortyPhonesAtOnce() {
         val (bk, bc) = SelfSignedCert.generate("box")
         val server = BoxProtocol.sslContext(bk.private, bc).serverSocketFactory.createServerSocket() as SSLServerSocket

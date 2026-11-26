@@ -602,6 +602,8 @@ class BoxDashboardActivity : AppCompatActivity() {
     }
 
     private fun respond(r: JSONObject, accept: Boolean) {
+        // Accorder du temps demande le parent (comme la récompense et le temps par jour) ; refuser, non.
+        if (accept && !unlocked) { Ui.requirePin(this, "Code parent pour accorder ce temps.") { unlocked = true; respond(r, true) }; return }
         lifecycleScope.launch {
             BoxLink.respond(this@BoxDashboardActivity, device, r.optString("id"), accept, r.optInt("minutes", 15))
                 .onFailure { Ui.toast(this@BoxDashboardActivity, "Erreur : ${it.message}") }
@@ -610,6 +612,7 @@ class BoxDashboardActivity : AppCompatActivity() {
     }
 
     private fun addTime() {
+        if (!unlocked) { Ui.requirePin(this, "Code parent pour ajouter du temps.") { unlocked = true; addTime() }; return }
         val st = status
         val todayMap = st?.optJSONObject("today"); val appLabels = st?.optJSONObject("labels")
         val pkgs = listOf("*") + (todayMap?.keys()?.asSequence()?.toList() ?: emptyList())

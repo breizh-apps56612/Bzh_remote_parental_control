@@ -101,7 +101,9 @@ class GuardService : AccessibilityService() {
         }
         log = UsageLog.get(this)
         exempt = computeExempt()
+        if (::server.isInitialized) server.stop()   // service reconnecté sans être détruit : pas de second serveur
         server = Server(this).also { it.start() }
+        runCatching { unregisterReceiver(screenReceiver) }
         registerScreenReceiver()
         if (SystemClock.elapsedRealtime() < 10 * 60_000L) addDiag("reboot", "La box a redémarré")
         Thread {
@@ -111,7 +113,9 @@ class GuardService : AccessibilityService() {
             } }
             log.purgeBefore(System.currentTimeMillis() - 90L * 24 * 3600_000)
         }.start()
+        main.removeCallbacks(tick)
         main.post(tick)
+        main.postDelayed({ catchUpForeground() }, 800)
     }
 
     // ---------- Mise à jour automatique ----------
@@ -190,14 +194,43 @@ class GuardService : AccessibilityService() {
         lastInteraction = System.currentTimeMillis()
         detectCrash(event)
         val pkg = event.packageName?.toString() ?: return
+        foreground(pkg, event.className?.toString())
+    }
+
+    /** Nouvelle appli au premier plan : on la note, on prévient le téléphone et on applique les règles. */
+    private fun foreground(pkg: String, className: String?) {
         if (pkg == packageName || pkg in TRANSIENT || isIme(pkg)) return
         if (pkg == current) return
         current = pkg
         if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg) && !progWatch) { progWatch = true; refreshEvents() }
-        BoxLog.log("APPLI", "${label(pkg)} ($pkg)" + (event.className?.let { " · $it" } ?: ""))
+        BoxLog.log("APPLI", "${label(pkg)} ($pkg)" + (className?.let { " · $it" } ?: ""))
         lastBlockPkg = null
-        server.push(JSONObject().put("event", "app").put("pkg", pkg).put("label", label(pkg)))
+        if (::server.isInitialized) server.push(JSONObject().put("event", "app").put("pkg", pkg).put("label", label(pkg)))
         evaluate()
+    }
+
+    /**
+     * Après un démarrage du service (plantage, mise à jour, box à court de mémoire), Android ne renvoie aucun
+     * changement de fenêtre tant que l'enfant reste dans la même appli : on lit nous-mêmes l'appli à l'écran,
+     * sinon elle échapperait aux règles jusqu'à la prochaine navigation.
+     */
+    private fun readForeground(): String? = runCatching {
+        val fromWindows = if (android.os.Build.VERSION.SDK_INT >= 21) windows.orEmpty()
+            .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+            .sortedByDescending { if (it.isActive) 2 else if (it.isFocused) 1 else 0 }
+            .firstNotNullOfOrNull { w -> runCatching { w.root?.packageName?.toString() }.getOrNull()?.takeIf { it != packageName } }
+        else null
+        fromWindows ?: rootInActiveWindow?.packageName?.toString()
+    }.getOrNull()
+
+    private fun catchUpForeground(attempt: Int = 0) {
+        val pkg = readForeground()
+        if (pkg != null && pkg != packageName && pkg !in TRANSIENT) {
+            BoxLog.log("SERVICE", "Appli déjà à l'écran au démarrage : ${label(pkg)}")
+            foreground(pkg, null)
+        } else if (attempt < 5) {
+            main.postDelayed({ catchUpForeground(attempt + 1) }, 1_500)
+        }
     }
 
     override fun onInterrupt() {}

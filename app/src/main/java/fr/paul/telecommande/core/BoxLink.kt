@@ -230,6 +230,11 @@ object BoxLink {
             "schedule" -> "à utiliser ${ev.optString("label")} en dehors des horaires"
             else -> "$minutes min de plus sur ${ev.optString("label")}"
         }
+        // « Accepter » ouvre la validation parent (empreinte ou code) : jamais d'accord direct depuis la notification.
+        val accept = PendingIntent.getActivity(ctx, nid(rid) * 2 + 1,
+            Intent(ctx, fr.paul.telecommande.ui.RequestApproveActivity::class.java).putExtra("device", d.id).putExtra("rid", rid)
+                .putExtra("minutes", minutes).putExtra("what", what).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         nm.notify(nid(rid), NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_notif)
             .setContentTitle("${d.name} : demande de temps")
@@ -237,7 +242,7 @@ object BoxLink {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(open)
             .setAutoCancel(true)
-            .addAction(0, "Accepter (+$minutes min)", action(true, 1))
+            .addAction(0, "Accepter (+$minutes min)", accept)
             .addAction(0, "Refuser", action(false, 0))
             .build())
     }
@@ -282,9 +287,11 @@ class RequestReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val d = DeviceStore(context).get(intent.getStringExtra("device") ?: return) ?: return
         val rid = intent.getStringExtra("rid") ?: return
+        // Seul le refus passe par ici : accepter demande toujours le parent (RequestApproveActivity).
+        if (intent.getBooleanExtra("accept", false)) return
         val pending = goAsync()
         DriverHub.scope.launch {
-            val r = BoxLink.respond(context, d, rid, intent.getBooleanExtra("accept", false), intent.getIntExtra("minutes", 15))
+            val r = BoxLink.respond(context, d, rid, false, intent.getIntExtra("minutes", 15))
             if (r.isFailure) withContext(Dispatchers.Main) {
                 android.widget.Toast.makeText(context, "Box injoignable : réponse non envoyée", android.widget.Toast.LENGTH_LONG).show()
             }

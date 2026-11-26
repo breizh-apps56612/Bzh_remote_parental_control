@@ -331,11 +331,14 @@ class MainActivity : AppCompatActivity() {
             texts.addView(TextView(this).apply { text = "+${r.optInt("minutes")} min demandées"; textSize = 15f; typeface = Ui.bold; setTextColor(col(R.color.ink)) })
             texts.addView(TextView(this).apply { text = listOf(r.optString("label"), d.name).filter { it.isNotBlank() }.joinToString(" · "); textSize = 13f; setTextColor(col(R.color.notice_ink)) })
             card.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
-            fun answer(accept: Boolean) = lifecycleScope.launch {
+            fun send(accept: Boolean) = lifecycleScope.launch {
                 fr.paul.telecommande.core.BoxLink.respond(this@MainActivity, d, r.optString("id"), accept, r.optInt("minutes", 15))
                     .onSuccess { Ui.toast(this@MainActivity, if (accept) "Temps accordé" else "Demande refusée") }
                     .onFailure { Ui.toast(this@MainActivity, "Erreur : ${it.message}") }
                 loadStatus()
+            }
+            fun answer(accept: Boolean) {
+                if (accept) Ui.requirePin(this, "Code parent pour accorder ce temps.") { send(true) } else send(false)
             }
             card.addView(android.widget.ImageButton(this).apply {
                 setImageResource(R.drawable.ic_close); imageTintList = android.content.res.ColorStateList.valueOf(col(R.color.ink))
@@ -409,14 +412,30 @@ class MainActivity : AppCompatActivity() {
         }.show()
     }
 
+    override fun onDestroy() {
+        // Rotation pendant « Rechercher sur le réseau » : on ferme la fenêtre d'attente avec l'écran (sinon plantage).
+        runCatching { scanDialog?.dismiss() }
+        scanDialog = null
+        super.onDestroy()
+    }
+
+    @Suppress("DEPRECATION")
+    private var scanDialog: ProgressDialog? = null
+
     @Suppress("DEPRECATION")
     private fun scan() {
         val progress = ProgressDialog(this).apply {
             setMessage("Recherche des TV et box sur le Wi-Fi (10 secondes environ)…"); setCancelable(false); show()
         }
+        scanDialog = progress
         lifecycleScope.launch {
-            val found = runCatching { Discovery(this@MainActivity).scan() }.getOrDefault(emptyList())
-            progress.dismiss()
+            val found = try { Discovery(this@MainActivity).scan() }
+                catch (e: kotlinx.coroutines.CancellationException) { throw e }   // écran tourné / fermé : on s'arrête là
+                catch (_: Exception) { emptyList() }
+            // Le téléphone a pu être tourné pendant la recherche : l'ancienne fenêtre n'existe plus.
+            if (isFinishing || isDestroyed) return@launch
+            runCatching { if (progress.isShowing) progress.dismiss() }
+            scanDialog = null
             val known = store.all().map { it.host }.toSet()
             val fresh = found.filter { it.host !in known }
             if (fresh.isEmpty()) {
