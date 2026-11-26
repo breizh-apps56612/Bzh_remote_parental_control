@@ -38,7 +38,8 @@ class ShareToTvActivity : AppCompatActivity() {
     private fun send(d: Device, url: String) {
         DiagLog.log("PARTAGE", "Lien envoyé à ${d.name} : $url")
         lifecycleScope.launch {
-            val ok = if (d.hasBoxApp) runCatching { BoxClient.of(this@ShareToTvActivity, d).call("open_url", JSONObject().put("url", url)) }.isSuccess else false
+            // La TV doit répondre « ok » : un lien qu'elle ne sait pas ouvrir passe par la télécommande Android TV
+            val ok = d.hasBoxApp && runCatching { BoxClient.of(this@ShareToTvActivity, d).call("open_url", JSONObject().put("url", url)).optBoolean("ok") }.getOrDefault(false)
             val done = ok || runCatching {
                 val tv = DriverHub.driver(this@ShareToTvActivity, d) as AndroidTvDriver
                 tv.connect(DriverHub.SilentPairing); tv.launchApp(url); true

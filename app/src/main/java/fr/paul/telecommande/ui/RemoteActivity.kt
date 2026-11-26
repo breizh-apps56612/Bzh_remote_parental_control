@@ -357,6 +357,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         val tracking = device.monitorEnabled || rules.enabled
         val todayTotal = if (tracking) TvMonitor.todayUsage(this, device.id).values.sum() else 0L
         chips(
+            *(if (device.hasBoxApp) arrayOf(chip("▶ Reprendre…") { showContinue() }) else emptyArray()),
             sleepChip(s.sleepAt),
             chip(if (tracking) "Temps d'écran · " + Usage.format(todayTotal) else "Activer le temps d'écran") {
                 startActivity(Intent(this, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, device.id))
@@ -383,7 +384,9 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         usageLine(s.app)
         chips(
             chip("−10 s") { press(RemoteKey.REWIND) }, chip("+10 s") { press(RemoteKey.FAST_FORWARD) },
-            chip("Rechercher…") { showKeyboard() }, sleepChip(s.sleepAt)
+            chip("Rechercher…") { showKeyboard() },
+            *(if (device.hasBoxApp) arrayOf(chip("▶ Reprendre…") { showContinue() }) else emptyArray()),
+            sleepChip(s.sleepAt)
         )
     }
 
@@ -883,6 +886,8 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         if (atv != null || box != null) menu.menu.add("Clavier")
         if (box != null) { menu.menu.add("Message sur la TV"); menu.menu.add("Récompense") }
         menu.menu.add(if (touchpad.mouseMode) "Quitter le mode souris" else "Mode souris")
+        if (device.hasBoxApp) menu.menu.add("Reprendre un programme")
+        menu.menu.add(if (fr.paul.telecommande.service.ControlNotification.enabled(this)) "Notification de contrôle : activée" else "Notification de contrôle : désactivée")
         menu.menu.add("Vraie souris (Bluetooth)"); menu.menu.add("Plus de touches"); menu.menu.add("Diagnostic de connexion"); menu.menu.add("Journal de diagnostic"); menu.menu.add("Rechercher une mise à jour"); menu.menu.add("Modifier l'adresse")
         menu.setOnMenuItemClickListener {
             when (it.title.toString()) {
@@ -893,6 +898,14 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
                 "Récompense" -> BoxActions.reward(this, device)
                 "Mode souris", "Quitter le mode souris" -> setMouse(!touchpad.mouseMode)
                 "Plus de touches" -> showMoreKeys()
+                "Reprendre un programme" -> showContinue()
+                "Notification de contrôle : activée" -> { fr.paul.telecommande.service.ControlNotification.setEnabled(this, false); Ui.toast(this, "Notification de contrôle désactivée") }
+                "Notification de contrôle : désactivée" -> {
+                    fr.paul.telecommande.service.ControlNotification.setEnabled(this, true)
+                    if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                        androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 12)
+                    Ui.toast(this, "Notification de contrôle activée : elle apparaît quand vous quittez l'appli")
+                }
                 "Vraie souris (Bluetooth)" -> startActivity(Intent(this, BtMouseActivity::class.java))
                 "Diagnostic de connexion" -> showDiagnostic()
                 "Journal de diagnostic" -> showJournal()
@@ -1085,6 +1098,37 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
     }
 
     override fun onPause() { super.onPause(); MouseHold.stopAll(); atv?.releaseAllHeld(); touchpad.mouseMode = touchpad.mouseMode }
+
+    // Notification de contrôle : visible dès qu'on quitte l'écran télécommande, masquée quand on y revient
+    override fun onStart() { super.onStart(); fr.paul.telecommande.service.ControlNotification.hide(this) }
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations && ::device.isInitialized) fr.paul.telecommande.service.ControlNotification.show(this, device.id)
+    }
+
+    /** Programmes en cours dans les applis de la TV (lus par l'appli Box) : un appui et ça reprend sur la TV. */
+    private fun showContinue() {
+        lifecycleScope.launch {
+            val res = runCatching { fr.paul.telecommande.core.BoxClient.of(this@RemoteActivity, device).call("continue_watching") }
+            val items = res.getOrNull()?.optJSONArray("items")
+            if (items == null) {
+                Ui.toast(this@RemoteActivity, res.getOrNull()?.optString("error")?.ifBlank { null } ?: "La TV ne répond pas (mettez l'appli Box à jour)")
+                return@launch
+            }
+            if (items.length() == 0) { Ui.toast(this@RemoteActivity, "Rien à reprendre pour l'instant"); return@launch }
+            val list = (0 until items.length()).map { items.getJSONObject(it) }
+            val lines = list.map { o ->
+                o.optString("title") + "\n" + listOf(o.optString("episode"), o.optString("label")).filter { it.isNotBlank() }.joinToString(" · ")
+            }.toTypedArray()
+            AlertDialog.Builder(this@RemoteActivity).setTitle("Reprendre")
+                .setItems(lines) { _, i ->
+                    lifecycleScope.launch {
+                        val r = runCatching { fr.paul.telecommande.core.BoxClient.of(this@RemoteActivity, device).call("open_row", org.json.JSONObject().put("id", list[i].optString("id"))) }.getOrNull()
+                        Ui.toast(this@RemoteActivity, if (r?.optBoolean("ok") == true) "Reprise de « ${list[i].optString("title")} »…" else r?.optString("error")?.ifBlank { null } ?: "La TV ne répond pas")
+                    }
+                }.setNegativeButton("Fermer", null).show()
+        }
+    }
 
     override fun onDestroy() {
         recorder?.stop()

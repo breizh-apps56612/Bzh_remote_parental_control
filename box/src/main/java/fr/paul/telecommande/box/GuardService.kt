@@ -1160,6 +1160,50 @@ class GuardService : AccessibilityService() {
         return runCatching { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }.getOrDefault(false)
     }
 
+    // ---------- « Reprendre » : ce que les applis publient pour l'écran d'accueil ----------
+
+    private data class Row(val id: String, val pkg: String, val title: String, val episode: String, val last: Long, val intentUri: String)
+
+    /** Rangée « Reprendre » d'Android TV, plus les « Reprendre la lecture… » que Netflix met dans sa propre rangée. */
+    private fun rows(): List<Row> {
+        val out = ArrayList<Row>()
+        fun read(uri: android.net.Uri, prefix: String, keep: (android.database.Cursor) -> Boolean) = runCatching {
+            contentResolver.query(uri, null, null, null, null)?.use { c ->
+                fun str(col: String) = c.getColumnIndex(col).takeIf { it >= 0 }?.let { i -> runCatching { c.getString(i) }.getOrNull() }.orEmpty()
+                while (c.moveToNext()) {
+                    if (!keep(c)) continue
+                    val pkg = str("package_name"); val title = str("title"); val intent = str("intent_uri")
+                    if (pkg.isBlank() || title.isBlank() || intent.isBlank() || pkg == packageName) continue
+                    out += Row(prefix + str("_id"), pkg, title, str("episode_title"), str("last_engagement_time_utc_millis").toLongOrNull() ?: 0L, intent)
+                }
+            }
+        }
+        read(android.media.tv.TvContract.WatchNextPrograms.CONTENT_URI, "w") { true }
+        read(android.media.tv.TvContract.PreviewPrograms.CONTENT_URI, "p") { c ->
+            c.getColumnIndex("short_description").takeIf { it >= 0 }?.let { c.getString(it) }?.startsWith("Reprendre la lecture") == true
+        }
+        return out
+    }
+
+    private fun continueWatching(max: Int): List<JSONObject> {
+        val launchable = tvApps().map { it.first }.toSet()
+        return rows().filter { it.pkg in launchable }
+            .sortedWith(compareByDescending<Row> { it.last }.thenByDescending { it.id })
+            .distinctBy { it.pkg + "|" + it.title }.take(max.coerceIn(1, 50))
+            .map { JSONObject().put("id", it.id).put("pkg", it.pkg).put("label", label(it.pkg)).put("title", it.title).put("episode", it.episode).put("last", it.last) }
+    }
+
+    /** Relance un programme de la rangée, par son identifiant (le lien vient de la box, pas du téléphone). */
+    private fun openRow(id: String): Boolean {
+        val row = rows().firstOrNull { it.id == id } ?: return false
+        val intent = runCatching { Intent.parseUri(row.intentUri, Intent.URI_INTENT_SCHEME) }.getOrNull() ?: return false
+        if (intent.component?.packageName.let { it != null && it != row.pkg }) return false
+        if (intent.component == null) intent.setPackage(row.pkg)
+        intent.selector = null
+        BoxLog.log("REPRENDRE", "${label(row.pkg)} : ${row.title}")
+        return runCatching { startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }.getOrDefault(false)
+    }
+
     private fun openUrl(url: String): Boolean {
         val uri = android.net.Uri.parse(url.trim())
         if (uri.scheme != "http" && uri.scheme != "https") return false
@@ -1185,6 +1229,8 @@ class GuardService : AccessibilityService() {
         })
         "launch" -> if (launch(req.optString("pkg"))) JSONObject().put("ok", true) else err("Impossible d'ouvrir cette appli")
         "open_url" -> if (openUrl(req.optString("url"))) JSONObject().put("ok", true) else err("Lien non pris en charge")
+        "continue_watching" -> JSONObject().put("ok", true).put("items", JSONArray(continueWatching(req.optInt("max", 30))))
+        "open_row" -> if (openRow(req.optString("id"))) JSONObject().put("ok", true) else err("Programme introuvable")
         "pointer" -> { overlays.movePointer(req.optDouble("dx").toFloat(), req.optDouble("dy").toFloat()); lastInteraction = System.currentTimeMillis(); JSONObject().put("ok", true) }
         "pointer_click" -> {
             overlays.pulsePointer(); lastInteraction = System.currentTimeMillis()

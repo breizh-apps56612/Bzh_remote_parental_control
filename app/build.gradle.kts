@@ -11,8 +11,8 @@ android {
         applicationId = "fr.paul.telecommande"
         minSdk = 21          // Android 5.0 : ~99 % des appareils en circulation
         targetSdk = 34
-        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "59").toInt()
-        versionName = "2.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "23")
+        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "60").toInt()
+        versionName = "2.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "24")
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -66,6 +66,7 @@ tasks.named("preBuild") { dependsOn(copyBoxApk) }
 dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.media:media:1.7.0")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")

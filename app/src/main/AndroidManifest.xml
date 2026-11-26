@@ -66,6 +66,8 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <receiver android:name=".service.ControlReceiver" android:exported="false" />
+
         <receiver
             android:name=".service.BootReceiver"
             android:exported="true">
