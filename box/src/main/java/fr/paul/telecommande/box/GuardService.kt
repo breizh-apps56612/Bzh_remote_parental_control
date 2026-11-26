@@ -160,7 +160,8 @@ class GuardService : AccessibilityService() {
             }
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 val label = (event.text?.joinToString(" ").orEmpty() + " " + (event.contentDescription ?: "") + " " +
-                    runCatching { event.source?.let { (it.text ?: "").toString() + " " + (it.contentDescription ?: "") } }.getOrNull().orEmpty()).trim()
+                    runCatching { event.source?.let { nodeLabel(it) } }.getOrNull().orEmpty()).trim()
+                event.packageName?.toString()?.let { rememberChoice(it, label) }
                 val pkg = event.packageName?.toString()
                 val play = pkg != null && fr.paul.telecommande.shared.PlayButtons.isPlay(label)
                 if (pkg != null && pkg != packageName && runCatching { event.source?.isEditable }.getOrNull() != true)
@@ -327,6 +328,20 @@ class GuardService : AccessibilityService() {
     }
 
     private var lastFocusLabel = ""
+
+    /** Texte d'un élément et de ses enfants (bouton dont le libellé « LECTURE » est dans un enfant, vignette « Classé 16+ »…). */
+    private fun nodeLabel(n: android.view.accessibility.AccessibilityNodeInfo): String {
+        val out = ArrayList<String>()
+        runCatching { walk(n, 12) { t, _ -> t.toString().trim().takeIf { it.isNotEmpty() && it.length <= 200 }?.let { out += it } } }
+        return out.distinct().joinToString(" ").take(400)
+    }
+
+    /** Classification du programme choisi (vignette ou page de détail) : appliquée si la lecture démarre ensuite sans classification lisible. */
+    private val chosenAge = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Long>>()
+    private fun rememberChoice(pkg: String, label: String) {
+        if (!fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg)) return
+        fr.paul.telecommande.shared.RatingReader.read(listOf(label)).age?.let { chosenAge[pkg] = it to System.currentTimeMillis() }
+    }
     private var lastFocusAt = 0L
 
     /**
@@ -340,8 +355,8 @@ class GuardService : AccessibilityService() {
             k != android.view.KeyEvent.KEYCODE_MEDIA_PLAY && k != android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) return false
         val pkg = current ?: return false
         if (!fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg)) return false
-        val focus = runCatching { findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT)
-            ?.let { ((it.text ?: "").toString() + " " + (it.contentDescription ?: "")).trim() } }.getOrNull().orEmpty()
+        val focus = runCatching { findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT)?.let { nodeLabel(it) } }.getOrNull().orEmpty()
+        rememberChoice(pkg, focus)
         val sel = focus.ifBlank { lastFocusLabel.takeIf { System.currentTimeMillis() - lastFocusAt < 15_000 }.orEmpty() }
         val play = k == android.view.KeyEvent.KEYCODE_MEDIA_PLAY || fr.paul.telecommande.shared.PlayButtons.isPlay(sel)
         BoxLog.log("TOUCHE", "${label(pkg)} : ${android.view.KeyEvent.keyCodeToString(k)} sur « ${sel.take(100)} »" + if (play) " → Lecture" else "")
@@ -748,6 +763,10 @@ class GuardService : AccessibilityService() {
                 if (title != null) progRating?.let { ratings[key] = it }
             } else if (title == null) progRating = null
         }
+        // Lecture sans classification lisible : celle du programme choisi juste avant (vignette, page de détail), si récente
+        if (playing && progRating?.age == null) chosenAge[pkg]?.takeIf { now - it.second < 5 * 60_000L }?.let { (a, _) ->
+            progRating = fr.paul.telecommande.shared.Rating(a, progRating?.contents ?: emptySet())
+        }
         var reason = if (active) fr.paul.telecommande.shared.ProgramRules.blockReason(rules, profile, title, sub, progRating) else null
         // Film ou série sans classification lisible après 10 s de lecture : demander au parent (ou bloquer), selon son réglage
         var unknown = false
@@ -855,6 +874,7 @@ class GuardService : AccessibilityService() {
         val texts = readScreen(pkg).texts.ifEmpty { recentTexts() }
         // La classification de la page : la première trouvée (celle du titre choisi, pas des suggestions plus bas)
         val age = texts.asSequence().mapNotNull { fr.paul.telecommande.shared.RatingReader.read(listOf(it)).age }.firstOrNull()
+        age?.let { chosenAge[pkg] = it to System.currentTimeMillis() }
         val r = fr.paul.telecommande.shared.Rating(age, fr.paul.telecommande.shared.RatingReader.read(texts).contents)
         val now = System.currentTimeMillis(); val day = Stats.startOfDay(now)
         val key = "$pkg|clic"
@@ -875,7 +895,7 @@ class GuardService : AccessibilityService() {
 
     private fun usage(pkg: String, now: Long, allRules: BoxRules, profile: fr.paul.telecommande.shared.Profile?): UsageContext {
         val day = Stats.startOfDay(now)
-        val totals = if (allRules.profiles.isEmpty()) log.totals(day, now) else log.totals(day, now, profile?.id ?: "")
+        val totals = (if (allRules.profiles.isEmpty()) log.totals(day, now) else log.totals(day, now, profile?.id ?: "")).filterKeys { it !in exempt }
         return UsageContext(
             minuteOfDay = Stats.minuteOfDay(now), dayOfWeek = Stats.dayOfWeek(now),
             usedMs = totals[pkg] ?: 0L, totalMs = totals.values.sum(),
@@ -1281,7 +1301,7 @@ class GuardService : AccessibilityService() {
     private fun status(): JSONObject {
         val now = System.currentTimeMillis()
         val day = Stats.startOfDay(now)
-        val totals = log.totals(day, now)
+        val totals = log.totals(day, now).filterKeys { it !in exempt }
         val pkg = current
         return JSONObject().put("ok", true)
             .put("pkg", pkg ?: "").put("label", pkg?.let { label(it) } ?: "")
@@ -1297,12 +1317,12 @@ class GuardService : AccessibilityService() {
     }
 
     private fun usage(from: Long, to: Long): JSONObject {
-        val sessions = log.sessions(from, to)
-        val totals = Stats.totals(sessions, from, to)
+        val sessions = log.sessions(from, to).filter { it.pkg !in exempt }
+        val totals = Stats.totals(sessions, from, to).filterKeys { it !in exempt }
         val days = ((to - from) / (24 * 3600_000L)).toInt().coerceIn(1, 31)
         val daily = JSONArray()
         var d = Stats.startOfDay(from)
-        while (d < to) { val e = Stats.addDays(d, 1); daily.put(Stats.totals(sessions, d, minOf(e, to)).values.sum()); d = e }
+        while (d < to) { val e = Stats.addDays(d, 1); daily.put(Stats.totals(sessions, d, minOf(e, to)).filterKeys { it !in exempt }.values.sum()); d = e }
         return JSONObject().put("ok", true)
             .put("byApp", JSONObject(totals as Map<*, *>))
             .put("labels", JSONObject(totals.keys.associateWith { label(it) } as Map<*, *>))
@@ -1331,7 +1351,9 @@ class GuardService : AccessibilityService() {
     private fun computeExempt(): Set<String> {
         val homes = packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY)
             .map { it.activityInfo.packageName }
-        return (homes + packageName + TRANSIENT).toSet()
+        // Économiseurs d'écran (Backdrop…) : la TV est allumée mais personne ne regarde, ce n'est pas du temps d'écran
+        val dreams = runCatching { packageManager.queryIntentServices(Intent("android.service.dreams.DreamService"), 0).map { it.serviceInfo.packageName } }.getOrDefault(emptyList())
+        return (homes + dreams + packageName + TRANSIENT + DREAMS).toSet()
     }
 
     private fun isIme(pkg: String): Boolean = runCatching {
@@ -1343,6 +1365,7 @@ class GuardService : AccessibilityService() {
             private set
 
         val SETTINGS = ProtectedApps.SETTINGS + ProtectedApps.INSTALLERS
+        val DREAMS = setOf("com.google.android.backdrop", "com.android.dreams.basic", "com.android.dreams.phototable")
         val TRANSIENT = setOf("com.android.systemui", "android", "com.google.android.katniss", "com.google.android.tvrecommendations")
 
         fun enabled(ctx: Context): Boolean =
