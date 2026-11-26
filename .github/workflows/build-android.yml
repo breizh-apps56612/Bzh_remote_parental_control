@@ -33,9 +33,10 @@ jobs:
       - name: Tests unitaires + compilation
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Un seul secret à créer (ANDROID_KEYSTORE_BASE64) : la clé utilise les mots de passe standard d'une clé Android de debug.
+          ANDROID_KEYSTORE_PASSWORD: android
+          ANDROID_KEY_ALIAS: androiddebugkey
+          ANDROID_KEY_PASSWORD: android
         run: gradle --no-daemon testReleaseUnitTest :app:assembleRelease :box:assembleRelease
 
       - name: Renommer les APK
