@@ -102,7 +102,12 @@ object ControlNotification {
                 val a = runCatching { DriverHub.assistant(c, d) }.getOrNull()
                 if (a != null && a.state.value.connected) { a.seekBy(seconds.toDouble()); DiagLog.log("CONTROLE", "${seconds}s par l'assistant YouTube"); return@launch }
             }
-            sendNow(c, d, if (seconds > 0) RemoteKey.FAST_FORWARD else RemoteKey.REWIND)
+            // Prime Video, Netflix, Disney+… ignorent avance / retour rapide (journal du 26/11, Prime Video) :
+            // pendant la lecture, gauche / droite recule / avance de 10 s.
+            val key = if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg))
+                (if (seconds > 0) RemoteKey.RIGHT else RemoteKey.LEFT)
+            else (if (seconds > 0) RemoteKey.FAST_FORWARD else RemoteKey.REWIND)
+            sendNow(c, d, key)
         }
     }
 
