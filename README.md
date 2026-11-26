@@ -8,6 +8,8 @@ Gratuite, open source (GPL-3.0), sans compte, sans serveur, sans publicité.
 
 ## Ce que fait l'appli
 
+- **Interface « Aurora »** (téléphone 2.4.38) : barre de navigation Maison · Parental · Activité · Réglages avec la télécommande au centre ; accueil « en direct » de la TV principale et demandes de temps à accepter d'un geste ; écran Parental organisé par profil (temps par jour de chaque enfant réglable en un geste).
+
 - **Télécommande** : pavé tactile, clavier du téléphone, vraie souris (flèche affichée sur la TV), lancement des applis avec leurs icônes, volume, veille.
 - **Contrôle parental** (appli « Box » installée sur la TV, active même téléphone éteint) : temps par jour au total et par appli, horaires et jours autorisés, couvre-feu, profils « Qui regarde ? », fin d'épisode avant de couper, demandes de temps depuis la TV, messages et récompenses, Paramètres et installations protégés.
 - **Code parent validé sur le téléphone** (empreinte, visage ou code) : l'enfant ne voit jamais le code.
@@ -29,6 +31,8 @@ gradle :shared:testReleaseUnitTest :app:assembleRelease :box:assembleRelease
 ```
 
 Il faut le SDK Android 34 (`ANDROID_HOME`). Les APK officiels sont signés avec une clé qui **n'est pas** dans ce dépôt : un APK que vous compilez vous-même ne peut pas mettre à jour la version installée depuis le site (Android refuse une signature différente). C'est voulu, pour que personne ne puisse publier une fausse mise à jour.
+
+Les APK officiels sont compilés, testés et signés par GitHub Actions à chaque envoi sur `main` (onglet **Actions** › dernier run › **Artifacts**). La clé de signature y est un secret du dépôt, invisible et inaccessible aux copies du dépôt. Les numéros de version sont fixés dans `app/build.gradle.kts` et `box/build.gradle.kts`.
 
 ## Licence
 
