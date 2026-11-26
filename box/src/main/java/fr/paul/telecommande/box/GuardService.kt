@@ -1014,6 +1014,22 @@ class GuardService : AccessibilityService() {
     private fun isProtected(pkg: String): Boolean =
         ProtectedApps.isSettings(pkg) || (ProtectedApps.isInstaller(pkg) && System.currentTimeMillis() > selfUpdateUntil)
 
+    /** Commandes du lecteur des réglages rapides du téléphone : avance / recul dans la vidéo, muet. */
+    private fun mediaControl(action: String, by: Long): JSONObject = when (action) {
+        "seek" -> {
+            val done = runCatching { Media.seekBy(this, by) }.getOrNull()
+            BoxLog.log("CONTROLE", "Avance/recul ${by}s : ${done ?: "aucune session pilotable"}")
+            if (done != null) JSONObject().put("ok", true).put("done", done) else err("Aucune lecture pilotable")
+        }
+        "mute" -> {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val r = runCatching { am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_TOGGLE_MUTE, AudioManager.FLAG_SHOW_UI) }
+            BoxLog.log("CONTROLE", "Muet : ${r.fold({ "envoyé" }, { it.message ?: "erreur" })}")
+            if (r.isSuccess) JSONObject().put("ok", true) else err("Muet impossible")
+        }
+        else -> err("Commande inconnue")
+    }
+
     private fun pauseMedia() {
         val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val t = SystemClock.uptimeMillis()
@@ -1234,6 +1250,7 @@ class GuardService : AccessibilityService() {
 
     fun command(cmd: String, req: JSONObject, phoneName: String, phoneFp: String): JSONObject = when (cmd) {
         "status" -> status()
+        "media_control" -> mediaControl(req.optString("action"), req.optLong("by", 10))
         "usage" -> usage(req.optLong("from"), req.optLong("to", System.currentTimeMillis()))
         "apps" -> JSONObject().put("ok", true).put("apps", JSONArray().apply {
             val icons = req.optBoolean("icons")

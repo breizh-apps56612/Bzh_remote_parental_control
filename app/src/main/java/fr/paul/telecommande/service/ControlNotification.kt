@@ -35,6 +35,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 /**
  * Télécommande dans le lecteur multimédia des réglages rapides d'Android : lecture/pause, −10 s / +10 s, muet,
@@ -68,11 +69,50 @@ object ControlNotification {
             })
     }
 
-    /** Envoie une touche à la TV (connexion partagée avec l'écran télécommande). */
+    /** Envoie une touche à la TV (connexion partagée avec l'écran télécommande), avec une reconnexion si le lien était mort. */
     fun send(c: Context, d: Device, key: RemoteKey) {
+        DriverHub.scope.launch { sendNow(c, d, key) }
+    }
+
+    private suspend fun sendNow(c: Context, d: Device, key: RemoteKey): Boolean {
+        for (attempt in 1..2) {
+            val r = runCatching { val drv = DriverHub.driver(c, d); drv.connect(DriverHub.SilentPairing); drv.send(key) }
+            if (r.getOrNull() == true) { DiagLog.log("CONTROLE", "Touche $key envoyée"); return true }
+            if (r.isSuccess) { DiagLog.log("CONTROLE", "Touche $key non prise en charge par ${d.name}"); return false }
+            DiagLog.log("CONTROLE", "Touche $key non envoyée (essai $attempt) : ${r.exceptionOrNull()?.message}")
+            runCatching { DriverHub.driver(c, d).close() }
+        }
+        return false
+    }
+
+    /**
+     * −10 s / +10 s comme dans l'écran télécommande : d'abord par l'appli Box (session multimédia de l'appli lue),
+     * sinon par l'assistant YouTube s'il est relié, sinon par les touches avance / retour rapide.
+     */
+    fun seek(c: Context, d: Device, seconds: Int) {
         DriverHub.scope.launch {
-            runCatching { val drv = DriverHub.driver(c, d); drv.connect(DriverHub.SilentPairing); drv.send(key) }
-                .onFailure { DiagLog.log("CONTROLE", "Touche $key non envoyée : ${it.message}") }
+            if (d.hasBoxApp) {
+                val r = runCatching { BoxClient.of(c, d).call("media_control", JSONObject().put("action", "seek").put("by", seconds)) }
+                if (r.getOrNull()?.optBoolean("ok") == true) { DiagLog.log("CONTROLE", "${seconds}s par l'appli Box : ${r.getOrNull()?.optString("done")}"); return@launch }
+                DiagLog.log("CONTROLE", "${seconds}s par l'appli Box impossible : ${r.exceptionOrNull()?.message ?: r.getOrNull()?.optString("error")}")
+            }
+            if (d.isSmartBox) {
+                val a = runCatching { DriverHub.assistant(c, d) }.getOrNull()
+                if (a != null && a.state.value.connected) { a.seekBy(seconds.toDouble()); DiagLog.log("CONTROLE", "${seconds}s par l'assistant YouTube"); return@launch }
+            }
+            sendNow(c, d, if (seconds > 0) RemoteKey.FAST_FORWARD else RemoteKey.REWIND)
+        }
+    }
+
+    /** Muet : par l'appli Box (son de la TV), sinon par la touche Muet. */
+    fun mute(c: Context, d: Device) {
+        DriverHub.scope.launch {
+            if (d.hasBoxApp) {
+                val r = runCatching { BoxClient.of(c, d).call("media_control", JSONObject().put("action", "mute")) }
+                if (r.getOrNull()?.optBoolean("ok") == true) { DiagLog.log("CONTROLE", "Muet par l'appli Box"); return@launch }
+                DiagLog.log("CONTROLE", "Muet par l'appli Box impossible : ${r.exceptionOrNull()?.message ?: r.getOrNull()?.optString("error")}")
+            }
+            sendNow(c, d, RemoteKey.MUTE)
         }
     }
 }
@@ -98,14 +138,16 @@ class TvControlService : Service() {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() = toggle()
                 override fun onPause() = toggle()
-                override fun onSkipToPrevious() = key(RemoteKey.REWIND)
-                override fun onSkipToNext() = key(RemoteKey.FAST_FORWARD)
-                override fun onRewind() = key(RemoteKey.REWIND)
-                override fun onFastForward() = key(RemoteKey.FAST_FORWARD)
+                override fun onSkipToPrevious() = seek(-10)
+                override fun onSkipToNext() = seek(10)
+                override fun onRewind() = seek(-10)
+                override fun onFastForward() = seek(10)
                 override fun onStop() { stopSelf() }
                 override fun onCustomAction(action: String, extras: android.os.Bundle?) {
                     when (action) {
-                        "mute" -> key(RemoteKey.MUTE)
+                        "back10" -> seek(-10)
+                        "fwd10" -> seek(10)
+                        "mute" -> device?.let { ControlNotification.mute(this@TvControlService, it) }
                         "remote" -> startActivity(Intent(this@TvControlService, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 }
@@ -127,6 +169,8 @@ class TvControlService : Service() {
     }
 
     private fun key(k: RemoteKey) { device?.let { ControlNotification.send(this, it, k) } }
+
+    private fun seek(s: Int) { device?.let { ControlNotification.seek(this, it, s) } }
 
     private fun toggle() { key(RemoteKey.PLAY_PAUSE); playing = !playing; update(); notifyAgain() }
 
@@ -150,7 +194,10 @@ class TvControlService : Service() {
         s.setMetadata(meta.build())
         s.setPlaybackState(PlaybackStateCompat.Builder()
             .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE or
-                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_STOP)
+                PlaybackStateCompat.ACTION_REWIND or PlaybackStateCompat.ACTION_FAST_FORWARD or PlaybackStateCompat.ACTION_STOP)
+            // Pas d'« précédent / suivant » : Android place alors −10 s et +10 s dans ces deux emplacements du lecteur.
+            .addCustomAction(PlaybackStateCompat.CustomAction.Builder("back10", "−10 s", R.drawable.ic_back10).build())
+            .addCustomAction(PlaybackStateCompat.CustomAction.Builder("fwd10", "+10 s", R.drawable.ic_fwd10).build())
             .addCustomAction(PlaybackStateCompat.CustomAction.Builder("mute", "Muet", R.drawable.ic_mute).build())
             .addCustomAction(PlaybackStateCompat.CustomAction.Builder("remote", "Télécommande", R.drawable.ic_remote).build())
             .setState(if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
@@ -198,7 +245,14 @@ class ControlReceiver : BroadcastReceiver() {
         if (key == "close") { ControlNotification.hide(c); return }
         val id = intent.getStringExtra("id") ?: return
         val d = DeviceStore(c).get(id) ?: return
-        val k = if (key == "toggle") RemoteKey.PLAY_PAUSE else runCatching { RemoteKey.valueOf(key) }.getOrNull() ?: return
-        ControlNotification.send(c, d, k)
+        when (key) {
+            "REWIND" -> ControlNotification.seek(c, d, -10)
+            "FAST_FORWARD" -> ControlNotification.seek(c, d, 10)
+            "MUTE" -> ControlNotification.mute(c, d)
+            else -> {
+                val k = if (key == "toggle") RemoteKey.PLAY_PAUSE else runCatching { RemoteKey.valueOf(key) }.getOrNull() ?: return
+                ControlNotification.send(c, d, k)
+            }
+        }
     }
 }

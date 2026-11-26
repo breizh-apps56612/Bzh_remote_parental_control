@@ -41,6 +41,30 @@ object Media {
         return o
     }
 
+    /**
+     * Avance / recule de [seconds] dans ce qui est lu, via la session multimédia de l'appli (YouTube, Netflix…).
+     * Renvoie une description de ce qui a été fait, ou null si aucune session n'est pilotable.
+     */
+    fun seekBy(ctx: Context, seconds: Long): String? {
+        if (!allowed(ctx)) return null
+        val msm = ctx.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager ?: return null
+        val sessions = runCatching { msm.getActiveSessions(ComponentName(ctx, MediaListener::class.java)) }.getOrNull() ?: return null
+        val c = sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
+            ?: sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PAUSED } ?: return null
+        val st = c.playbackState ?: return null
+        if (st.actions and PlaybackState.ACTION_SEEK_TO != 0L && st.position >= 0) {
+            val elapsed = if (st.state == PlaybackState.STATE_PLAYING)
+                ((android.os.SystemClock.elapsedRealtime() - st.lastPositionUpdateTime) * st.playbackSpeed).toLong() else 0L
+            val dur = c.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.takeIf { it > 0 } ?: Long.MAX_VALUE
+            val target = (st.position + elapsed + seconds * 1000).coerceIn(0L, dur)
+            c.transportControls.seekTo(target)
+            return "${c.packageName} seekTo ${target / 1000}s"
+        }
+        if (seconds > 0 && st.actions and PlaybackState.ACTION_FAST_FORWARD != 0L) { c.transportControls.fastForward(); return "${c.packageName} fastForward" }
+        if (seconds < 0 && st.actions and PlaybackState.ACTION_REWIND != 0L) { c.transportControls.rewind(); return "${c.packageName} rewind" }
+        return null
+    }
+
     /** Tous les textes publiés par l'appli sur ce qui est lu (titre, chaîne, description, classification éventuelle). */
     fun allText(ctx: Context, pkg: String): List<String> {
         if (!allowed(ctx)) return emptyList()
