@@ -49,7 +49,9 @@ class UpdateActivity : Activity() {
         if (state == "permission" && updater.canInstall()) startDownload()
     }
 
-    private fun text(t: String, size: Float, color: Int = BoxUi.INK, bold: Boolean = false) = BoxUi.text(this, t, size, color, bold)
+    // Largeur bornée : un texte long revient à la ligne au lieu de sortir de l'écran
+    private fun text(t: String, size: Float, color: Int = BoxUi.INK, bold: Boolean = false) =
+        BoxUi.text(this, t, size, color, bold).apply { maxWidth = dp(620) }
 
     private fun button(label: String, primary: Boolean, onClick: () -> Unit) = BoxUi.button(this, label, primary, onClick = onClick)
 
@@ -96,7 +98,8 @@ class UpdateActivity : Activity() {
         }
     }
 
-    private fun lp(top: Int) = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(top) }
+    // Largeur « au contenu » : en pleine largeur, LinearLayout garde la hauteur d'une seule ligne et coupe la suite
+    private fun lp(top: Int) = LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(top); gravity = android.view.Gravity.CENTER_HORIZONTAL }
 
     private fun addButtons(vararg b: Button) {
         val row = LinearLayout(this).apply { gravity = Gravity.CENTER }
