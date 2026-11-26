@@ -30,6 +30,9 @@
     <!-- Fond du pavé tactile : lueur indigo puis menthe -->
     <color name="aurora_a">#ECEBFF</color>
     <color name="aurora_b">#DDF5F3</color>
+    <!-- Encart « demande en attente » -->
+    <color name="notice_bg">#FFF4E5</color>
+    <color name="notice_ink">#6B4A1F</color>
     <color name="ok">#14B8A6</color>
     <color name="danger">#D92D20</color>
     <color name="power_bg">#FFE4E8</color>

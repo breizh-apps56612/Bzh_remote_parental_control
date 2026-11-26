@@ -55,7 +55,7 @@ class ParentalActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             val p = Ui.dp(this@ParentalActivity, 16); setPadding(p, p, p, p * 2)
         }
-        setContentView(ScrollView(this).apply { setBackgroundResource(R.drawable.bg_screen); addView(root) })
+        setContentView(AuroraNav.wrap(this, ScrollView(this).apply { addView(root) }, AuroraNav.Tab.PARENTAL))
         unlocked = !store.hasPin
         render()
         if (!unlocked) unlock()
@@ -160,6 +160,7 @@ class ParentalActivity : AppCompatActivity() {
         root.addView(Ui.text(c,
             "Fonctionne avec les box Android TV / Google TV. Le téléphone doit rester sur le Wi-Fi de la maison ; " +
                 "s'il part, les limites ne sont plus appliquées jusqu'à son retour.", 12f, muted = true), Ui.lp(c, 12))
+        root.addView(AuroraNav.spacer(c))
     }
 
     private fun pickMinutes(title: String, options: List<Int>, current: Int, done: (Int) -> Unit) {

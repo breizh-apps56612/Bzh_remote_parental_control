@@ -50,7 +50,7 @@ class StatsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             val p = Ui.dp(this@StatsActivity, 16); setPadding(p, p, p, p * 2)
         }
-        setContentView(ScrollView(this).apply { setBackgroundResource(R.drawable.bg_screen); addView(root) })
+        setContentView(AuroraNav.wrap(this, ScrollView(this).apply { addView(root) }, AuroraNav.Tab.ACTIVITY))
         lifecycleScope.launch {
             while (isActive) { render(); delay(30_000) }
         }
@@ -200,6 +200,6 @@ class StatsActivity : AppCompatActivity() {
             (if (since != null) "Mesuré depuis le " + DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.FRANCE).format(Date(since)) + ". " else "") +
                 "L'historique antérieur à l'activation n'est pas transmis par la box. Le suivi fonctionne quand ce téléphone est sur le même Wi-Fi que la box. Les données restent sur le téléphone.",
             12f, muted = true), Ui.lp(c, 14))
-        root.addView(View(c), Ui.lp(c, 8))
+        root.addView(AuroraNav.spacer(c))
     }
 }

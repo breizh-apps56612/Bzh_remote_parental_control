@@ -57,6 +57,34 @@
         <item name="tint">@color/ink</item>
     </style>
 
+    <!-- Touche du dock de la télécommande : icône + petit libellé -->
+    <style name="DockKey">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">64dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:background">?android:attr/selectableItemBackgroundBorderless</item>
+    </style>
+    <style name="DockIcon">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="tint">@color/ink</item>
+    </style>
+    <style name="DockLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:textColor">@color/muted</item>
+        <item name="android:textSize">11.5sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:maxLines">1</item>
+    </style>
+
     <style name="RemoteKey">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">52dp</item>

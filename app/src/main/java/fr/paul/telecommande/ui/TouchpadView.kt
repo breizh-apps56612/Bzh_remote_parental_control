@@ -203,8 +203,12 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
         centerDot.clearShadowLayer()
         centerDot.color = ContextCompat.getColor(context, R.color.accent)
         canvas.drawCircle(cx, cy, (if (tap) 10f else 7f) * d, centerDot)
-        if (!mouseMode && touchX < 0 && height > 250 * d) {
-            hint.split("\n").forEachIndexed { i, line -> canvas.drawText(line, cx, cy + 82 * d + i * 16 * d, textPaint) }
+        if (!mouseMode && touchX < 0) {
+            // Aide sous le bouton central, seulement s'il reste la place avant la flèche du bas
+            val lines = hint.split("\n")
+            val y0 = cy + (if (tap) 62f else 56f) * d + 20 * d
+            if (y0 + (lines.size - 1) * 16 * d < height - m - 22 * d)
+                lines.forEachIndexed { i, line -> canvas.drawText(line, cx, y0 + i * 16 * d, textPaint) }
         }
         if (touchX >= 0) canvas.drawCircle(touchX, touchY, 34 * d, touchPaint)
 

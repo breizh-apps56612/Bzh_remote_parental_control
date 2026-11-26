@@ -143,11 +143,24 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             setOnClickListener { atv?.allowPowerOnce(); press(RemoteKey.POWER) }
             setOnLongClickListener { atv?.allowPowerOnce(); powerOn(); true }
         }
-        findViewById<View>(R.id.btnMenu).setOnClickListener { showMenu(it) }
+        findViewById<View>(R.id.btnMenu).setOnClickListener { showMoreKeys() }
+        findViewById<View>(R.id.btnClose).setOnClickListener {
+            if (isTaskRoot) startActivity(Intent(this, MainActivity::class.java))
+            finish()
+        }
+        AuroraNav.setPrimary(this, device)
+        findViewById<View>(R.id.btnApps).apply {
+            if (device.isSmartBox) setOnClickListener { it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); showAppsSheet() }
+            else {
+                // Pas d'applis à lancer sur une TV classique : la touche devient « Source »
+                findViewById<TextView>(R.id.btnAppsLabel).text = "Source"
+                contentDescription = "Source (entrée HDMI, TV…)"
+                setOnClickListener { it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); press(RemoteKey.INPUT) }
+            }
+        }
         findViewById<View>(R.id.btnBack).setOnClickListener { press(RemoteKey.BACK) }
         findViewById<View>(R.id.btnHome).setOnClickListener { press(RemoteKey.HOME) }
         findViewById<View>(R.id.btnPlay).setOnClickListener { press(RemoteKey.PLAY_PAUSE) }
-        findViewById<View>(R.id.btnMore).setOnClickListener { showMoreKeys() }
         repeatKey(R.id.btnVolUp, RemoteKey.VOL_UP); repeatKey(R.id.btnVolDown, RemoteKey.VOL_DOWN)
         repeatKey(R.id.btnChUp, RemoteKey.CH_UP); repeatKey(R.id.btnChDown, RemoteKey.CH_DOWN)
         setupNav()
@@ -837,6 +850,8 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         tool(if (touchpad.mouseMode) "🖱️  Souris : arrêter" else "🖱️  Mode souris") { setMouse(!touchpad.mouseMode) }
         tool("🔵  Souris Bluetooth") { startActivity(Intent(this, BtMouseActivity::class.java)) }
         if (device.hasBoxApp) tool("⏯️  Reprendre") { showContinue() }
+        tool("⚙️  Réglages") { showSettings() }
+        tool("❓  Aide") { showHelp() }
         box0.addView(tools)
 
         // Touches
@@ -889,18 +904,8 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         }
     }
 
-    private fun setupNav() {
-        val nav = findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(R.id.bottomNav)
-        if (!device.isSmartBox) { nav.visibility = View.GONE; return }
-        nav.selectedItemId = R.id.nav_remote
-        nav.setOnItemSelectedListener { item ->
-            when (item.itemId) {
-                R.id.nav_apps -> showAppsSheet()
-                R.id.nav_stats -> startActivity(Intent(this, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, device.id))
-            }
-            item.itemId == R.id.nav_remote
-        }
-    }
+    /** La télécommande n'a plus de barre du bas : on y revient par le bouton rond central de l'appli. */
+    private fun setupNav() {}
 
     private fun showAppsSheet() {
         if (box != null) { BoxActions.appsSheet(this, device); return }
@@ -1010,7 +1015,13 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
     @SuppressLint("ClickableViewAccessibility")
     private fun setupMic() {
         val mic = findViewById<View>(R.id.btnMic)
-        if (atv == null) { mic.visibility = View.GONE; return }
+        if (atv == null) {
+            // Pas de recherche vocale sur cette TV : le gros bouton central ouvre « Plus » (touches, clavier, réglages)
+            (mic as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_more)
+            mic.contentDescription = "Plus de touches"
+            mic.setOnClickListener { showMoreKeys() }
+            return
+        }
         // Maintenir = parler tant que le doigt reste posé ; toucher = parler jusqu'au silence.
         mic.setOnTouchListener { v, e ->
             when (e.actionMasked) {

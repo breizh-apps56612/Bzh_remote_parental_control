@@ -26,6 +26,8 @@
     <color name="brand_b">#0B8783</color>
     <color name="aurora_a">#1E1F45</color>
     <color name="aurora_b">#12303A</color>
+    <color name="notice_bg">#3A2C17</color>
+    <color name="notice_ink">#F3D9AE</color>
     <color name="ok">#2DD4BF</color>
     <color name="danger">#FF8A80</color>
     <color name="power_bg">#3A1A26</color>
