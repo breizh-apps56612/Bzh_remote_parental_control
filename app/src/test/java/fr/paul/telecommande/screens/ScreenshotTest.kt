@@ -35,7 +35,7 @@ import java.io.File
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w412dp-h915dp-night-xxhdpi")
+@Config(sdk = [34], qualifiers = "w412dp-h915dp-notnight-xxhdpi")
 class ScreenshotTest {
     private val ctx get() = ApplicationProvider.getApplicationContext<android.app.Application>()
     private val out = File(System.getenv("SCREENS_DIR") ?: "build/screens").apply { mkdirs() }
@@ -49,7 +49,8 @@ class ScreenshotTest {
         ps.setPin("2580")
         val r = ps.boxRules(device.id)
         r.enabled = true; r.dailyTotalMin = 120; r.bedtimeEnabled = true; r.bedtimeStart = 20 * 60 + 30; r.bedtimeEnd = 7 * 60
-        r.profiles = mutableListOf(Profile("leo", "Léo", "🦖", 90), Profile("emma", "Emma", "🦄", 60), Profile("par", "Parents", "👑", 0, true))
+        r.profiles = mutableListOf(Profile("leo", "Léo", "🦖", 90, birthYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) - 7),
+            Profile("emma", "Emma", "🦄", 0, birthYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) - 11), Profile("par", "Parents", "👑", 0, true))
         r.apps = mutableMapOf(
             "com.google.android.youtube.tv" to AppRule(limitMin = 45),
             "com.netflix.ninja" to AppRule(limitMin = 60),
@@ -71,6 +72,36 @@ class ScreenshotTest {
 
     private fun call(o: Any, name: String) = o.javaClass.getDeclaredMethod(name).apply { isAccessible = true }.invoke(o)
 
+    /** Premier ScrollView de l'écran (le contenu est enveloppé par la barre de navigation flottante). */
+    private fun scroller(a: Activity): View {
+        fun find(v: View): View? = when (v) {
+            is android.widget.ScrollView -> v
+            is android.view.ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
+            else -> null
+        }
+        return find(a.findViewById(android.R.id.content))!!
+    }
+
+    /** Vue dont le texte ou la description correspond exactement. */
+    private fun view(a: Activity, label: String): View? {
+        fun find(v: View): View? {
+            if (v.contentDescription?.toString() == label || (v as? android.widget.TextView)?.text?.toString() == label) return v
+            return (v as? android.view.ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { find(g.getChildAt(it)) } }
+        }
+        return find(a.window.decorView)
+    }
+
+    /** Positions (px, écran 1080×2400) des éléments utiles aux animations du site : nom → [gauche, haut, droite, bas]. */
+    private fun bounds(file: String, views: Map<String, View?>) {
+        val o = JSONObject()
+        views.forEach { (k, v) ->
+            if (v == null) return@forEach
+            val p = IntArray(2); v.getLocationInWindow(p)
+            o.put(k, JSONArray(listOf(p[0], p[1], p[0] + v.width, p[1] + v.height)))
+        }
+        File(out, "$file.json").writeText(o.toString(1))
+    }
+
     /** Dessine l'écran (et la boîte de dialogue ouverte s'il y en a une) à la taille d'un téléphone 1080×2400. */
     private fun shot(a: Activity, file: String, h: Int = 2400, withDialog: Boolean = false) {
         val w = 1080
@@ -88,6 +119,10 @@ class ScreenshotTest {
             c.save(); c.translate(((w - dw) / 2).toFloat(), ((h - d.measuredHeight) / 2).toFloat()); d.draw(c); c.restore()
         }
         File(out, "$file.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        if (withDialog) ShadowDialog.getLatestDialog()?.window?.decorView?.let { d ->
+            val dw = (w * 0.86).toInt(); val x = (w - dw) / 2; val y = (h - d.measuredHeight) / 2
+            File(out, "$file.json").writeText(JSONObject().put("dialog", JSONArray(listOf(x, y, x + dw, y + d.measuredHeight))).toString(1))
+        }
     }
 
     private fun intent(cls: Class<*>, key: String) = Intent(ctx, cls).putExtra(key, device.id)
@@ -97,7 +132,7 @@ class ScreenshotTest {
 
     private fun status(withRequest: Boolean) = JSONObject()
         .put("interactive", true).put("label", "Netflix")
-        .put("profile", JSONObject().put("emoji", "🦖").put("name", "Léo"))
+        .put("profile", JSONObject().put("id", "leo").put("emoji", "🦖").put("name", "Léo"))
         .put("todayTotal", 72 * 60_000L)
         .put("today", JSONObject().put("com.netflix.ninja", 38 * 60_000L).put("com.google.android.youtube.tv", 27 * 60_000L).put("fr.francetv.pluzz", 7 * 60_000L))
         .put("labels", labels)
@@ -116,14 +151,30 @@ class ScreenshotTest {
     }
 
     @Test fun dashboard() {
-        val a = Robolectric.buildActivity(BoxDashboardActivity::class.java, intent(BoxDashboardActivity::class.java, BoxDashboardActivity.EXTRA_ID)).setup().get()
+        // Écran « Parental » : demande en attente, profils, règle du profil, actions, applis
+        val a = Robolectric.buildActivity(BoxDashboardActivity::class.java, intent(BoxDashboardActivity::class.java, BoxDashboardActivity.EXTRA_ID)
+            .putExtra(BoxDashboardActivity.EXTRA_MODE, BoxDashboardActivity.MODE_PARENTAL)).setup().get()
         set(a, "status", status(withRequest = true)); set(a, "week", week()); set(a, "error", null)
         call(a, "render"); shot(a, "01-tableau-de-bord")
+        bounds("01-tableau-de-bord", mapOf("accept" to view(a, "Accepter")))
         set(a, "status", status(withRequest = false)); call(a, "render"); shot(a, "02-tableau-de-bord-sans-demande")
-        set(a, "tab", 1); call(a, "render")
-        (a.window.decorView.findViewById<View>(android.R.id.content) as android.view.ViewGroup).getChildAt(0).scrollTo(0, 1500)
-        shot(a, "03-semaine")
-        set(a, "tab", 2); call(a, "render"); shot(a, "04-horaires")
+        // Écran « Activité » : anneau du jour puis le détail en onglets
+        val b = Robolectric.buildActivity(BoxDashboardActivity::class.java, intent(BoxDashboardActivity::class.java, BoxDashboardActivity.EXTRA_ID)
+            .putExtra(BoxDashboardActivity.EXTRA_MODE, BoxDashboardActivity.MODE_ACTIVITY)).setup().get()
+        set(b, "status", status(withRequest = false)); set(b, "week", week()); set(b, "error", null)
+        set(b, "tab", 1); call(b, "render"); shot(b, "03-semaine")
+        set(b, "tab", 2); call(b, "render"); shot(b, "04-horaires")
+    }
+
+    /** Accueil : carte « en direct » de la TV principale, tuiles, demande en attente, écrans. */
+    @Test fun home() {
+        val a = Robolectric.buildActivity(fr.paul.telecommande.ui.MainActivity::class.java).setup().get()
+        repeat(10) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(50) }
+        ShadowDialog.getLatestDialog()?.dismiss()
+        @Suppress("UNCHECKED_CAST")
+        val st = a.javaClass.getDeclaredField("status").apply { isAccessible = true }.get(a) as HashMap<String, JSONObject?>
+        st[device.id] = status(withRequest = true)
+        call(a, "refresh"); shot(a, "10-accueil")
     }
 
     @Test fun rules() {
@@ -132,8 +183,13 @@ class ScreenshotTest {
         set(a, "unlocked", true); set(a, "syncState", "Synchronisé avec la box")
         set(a, "apps", listOf("com.netflix.ninja" to "Netflix", "com.google.android.youtube.tv" to "YouTube", "com.disney.disneyplus" to "Disney+", "com.twitch.android.app" to "Twitch", "fr.francetv.pluzz" to "france.tv"))
         call(a, "render"); shot(a, "05-regles")
-        (a.window.decorView.findViewById<View>(android.R.id.content) as android.view.ViewGroup).getChildAt(0).scrollTo(0, 2300)
+        // Liste des applis : on fait défiler jusqu'à elle et on note où elle se trouve
+        val label = view(a, "APPLIS DE LA TV")
+        val list = (label?.parent as? android.view.ViewGroup)?.let { g -> g.getChildAt(g.indexOfChild(label) + 1) }
+        shot(a, "05-regles")
+        scroller(a).scrollTo(0, ((label?.top ?: 2300) - 200).coerceAtLeast(0))
         shot(a, "05b-regles-suite")
+        bounds("05b-regles-suite", mapOf("label" to label, "list" to list))
         // Règle d'une appli : Disney+ le week-end, de 14 h à 18 h
         a.javaClass.getDeclaredMethod("editApp", String::class.java, String::class.java).apply { isAccessible = true }
             .invoke(a, "com.disney.disneyplus", "Disney+")
@@ -149,7 +205,6 @@ class ScreenshotTest {
             root.draw(Canvas(bmp))
             File(dir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
         }
-        fun scroller(a: Activity) = (a.window.decorView.findViewById<View>(android.R.id.content) as android.view.ViewGroup).getChildAt(0)
         fun layout(a: Activity) {
             val root = a.window.decorView
             root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2400, View.MeasureSpec.EXACTLY))
@@ -162,9 +217,21 @@ class ScreenshotTest {
         call(r, "render"); layout(r)
         for (i in 0..64) { scroller(r).scrollTo(0, i * 60); save(r, "regles-%02d".format(i)) }
 
-        val d = Robolectric.buildActivity(BoxDashboardActivity::class.java, intent(BoxDashboardActivity::class.java, BoxDashboardActivity.EXTRA_ID)).setup().get()
+        val d = Robolectric.buildActivity(BoxDashboardActivity::class.java, intent(BoxDashboardActivity::class.java, BoxDashboardActivity.EXTRA_ID)
+            .putExtra(BoxDashboardActivity.EXTRA_MODE, BoxDashboardActivity.MODE_ACTIVITY)).setup().get()
         set(d, "status", status(withRequest = false)); set(d, "week", week()); set(d, "error", null)
-        for (t in 0..2) { set(d, "tab", t); call(d, "render"); layout(d); scroller(d).scrollTo(0, if (t == 0) 1624 else 1500); save(d, "activite-$t") }
+        for (t in 0..2) {
+            set(d, "tab", t); call(d, "render"); layout(d); save(d, "activite-$t")
+            if (t == 0) {
+                val tabs = view(d, "Aujourd'hui")?.parent as? View
+                File(out, "activite.json").writeText(JSONObject().apply {
+                    fun put(k: String, v: View?) { if (v != null) { val p = IntArray(2); v.getLocationInWindow(p); put(k, JSONArray(listOf(p[0], p[1], p[0] + v.width, p[1] + v.height))) } }
+                    put("tabs", tabs)
+                    listOf("Aujourd'hui", "Semaine", "Horaires").forEachIndexed { i, n -> put("tab$i", view(d, n) ?: view(d, "$n, sélectionné")) }
+                    put("hero", (view(d, "QUI REGARDE")?.parent?.parent?.parent as? View))
+                }.toString(1))
+            }
+        }
     }
 
     /** Assistant d'installation de l'appli TV : les étapes se cochent au fil de ce que le téléphone observe sur la TV. */

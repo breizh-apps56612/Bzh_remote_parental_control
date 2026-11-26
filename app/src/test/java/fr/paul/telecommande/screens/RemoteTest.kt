@@ -37,7 +37,7 @@ import java.io.File
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w412dp-h915dp-night-xxhdpi")
+@Config(sdk = [34], qualifiers = "w412dp-h915dp-notnight-xxhdpi")
 class RemoteTest {
     /** TV simulée : connexion immédiate, chaque touche est notée. */
     class FakeTv(d: Device) : Driver(d) {
@@ -168,5 +168,13 @@ class RemoteTest {
         val bmp = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888)
         root.draw(Canvas(bmp))
         File(out, "00-telecommande.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // Positions des éléments, pour placer le doigt dans l'animation du site
+        val o = JSONObject()
+        listOf("pad" to R.id.touchpad, "play" to R.id.btnPlay, "home" to R.id.btnHome, "back" to R.id.btnBack, "mic" to R.id.btnMic, "apps" to R.id.btnApps).forEach { (k, id) ->
+            val v = a.findViewById<View>(id); val p = IntArray(2); v.getLocationInWindow(p)
+            o.put(k, org.json.JSONArray(listOf(p[0], p[1], p[0] + v.width, p[1] + v.height)))
+        }
+        o.put("density", ctx.resources.displayMetrics.density.toDouble())
+        File(out, "00-telecommande.json").writeText(o.toString(1))
     }
 }
