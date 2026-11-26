@@ -89,14 +89,16 @@ object ControlNotification {
      * −10 s / +10 s comme dans l'écran télécommande : d'abord par l'appli Box (session multimédia de l'appli lue),
      * sinon par l'assistant YouTube s'il est relié, sinon par les touches avance / retour rapide.
      */
-    fun seek(c: Context, d: Device, seconds: Int) {
+    fun seek(c: Context, d: Device, seconds: Int, pkg: String = "") {
         DriverHub.scope.launch {
             if (d.hasBoxApp) {
                 val r = runCatching { BoxClient.of(c, d).call("media_control", JSONObject().put("action", "seek").put("by", seconds)) }
                 if (r.getOrNull()?.optBoolean("ok") == true) { DiagLog.log("CONTROLE", "${seconds}s par l'appli Box : ${r.getOrNull()?.optString("done")}"); return@launch }
                 DiagLog.log("CONTROLE", "${seconds}s par l'appli Box impossible : ${r.exceptionOrNull()?.message ?: r.getOrNull()?.optString("error")}")
             }
-            if (d.isSmartBox) {
+            // L'assistant YouTube ne pilote que YouTube : sur Prime Video, Netflix… on passe aux touches.
+            val onYouTube = pkg.isBlank() || pkg.contains("youtube")
+            if (d.isSmartBox && onYouTube) {
                 val a = runCatching { DriverHub.assistant(c, d) }.getOrNull()
                 if (a != null && a.state.value.connected) { a.seekBy(seconds.toDouble()); DiagLog.log("CONTROLE", "${seconds}s par l'assistant YouTube"); return@launch }
             }
@@ -181,7 +183,7 @@ class TvControlService : Service() {
     /** Trace de chaque appui reçu du lecteur, pour savoir ce qu'Android transmet vraiment. */
     private fun trace(what: String) = DiagLog.log("CONTROLE", "Lecteur : $what reçu")
 
-    private fun seek(s: Int) { device?.let { ControlNotification.seek(this, it, s) } }
+    private fun seek(s: Int) { device?.let { ControlNotification.seek(this, it, s, pkg) } }
 
     private fun toggle() { key(RemoteKey.PLAY_PAUSE); playing = !playing; update(); notifyAgain() }
 
