@@ -64,6 +64,11 @@ ul.ticks b{color:var(--ink)}
 ol{margin:0 0 6px;padding-left:1.25em;color:var(--soft)}li{margin:7px 0}
 code{background:#0b0b12;border:1px solid var(--stroke);border-radius:10px;padding:3px 10px;font-size:1.02em;color:#fff;white-space:nowrap}
 .compat{color:var(--muted);font-size:.95rem;margin-top:16px}
+.nfx{background:var(--surface);border:1px solid var(--stroke);border-radius:20px;padding:22px 26px;margin:40px 0 0}
+.nfx p{color:var(--soft)}
+.nfx ol{margin:14px 0 0;padding-left:22px;color:var(--soft)}
+.nfx ol li{margin:0 0 10px}
+.nfx ol b{color:var(--ink)}
 details{background:var(--surface);border:1px solid var(--stroke);border-radius:16px;padding:14px 18px;margin:10px 0}
 summary{cursor:pointer;font-weight:600}
 details p{color:var(--soft);margin:.6em 0 0}
@@ -151,6 +156,20 @@ small{color:var(--muted)}
     <figure><img src="demande.gif" width="360" height="780" loading="lazy" alt="Une demande de 15 minutes de YouTube arrive sur le tableau de bord et le parent l'accepte."><figcaption><b>Accepter une demande</b>« 15 min de YouTube ? » Un geste et c'est réglé.</figcaption></figure>
     <figure><img src="regles.gif" width="360" height="780" loading="lazy" alt="Défilement de l'écran des règles : temps par jour, couvre-feu, profils, règles par appli."><figcaption><b>Les règles, simplement</b>Temps par jour, couvre-feu, profils, et une règle par appli.</figcaption></figure>
     <figure><img src="activite.gif" width="420" height="600" loading="lazy" alt="Statistiques : aujourd'hui par appli, la semaine en barres, les heures d'utilisation."><figcaption><b>Voir où passe le temps</b>Aujourd'hui, la semaine, les heures où la TV est allumée.</figcaption></figure>
+  </div>
+
+
+  <div class="nfx" id="netflix">
+    <h3 style="margin-top:0">Netflix : l'âge se règle dans Netflix</h3>
+    <p>Sur Netflix, Télécommande applique le temps d'écran, les horaires et le couvre-feu, mais <b>ne peut pas filtrer les programmes par âge</b>. Netflix dessine son écran d'une façon que les autres applis ne peuvent pas lire, même en mode accessibilité, et il ne publie pas ce qui est en cours de lecture. Sur Freebox, l'autre moyen de connaître le titre est masqué. Pour l'âge, on utilise donc le contrôle parental de Netflix, qui connaît la classification de chaque titre. À faire une fois, depuis l'appli Netflix du téléphone ou sur netflix.com : la limite d'âge ne se change pas depuis la TV.</p>
+    <ol>
+      <li><b>Créer le profil de l'enfant</b> : Mon Netflix › votre profil › Gérer les profils › Ajouter un profil, et cochez « Profil Enfant ». Sur la TV : écran de choix du profil › Ajouter un profil.</li>
+      <li><b>Choisir la limite d'âge</b> : sur netflix.com, Compte › Profils › Ajuster le contrôle parental › choisissez le profil de l'enfant. Netflix vérifie que c'est vous (mot de passe, ou code reçu par e-mail ou SMS). Choisissez le niveau de classification, puis Enregistrer. Vous pouvez aussi y bloquer des titres précis.</li>
+      <li><b>Verrouiller les profils adultes</b> : Gérer les profils › profil adulte › Verrouillage du profil › créez un code à 4 chiffres. Faites-le pour chaque profil adulte, sinon l'enfant n'a qu'à changer de profil.</li>
+      <li><b>Empêcher la création d'un nouveau profil</b> : dans le verrouillage du profil, activez l'option qui exige le code pour ajouter un profil.</li>
+      <li><b>Facultatif</b> : désactivez la lecture automatique des bandes-annonces dans les réglages du profil de l'enfant.</li>
+    </ol>
+    <p class="compat">Les noms des menus peuvent varier selon la version de Netflix. Aide officielle : <a href="https://help.netflix.com/fr/node/264">le contrôle parental sur Netflix</a>.</p>
   </div>
 
   <h3 style="margin-top:56px">Et sur la TV, des écrans clairs pour les enfants</h3>
@@ -270,6 +289,7 @@ small{color:var(--muted)}
   <details><summary>C'est vraiment gratuit ?</summary><p>Oui. C'est un projet personnel, sans publicité ni abonnement, et le code est libre.</p></details>
   <details><summary>Pourquoi l'appli n'est-elle pas sur le Play Store ?</summary><p>Pour l'instant, elle se télécharge depuis ce site. Android demande donc d'autoriser l'installation : c'est normal pour une appli hors Play Store.</p></details>
   <details><summary>Et si l'enfant éteint le téléphone du parent ?</summary><p>Les règles sont sur la TV : elle les applique même quand le téléphone est éteint ou absent.</p></details>
+  <details><summary>Pourquoi Netflix n'est-il pas filtré par âge ?</summary><p>Netflix ne laisse aucune autre appli lire son écran ni savoir ce qui passe. Télécommande y applique le temps et les horaires ; pour l'âge, réglez le contrôle parental de Netflix : <a href="#netflix">le guide est ici</a>.</p></details>
   <details><summary>Ma TV est-elle compatible ?</summary><p>Le contrôle parental fonctionne sur les box et TV Android TV / Google TV (Android 6 et plus). Il est testé sur Freebox Pop. La télécommande seule fonctionne avec beaucoup plus d'appareils.</p></details>
   <details><summary>Je trouve un bug, je fais comment ?</summary><p>Ouvrez un ticket sur <a href="https://github.com/breizh-apps56612/Bzh_remote_parental_control/issues">GitHub</a>, idéalement avec le journal de l'appli (menu ⋮ › Journal de diagnostic).</p></details>
 </section>
