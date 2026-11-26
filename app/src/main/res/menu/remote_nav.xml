@@ -2,5 +2,5 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:id="@+id/nav_remote" android:icon="@drawable/ic_remote" android:title="Télécommande" />
     <item android:id="@+id/nav_apps" android:icon="@drawable/ic_apps" android:title="Applis" />
-    <item android:id="@+id/nav_stats" android:icon="@drawable/ic_stats" android:title="Temps d'écran" />
+    <item android:id="@+id/nav_stats" android:icon="@drawable/ic_stats" android:title="Parental" />
 </menu>

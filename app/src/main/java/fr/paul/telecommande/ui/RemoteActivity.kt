@@ -816,9 +816,34 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         k.open()
     }
 
+    /** Bouton « ⋯ » : outils de la télécommande en haut, puis toutes les touches secondaires. */
     private fun showMoreKeys() {
-        val grid = GridLayout(this).apply { columnCount = 4; setPadding(dp(12), dp(8), dp(12), dp(8)) }
+        val box0 = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(4), dp(12), dp(8)) }
         var dialog: AlertDialog? = null
+
+        // Outils : clavier, souris, reprise — une seule ligne de grosses tuiles
+        val tools = GridLayout(this).apply { columnCount = 2 }
+        fun tool(label: String, action: () -> Unit) {
+            val v = TextView(this).apply {
+                text = label; gravity = Gravity.CENTER; textSize = 14f; setTextColor(color(R.color.ink))
+                setBackgroundResource(R.drawable.bg_tile); isClickable = true; isFocusable = true; contentDescription = label
+                setOnClickListener { dialog?.dismiss(); action() }
+            }
+            tools.addView(v, GridLayout.LayoutParams().apply {
+                width = 0; height = dp(56); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(4), dp(4), dp(4), dp(4))
+            })
+        }
+        if (atv != null || box != null) tool("⌨️  Clavier") { showKeyboard() }
+        tool(if (touchpad.mouseMode) "🖱️  Souris : arrêter" else "🖱️  Mode souris") { setMouse(!touchpad.mouseMode) }
+        tool("🔵  Souris Bluetooth") { startActivity(Intent(this, BtMouseActivity::class.java)) }
+        if (device.hasBoxApp) tool("⏯️  Reprendre") { showContinue() }
+        box0.addView(tools)
+
+        // Touches
+        box0.addView(TextView(this).apply {
+            text = "Touches"; textSize = 12f; setTextColor(color(R.color.muted)); setPadding(dp(6), dp(14), 0, dp(2))
+        })
+        val grid = GridLayout(this).apply { columnCount = 4 }
         fun add(label: String, key: RemoteKey?, bg: Int = 0, action: (() -> Unit)? = null) {
             val v = TextView(this).apply {
                 text = label; gravity = Gravity.CENTER; textSize = 15f; setTextColor(color(R.color.ink))
@@ -838,10 +863,10 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         add("Rouge", RemoteKey.RED, 0xFF9F1239.toInt()); add("Vert", RemoteKey.GREEN, 0xFF166534.toInt())
         add("Jaune", RemoteKey.YELLOW, 0xFF854D0E.toInt()); add("Bleu", RemoteKey.BLUE, 0xFF1E40AF.toInt())
         add("Allumer", null) { atv?.allowPowerOnce(); powerOn() }
-        if (atv != null) add("Clavier", null) { showKeyboard() }
         add("Muet", RemoteKey.MUTE)
-        val scroll = android.widget.ScrollView(this).apply { addView(grid) }
-        dialog = AlertDialog.Builder(this).setTitle("Plus de touches").setView(scroll).setNegativeButton("Fermer", null).show()
+        box0.addView(grid)
+        val scroll = android.widget.ScrollView(this).apply { addView(box0) }
+        dialog = AlertDialog.Builder(this).setTitle("Plus").setView(scroll).setNegativeButton("Fermer", null).show()
     }
 
     // ---------- Navigation, menu, touches répétées ----------
@@ -897,54 +922,64 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         dialog = AlertDialog.Builder(this).setTitle("Ouvrir une appli sur la TV").setView(grid).setNegativeButton("Fermer", null).show()
     }
 
+    /** Menu ⋮ : seulement deux entrées. Le contrôle parental est dans l'onglet du bas, les touches et la souris dans « ⋯ ». */
     private fun showMenu(anchor: View) {
         val menu = android.widget.PopupMenu(this, anchor)
-        if (device.isSmartBox) {
-            menu.menu.add("Temps d'écran"); menu.menu.add("Contrôle parental")
-        }
-        if (atv != null || box != null) menu.menu.add("Clavier")
-        if (box != null) { menu.menu.add("Message sur la TV"); menu.menu.add("Récompense") }
-        menu.menu.add(if (touchpad.mouseMode) "Quitter le mode souris" else "Mode souris")
-        if (device.hasBoxApp) menu.menu.add("Reprendre un programme")
-        menu.menu.add(if (fr.paul.telecommande.service.ControlNotification.enabled(this)) "Télécommande dans les réglages rapides : oui" else "Télécommande dans les réglages rapides : non")
-        menu.menu.add(if (getSharedPreferences("ui", MODE_PRIVATE).getBoolean("voice_phone", false)) "Recherche vocale : par le téléphone" else "Recherche vocale : par la TV")
-        if (java.io.File(filesDir, "voix-derniere.wav").exists()) menu.menu.add("Réécouter la dernière recherche vocale")
-        menu.menu.add("Vraie souris (Bluetooth)"); menu.menu.add("Plus de touches"); menu.menu.add("Diagnostic de connexion"); menu.menu.add("Journal de diagnostic"); menu.menu.add("Rechercher une mise à jour"); menu.menu.add("Modifier l'adresse")
+        menu.menu.add("Réglages"); menu.menu.add("Aide et dépannage")
         menu.setOnMenuItemClickListener {
             when (it.title.toString()) {
-                "Temps d'écran" -> startActivity(Intent(this, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, device.id))
-                "Contrôle parental" -> startActivity(Intent(this, ParentalActivity::class.java).putExtra(ParentalActivity.EXTRA_ID, device.id))
-                "Clavier" -> showKeyboard()
-                "Message sur la TV" -> BoxActions.message(this, device)
-                "Récompense" -> BoxActions.reward(this, device)
-                "Mode souris", "Quitter le mode souris" -> setMouse(!touchpad.mouseMode)
-                "Plus de touches" -> showMoreKeys()
-                "Reprendre un programme" -> showContinue()
-                "Recherche vocale : par la TV" -> { getSharedPreferences("ui", MODE_PRIVATE).edit().putBoolean("voice_phone", true).apply()
-                    Ui.toast(this, "Le téléphone reconnaît la voix et tape la recherche sur la TV") }
-                "Recherche vocale : par le téléphone" -> { getSharedPreferences("ui", MODE_PRIVATE).edit().putBoolean("voice_phone", false).apply()
-                    Ui.toast(this, "La voix est envoyée à l'Assistant de la TV") }
-                "Réécouter la dernière recherche vocale" -> runCatching {
-                    android.media.MediaPlayer().apply { setDataSource(java.io.File(filesDir, "voix-derniere.wav").path); setOnCompletionListener { it.release() }; prepare(); start() }
-                    Ui.toast(this, "Lecture de ce que la TV a reçu…")
-                }.onFailure { Ui.toast(this, "Lecture impossible") }
-                "Télécommande dans les réglages rapides : oui" -> { fr.paul.telecommande.service.ControlNotification.setEnabled(this, false); Ui.toast(this, "Retirée des réglages rapides") }
-                "Télécommande dans les réglages rapides : non" -> {
+                "Réglages" -> showSettings()
+                "Aide et dépannage" -> showHelp()
+            }
+            true
+        }
+        menu.show()
+    }
+
+    private fun showSettings() {
+        val prefs = getSharedPreferences("ui", MODE_PRIVATE)
+        val voicePhone = prefs.getBoolean("voice_phone", false)
+        val quick = fr.paul.telecommande.service.ControlNotification.enabled(this)
+        val items = arrayOf(
+            "Recherche vocale : " + if (voicePhone) "par le téléphone" else "par la TV",
+            "Télécommande dans les réglages rapides : " + if (quick) "oui" else "non",
+            "Modifier l'adresse de l'appareil"
+        )
+        AlertDialog.Builder(this).setTitle("Réglages").setItems(items) { _, i ->
+            when (i) {
+                0 -> {
+                    prefs.edit().putBoolean("voice_phone", !voicePhone).apply()
+                    Ui.toast(this, if (!voicePhone) "Le téléphone reconnaît la voix et tape la recherche sur la TV" else "La voix est envoyée à l'Assistant de la TV")
+                }
+                1 -> if (quick) {
+                    fr.paul.telecommande.service.ControlNotification.setEnabled(this, false); Ui.toast(this, "Retirée des réglages rapides")
+                } else {
                     fr.paul.telecommande.service.ControlNotification.setEnabled(this, true)
                     if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                         androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 12)
                     if (::device.isInitialized) fr.paul.telecommande.service.ControlNotification.show(this, device.id)
                     Ui.toast(this, "Télécommande ajoutée au lecteur des réglages rapides")
                 }
-                "Vraie souris (Bluetooth)" -> startActivity(Intent(this, BtMouseActivity::class.java))
+                2 -> editHost()
+            }
+        }.setNegativeButton("Fermer", null).show()
+    }
+
+    private fun showHelp() {
+        val voiceFile = java.io.File(filesDir, "voix-derniere.wav")
+        val items = mutableListOf("Diagnostic de connexion", "Journal de diagnostic", "Rechercher une mise à jour")
+        if (voiceFile.exists()) items.add("Réécouter la dernière recherche vocale")
+        AlertDialog.Builder(this).setTitle("Aide et dépannage").setItems(items.toTypedArray()) { _, i ->
+            when (items[i]) {
                 "Diagnostic de connexion" -> showDiagnostic()
                 "Journal de diagnostic" -> showJournal()
                 "Rechercher une mise à jour" -> PhoneUpdate.checkAndOffer(this, force = true)
-                "Modifier l'adresse" -> editHost()
+                "Réécouter la dernière recherche vocale" -> runCatching {
+                    android.media.MediaPlayer().apply { setDataSource(voiceFile.path); setOnCompletionListener { it.release() }; prepare(); start() }
+                    Ui.toast(this, "Lecture de ce que la TV a reçu…")
+                }.onFailure { Ui.toast(this, "Lecture impossible") }
             }
-            true
-        }
-        menu.show()
+        }.setNegativeButton("Fermer", null).show()
     }
 
     private fun showJournal() {

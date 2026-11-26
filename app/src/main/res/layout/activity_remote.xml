@@ -154,7 +154,7 @@
             <ImageButton android:id="@+id/btnMic" android:layout_width="60dp" android:layout_height="60dp" android:layout_margin="3dp"
                 android:background="@drawable/bg_round" android:contentDescription="Recherche vocale (maintenir pour parler)" android:src="@drawable/ic_mic" app:tint="@color/ink" />
             <ImageButton android:id="@+id/btnMore" android:layout_width="60dp" android:layout_height="60dp" android:layout_margin="3dp"
-                android:background="@drawable/bg_round" android:contentDescription="Plus de touches : 123, clavier, couleurs" android:src="@drawable/ic_more" app:tint="@color/ink" />
+                android:background="@drawable/bg_round" android:contentDescription="Plus : clavier, souris, 123, couleurs" android:src="@drawable/ic_more" app:tint="@color/ink" />
         </GridLayout>
 
         <LinearLayout
