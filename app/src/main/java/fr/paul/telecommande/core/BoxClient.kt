@@ -89,6 +89,15 @@ class BoxClient(private val context: Context, private val host: String, private 
     }
 
     companion object {
-        fun of(context: Context, d: Device) = BoxClient(context, d.host, d.boxFp.ifBlank { null })
+        /**
+         * Toujours l'empreinte enregistrée à jour : un écran ouvert avant un nouvel appairage garde sinon l'ancienne
+         * en mémoire, et la box est refusée (« ne présente pas l'identité attendue ») alors que l'appairage est bon.
+         */
+        fun of(context: Context, d: Device): BoxClient {
+            val fresh = runCatching { DeviceStore(context).get(d.id) }.getOrNull()
+            if (fresh != null && fresh.boxFp != d.boxFp) d.boxFp = fresh.boxFp
+            val host = fresh?.host ?: d.host
+            return BoxClient(context, host, (fresh?.boxFp ?: d.boxFp).ifBlank { null })
+        }
     }
 }

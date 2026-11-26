@@ -16,8 +16,8 @@ android {
         applicationId = "fr.paul.telecommande.box"
         minSdk = 23          // Android TV 6.0+ (Freebox Pop, mini 4K, Shield, Chromecast, Sony, Philips, TCL…)
         targetSdk = 34
-        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "47").toInt()
-        versionName = "1.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "36")
+        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "48").toInt()
+        versionName = "1.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "37")
     }
 
     val ksFile = System.getenv("ANDROID_KEYSTORE_PATH")

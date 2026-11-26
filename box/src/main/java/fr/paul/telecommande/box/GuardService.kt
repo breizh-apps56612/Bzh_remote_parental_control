@@ -56,6 +56,11 @@ class GuardService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         BoxLog.init(this)
+        // Ancienne version : la TV se déclarait lecteur d'écran (exploration tactile) et certaines applis parlaient.
+        // On redemande explicitement la configuration sans ce mode, pour qu'Android le coupe.
+        runCatching { serviceInfo = serviceInfo.apply { flags = flags and android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_TOUCH_EXPLORATION_MODE.inv() } }
+        main.postDelayed({ BoxLog.log("SERVICE", "Exploration tactile : " + runCatching {
+            if ((getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager).isTouchExplorationEnabled) "encore active" else "coupée" }.getOrDefault("?")) }, 3_000)
         BoxLog.log("SERVICE", "Contrôle parental actif (accessibilité connectée) · lecteur d'écran muet : " +
             runCatching { val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
                 "exploration ${if (am.isTouchExplorationEnabled) "oui" else "non"}, touches ${if ((serviceInfo?.flags ?: 0) and android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS != 0) "oui" else "non"}" }.getOrDefault("?"))
