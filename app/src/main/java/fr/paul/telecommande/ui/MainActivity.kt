@@ -129,7 +129,7 @@ class MainActivity : AppCompatActivity() {
     @Suppress("DEPRECATION")
     private fun scan() {
         val progress = ProgressDialog(this).apply {
-            setMessage("Recherche des TV et box sur le Wi-Fi…"); setCancelable(false); show()
+            setMessage("Recherche des TV et box sur le Wi-Fi (10 secondes environ)…"); setCancelable(false); show()
         }
         lifecycleScope.launch {
             val found = runCatching { Discovery(this@MainActivity).scan() }.getOrDefault(emptyList())
@@ -156,13 +156,15 @@ class MainActivity : AppCompatActivity() {
     private fun showDeviceMenu(d: Device) {
         val items = mutableListOf("Modifier", "Réinitialiser l'appairage", "Supprimer")
         if (d.isSmartBox) { items.add(0, "Contrôle parental"); items.add(0, "Temps d'écran") }
+        if (d.type == DeviceType.VESTEL) items.add(0, "Tester la télécommande")
         AlertDialog.Builder(this).setTitle(d.name)
             .setItems(items.toTypedArray()) { _, which ->
                 when (items[which]) {
+                    "Tester la télécommande" -> VestelSetup.start(this, d) { refresh() }
                     "Temps d'écran" -> startActivity(Intent(this, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, d.id))
                     "Contrôle parental" -> startActivity(Intent(this, ParentalActivity::class.java).putExtra(ParentalActivity.EXTRA_ID, d.id))
                     "Modifier" -> Ui.requirePin(this, "Modifier « ${d.name} » ?") { editDevice(d, null) }
-                    "Réinitialiser l'appairage" -> { d.token = ""; if (d.type == DeviceType.SONY || d.type == DeviceType.FREEBOX) d.secret = ""
+                    "Réinitialiser l'appairage" -> { d.token = ""; if (d.type == DeviceType.SONY || d.type == DeviceType.FREEBOX || d.type == DeviceType.VESTEL) d.secret = ""
                         store.save(d); Toast.makeText(this, "Appairage réinitialisé", Toast.LENGTH_SHORT).show() }
                     "Supprimer" -> Ui.requirePin(this, "Supprimer « ${d.name} » ?") {
                         AlertDialog.Builder(this).setMessage("Supprimer « ${d.name} » ?")
@@ -256,9 +258,11 @@ class MainActivity : AppCompatActivity() {
                 if (t == DeviceType.IR && !hasIr(this)) {
                     Toast.makeText(this, "Attention : aucun émetteur infrarouge détecté sur ce téléphone.", Toast.LENGTH_LONG).show()
                 }
+                val retest = t == DeviceType.VESTEL && (existing == null || d.secret.isBlank())
                 store.save(d)
                 refresh()
-                if (existing == null) openRemote(d)
+                if (retest) VestelSetup.start(this, d) { refresh(); if (existing == null) openRemote(d) }
+                else if (existing == null) openRemote(d)
             }
             .setNegativeButton("Annuler", null)
             .show()
@@ -273,6 +277,7 @@ class MainActivity : AppCompatActivity() {
         DeviceType.SONY -> "Bravia non Android : activez Contrôle IP > Clé pré-partagée. Les Bravia Android/Google TV : préférez le type « Android TV »."
         DeviceType.PHILIPS -> "TV Philips non Android (JointSpace). Les Philips Android TV : choisissez « Android TV »."
         DeviceType.PANASONIC -> "Activez « Contrôle TV par appareil réseau » dans Réglages réseau > Paramètres TV Remote App."
+        DeviceType.VESTEL -> "Smart TV non Android fabriquées par Vestel (Edenwood d'Électro Dépôt, Toshiba, Telefunken, Hitachi, JVC…). Pas d'appairage : un test « Volume + » trouve la bonne façon de lui parler. La TV doit être connectée au même Wi-Fi."
         DeviceType.FREEBOX -> "Le code à 8 chiffres sera demandé (Réglages > Système > Informations Freebox Player et Server). Laisser l'IP vide pour hd1.freebox.fr."
         DeviceType.KODI -> "Kodi : Paramètres > Services > Contrôle > « Autoriser le contrôle à distance via HTTP »."
     }

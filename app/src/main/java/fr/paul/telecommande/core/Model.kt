@@ -27,6 +27,7 @@ enum class DeviceType(val label: String, val needsHost: Boolean, val defaultPort
     SONY("Sony Bravia (IRCC-IP, code PSK)", true, 80),
     PHILIPS("Philips (JointSpace, avant 2016)", true, 1925),
     PANASONIC("Panasonic Viera (avant 2019)", true, 55000),
+    VESTEL("TV Vestel : Edenwood, Toshiba, Telefunken, Hitachi, JVC… (Smart TV non Android)", true, 56789),
     FREEBOX("Freebox Player (code télécommande réseau)", true, 80),
     KODI("Kodi / LibreELEC / OSMC", true, 8080);
 }

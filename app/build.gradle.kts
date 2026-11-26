@@ -11,8 +11,8 @@ android {
         applicationId = "fr.paul.telecommande"
         minSdk = 21          // Android 5.0 : ~99 % des appareils en circulation
         targetSdk = 34
-        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "63").toInt()
-        versionName = "2.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "27")
+        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "64").toInt()
+        versionName = "2.4." + (System.getenv("GITHUB_RUN_NUMBER") ?: "28")
         vectorDrawables.useSupportLibrary = true
     }
 

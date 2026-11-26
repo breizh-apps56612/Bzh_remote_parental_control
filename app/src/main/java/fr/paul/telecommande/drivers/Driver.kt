@@ -37,6 +37,7 @@ abstract class Driver(val device: Device) {
             DeviceType.SONY -> SonyDriver(device)
             DeviceType.PHILIPS -> PhilipsDriver(device)
             DeviceType.PANASONIC -> PanasonicDriver(device)
+            DeviceType.VESTEL -> VestelDriver(device)
             DeviceType.FREEBOX -> FreeboxDriver(device)
             DeviceType.KODI -> KodiDriver(device)
         }

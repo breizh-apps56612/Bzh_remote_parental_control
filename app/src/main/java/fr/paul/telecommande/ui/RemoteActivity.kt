@@ -36,6 +36,7 @@ import com.google.android.material.chip.ChipGroup
 import fr.paul.telecommande.R
 import fr.paul.telecommande.core.AppCatalog
 import fr.paul.telecommande.core.Device
+import fr.paul.telecommande.core.DeviceType
 import fr.paul.telecommande.core.DeviceStore
 import fr.paul.telecommande.core.DriverHub
 import fr.paul.telecommande.core.Discovery
@@ -353,6 +354,19 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             chip("Source") { press(RemoteKey.INPUT) }, chip("Infos") { press(RemoteKey.INFO) },
             chip("123 · couleurs") { showMoreKeys() }
         )
+        if (device.type == DeviceType.VESTEL) chips(
+            chip("Netflix") { openVestelApp("Netflix") }, chip("YouTube") { openVestelApp("YouTube") },
+            chip("Accueil") { press(RemoteKey.HOME) }, chip("Menu") { press(RemoteKey.MENU) }
+        )
+    }
+
+    /** TV Vestel : Netflix et YouTube s'ouvrent par le protocole DIAL, sans passer par les menus. */
+    private fun openVestelApp(app: String) {
+        val tv = driver as? fr.paul.telecommande.drivers.VestelDriver ?: return
+        lifecycleScope.launch {
+            if (tv.launchApp(app)) toast("Ouverture de $app…")
+            else toast("La TV n'a pas ouvert $app (voir le journal de diagnostic)")
+        }
     }
 
     private fun renderHome(s: Snapshot) {
