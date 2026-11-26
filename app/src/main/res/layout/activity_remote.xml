@@ -2,7 +2,8 @@
 <!--
   Télécommande — maquette « Aurora » (C-Remote).
   Haut : retour, TV (pilule), plus, veille. Puis la carte « En cours » et le grand pavé tactile.
-  Zone du pouce : Retour TV · volume (− muet +) · Accueil TV, puis le dock CH − · Applis · MICRO · Lecture · CH +.
+  Le pavé porte deux barres : chaînes à gauche, volume à droite (milieu = muet).
+  Zone du pouce : le dock Retour · Accueil · MICRO · Lecture · Applis.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -125,79 +126,11 @@
         android:layout_weight="1"
         android:minHeight="160dp" />
 
-    <!-- Retour TV · volume · Accueil TV -->
+    <!-- Dock : Retour · Accueil · MICRO · Lecture · Applis (chaînes et volume sont les barres du pavé) -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="58dp"
-        android:layout_marginTop="14dp"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp">
-
-        <ImageButton
-            android:id="@+id/btnBack"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_round"
-            android:contentDescription="Retour (touche de la TV)"
-            android:elevation="2dp"
-            android:src="@drawable/ic_return"
-            app:tint="@color/ink" />
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="56dp"
-            android:layout_marginStart="10dp"
-            android:layout_marginEnd="10dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_rocker"
-            android:elevation="2dp"
-            android:gravity="center_vertical"
-            android:paddingStart="4dp"
-            android:paddingEnd="4dp">
-
-            <ImageButton android:id="@+id/btnVolDown" android:layout_width="48dp" android:layout_height="48dp"
-                android:background="@drawable/bg_rocker_btn" android:contentDescription="Volume moins"
-                android:src="@drawable/ic_vol_down" app:tint="@color/rocker_ink" />
-
-            <LinearLayout
-                android:id="@+id/btnMute"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_rocker_btn"
-                android:clickable="true"
-                android:contentDescription="Muet"
-                android:focusable="true"
-                android:gravity="center">
-
-                <ImageView android:layout_width="18dp" android:layout_height="18dp" android:importantForAccessibility="no"
-                    android:src="@drawable/ic_mute" app:tint="@color/muted" />
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp"
-                    android:importantForAccessibility="no" android:fontFamily="@font/sora_semibold" android:letterSpacing="0.12"
-                    android:text="VOLUME" android:textColor="@color/muted" android:textSize="11sp" />
-            </LinearLayout>
-
-            <ImageButton android:id="@+id/btnVolUp" android:layout_width="48dp" android:layout_height="48dp"
-                android:background="@drawable/bg_rocker_btn" android:contentDescription="Volume plus"
-                android:src="@drawable/ic_vol_up" app:tint="@color/accent" />
-        </LinearLayout>
-
-        <ImageButton
-            android:id="@+id/btnHome"
-            android:layout_width="56dp"
-            android:layout_height="56dp"
-            android:background="@drawable/bg_round"
-            android:contentDescription="Accueil (touche de la TV)"
-            android:elevation="2dp"
-            android:src="@drawable/ic_home"
-            app:tint="@color/ink" />
-    </LinearLayout>
-
-    <!-- Dock : CH − · Applis · MICRO · Lecture · CH + -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="96dp"
+        android:layout_height="100dp"
+        android:layout_marginTop="6dp"
         android:clipChildren="false"
         android:clipToPadding="false"
         android:gravity="center_vertical"
@@ -205,14 +138,14 @@
         android:paddingEnd="8dp"
         android:paddingBottom="10dp">
 
-        <LinearLayout android:id="@+id/btnChDown" style="@style/DockKey" android:contentDescription="Chaîne précédente">
-            <ImageView style="@style/DockIcon" android:src="@drawable/ic_chevron_down" />
-            <TextView style="@style/DockLabel" android:text="CH −" />
+        <LinearLayout android:id="@+id/btnBack" style="@style/DockKey" android:contentDescription="Retour (touche de la TV)">
+            <ImageView style="@style/DockIcon" android:src="@drawable/ic_return" />
+            <TextView style="@style/DockLabel" android:text="Retour" />
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/btnApps" style="@style/DockKey" android:contentDescription="Applis de la TV">
-            <ImageView android:id="@+id/btnAppsIcon" style="@style/DockIcon" android:src="@drawable/ic_apps" />
-            <TextView android:id="@+id/btnAppsLabel" style="@style/DockLabel" android:text="Applis" />
+        <LinearLayout android:id="@+id/btnHome" style="@style/DockKey" android:contentDescription="Accueil (touche de la TV)">
+            <ImageView style="@style/DockIcon" android:src="@drawable/ic_home" />
+            <TextView style="@style/DockLabel" android:text="Accueil" />
         </LinearLayout>
 
         <FrameLayout
@@ -239,9 +172,9 @@
             <TextView style="@style/DockLabel" android:text="Lecture" />
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/btnChUp" style="@style/DockKey" android:contentDescription="Chaîne suivante">
-            <ImageView style="@style/DockIcon" android:src="@drawable/ic_chevron_up" />
-            <TextView style="@style/DockLabel" android:text="CH +" />
+        <LinearLayout android:id="@+id/btnApps" style="@style/DockKey" android:contentDescription="Applis de la TV">
+            <ImageView android:id="@+id/btnAppsIcon" style="@style/DockIcon" android:src="@drawable/ic_apps" />
+            <TextView android:id="@+id/btnAppsLabel" style="@style/DockLabel" android:text="Applis" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

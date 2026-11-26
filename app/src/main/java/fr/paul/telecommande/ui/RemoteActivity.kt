@@ -71,6 +71,7 @@ import kotlin.coroutines.resume
 class RemoteActivity : AppCompatActivity(), PairingUi {
     companion object {
         const val EXTRA_ID = "device_id"
+        const val HINT = "Glisser · naviguer    Toucher · OK\nGlisser puis rester appuyé · en continu"
         /** Ouvre directement le menu Administrateur (depuis Réglages). */
         const val EXTRA_ADMIN = "admin"
     }
@@ -142,7 +143,6 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
 
         Ui.systemBars(this)
         findViewById<View>(R.id.deviceChip).setOnClickListener { showDeviceSwitcher() }
-        findViewById<View>(R.id.btnMute).setOnClickListener { press(RemoteKey.MUTE) }
         findViewById<View>(R.id.btnPower).apply {
             setOnClickListener { atv?.allowPowerOnce(); press(RemoteKey.POWER) }
             setOnLongClickListener { atv?.allowPowerOnce(); powerOn(); true }
@@ -166,8 +166,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         findViewById<View>(R.id.btnBack).setOnClickListener { press(RemoteKey.BACK) }
         findViewById<View>(R.id.btnHome).setOnClickListener { press(RemoteKey.HOME) }
         findViewById<View>(R.id.btnPlay).setOnClickListener { press(RemoteKey.PLAY_PAUSE) }
-        repeatKey(R.id.btnVolUp, RemoteKey.VOL_UP); repeatKey(R.id.btnVolDown, RemoteKey.VOL_DOWN)
-        repeatKey(R.id.btnChUp, RemoteKey.CH_UP); repeatKey(R.id.btnChDown, RemoteKey.CH_DOWN)
+        touchpad.holdListener = { g, down -> holdArrow(g, down) }
         setupNav()
         setupMic()
         touchpad.listener = ::onGesture
@@ -176,7 +175,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         // Souris Bluetooth connectée : le pavé déplace une vraie flèche sur la TV
         lifecycleScope.launch { fr.paul.telecommande.core.BtMouse.state.collect { routeMouse() } }
         if (fr.paul.telecommande.core.BtMouse.savedHost(this) != null && btGranted()) fr.paul.telecommande.core.BtMouse.start(this)
-        if (!device.isSmartBox) touchpad.hint = "Glisser = flèches · Toucher = OK\nAppui long = menu"
+        if (!device.isSmartBox) touchpad.hint = HINT
 
         lifecycleScope.launch { mutex.withLock { ensureConnected() } }
         // Appli Box : une zone de texte est sélectionnée sur la TV → le clavier du téléphone s'ouvre
@@ -269,9 +268,9 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         setDot(s.connected)
         currentKind = if (device.isSmartBox) AppCatalog.kind(s.app) else AppCatalog.Kind.OTHER
         touchpad.hint = when {
-            !device.isSmartBox -> "Glisser = flèches · Toucher = OK\nAppui long = menu"
-            currentKind == AppCatalog.Kind.LIVE_TV -> "Glisser = flèches · Toucher = OK\nDouble-toucher à gauche / droite = chaîne − / +"
-            else -> "Glisser = flèches · Toucher = OK\nDouble-toucher à gauche / droite = −10 s / +10 s"
+            !device.isSmartBox -> HINT
+            currentKind == AppCatalog.Kind.LIVE_TV -> HINT
+            else -> HINT
         }
         val y = s.yt
         val sig = listOf(touchpad.mouseMode, s.yt.videoId, s.error, device.isSmartBox, currentKind, s.app, s.connected, s.sleepAt, y.linked, y.connected, y.adPlaying,
@@ -611,6 +610,37 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
 
     // ---------- Gestes et touches ----------
 
+    /**
+     * Flèche maintenue sur le pavé (glisser puis rester appuyé), comme une touche tenue sur la télécommande Free :
+     * dans un lecteur, gauche / droite font un retour / une avance rapide en continu.
+     * Box Android TV : vrai appui long (début / fin) ; autres TV : la touche est répétée tant que le doigt reste posé.
+     */
+    private var holdJob: kotlinx.coroutines.Job? = null
+    private var heldArrow: RemoteKey? = null
+
+    private fun holdArrow(g: TouchpadView.Gesture, down: Boolean) {
+        val key = when (g) {
+            TouchpadView.Gesture.LEFT -> RemoteKey.LEFT; TouchpadView.Gesture.RIGHT -> RemoteKey.RIGHT
+            TouchpadView.Gesture.UP -> RemoteKey.UP; TouchpadView.Gesture.DOWN -> RemoteKey.DOWN
+            else -> return
+        }
+        holdJob?.cancel(); holdJob = null
+        val tv = atv
+        if (down) {
+            if (offline) { lifecycleScope.launch { offlineNotice() }; return }
+            heldArrow = key
+            fr.paul.telecommande.core.DiagLog.log("TOUCHE", "Maintenue : $key")
+            holdJob = lifecycleScope.launch {
+                if (tv != null && connected) runCatching { tv.hold(key, true) }.onFailure { connected = false; connectedFlow.value = false }
+                else while (isActive) { sendKey(key); delay(180) }
+            }
+        } else {
+            val k = heldArrow ?: return
+            heldArrow = null
+            if (tv != null) lifecycleScope.launch { runCatching { tv.hold(k, false) } }
+        }
+    }
+
     private fun onGesture(g: TouchpadView.Gesture) {
         when (g) {
             TouchpadView.Gesture.UP -> press(RemoteKey.UP)
@@ -625,6 +655,9 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             TouchpadView.Gesture.LONG_PRESS -> press(RemoteKey.MENU)
             TouchpadView.Gesture.VOL_UP -> press(RemoteKey.VOL_UP)
             TouchpadView.Gesture.VOL_DOWN -> press(RemoteKey.VOL_DOWN)
+            TouchpadView.Gesture.MUTE -> press(RemoteKey.MUTE)
+            TouchpadView.Gesture.CH_UP -> press(RemoteKey.CH_UP)
+            TouchpadView.Gesture.CH_DOWN -> press(RemoteKey.CH_DOWN)
             TouchpadView.Gesture.SEEK_BACK, TouchpadView.Gesture.SEEK_FORWARD -> {
                 val fwd = g == TouchpadView.Gesture.SEEK_FORWARD
                 val a = assistant
@@ -1247,7 +1280,10 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         }
     }
 
-    override fun onPause() { super.onPause(); MouseHold.stopAll(); atv?.releaseAllHeld(); touchpad.mouseMode = touchpad.mouseMode }
+    override fun onPause() {
+        super.onPause(); MouseHold.stopAll(); holdJob?.cancel(); heldArrow = null
+        atv?.releaseAllHeld(); touchpad.mouseMode = touchpad.mouseMode
+    }
 
     // Notification de contrôle : visible dès qu'on quitte l'écran télécommande, masquée quand on y revient
     // Télécommande dans le lecteur des réglages rapides : lancée tant que l'appli est visible (exigence d'Android),

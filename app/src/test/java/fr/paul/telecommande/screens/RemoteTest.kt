@@ -86,6 +86,13 @@ class RemoteTest {
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(400)); idle()
     }
 
+    private fun tapAt(v: View, x: Float, y: Float) {
+        val t = SystemClock.uptimeMillis()
+        v.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0))
+        v.dispatchTouchEvent(MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, x, y, 0))
+        idle()
+    }
+
     private fun press(v: View) {
         val t = SystemClock.uptimeMillis()
         v.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, 5f, 5f, 0))
@@ -98,11 +105,14 @@ class RemoteTest {
         a.findViewById<View>(R.id.btnHome).performClick(); idle()
         a.findViewById<View>(R.id.btnBack).performClick(); idle()
         a.findViewById<View>(R.id.btnPlay).performClick(); idle()
-        a.findViewById<View>(R.id.btnMute).performClick(); idle()
-        press(a.findViewById(R.id.btnVolUp)); press(a.findViewById(R.id.btnVolDown))
-        press(a.findViewById(R.id.btnChUp)); press(a.findViewById(R.id.btnChDown))
-        assertEquals(listOf(RemoteKey.HOME, RemoteKey.BACK, RemoteKey.PLAY_PAUSE, RemoteKey.MUTE,
-            RemoteKey.VOL_UP, RemoteKey.VOL_DOWN, RemoteKey.CH_UP, RemoteKey.CH_DOWN), tv.keys)
+        // Barres du pavé : volume à droite (haut, bas, milieu = muet), chaînes à gauche (haut, bas)
+        val pad = a.findViewById<TouchpadView>(R.id.touchpad)
+        val edge = 20 * ctx.resources.displayMetrics.density
+        tapAt(pad, pad.width - edge, pad.height * 0.2f); tapAt(pad, pad.width - edge, pad.height * 0.8f)
+        tapAt(pad, pad.width - edge, pad.height * 0.5f)
+        tapAt(pad, edge, pad.height * 0.2f); tapAt(pad, edge, pad.height * 0.8f)
+        assertEquals(listOf(RemoteKey.HOME, RemoteKey.BACK, RemoteKey.PLAY_PAUSE,
+            RemoteKey.VOL_UP, RemoteKey.VOL_DOWN, RemoteKey.MUTE, RemoteKey.CH_UP, RemoteKey.CH_DOWN), tv.keys)
     }
 
     @Test fun touchpadGestures() {
@@ -119,6 +129,25 @@ class RemoteTest {
         tv.keys.clear()
         swipe(pad, 0f, step * 3.3f)
         assertEquals(listOf(RemoteKey.DOWN, RemoteKey.DOWN, RemoteKey.DOWN), tv.keys)
+    }
+
+    @Test fun swipeThenHoldRepeatsTheArrow() {
+        val a = launch()
+        val pad = a.findViewById<TouchpadView>(R.id.touchpad)
+        val step = 48 * ctx.resources.displayMetrics.density
+        val t = SystemClock.uptimeMillis()
+        val cx = pad.width / 2f; val cy = pad.height / 2f
+        pad.dispatchTouchEvent(MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cx, cy, 0))
+        for (i in 1..6) pad.dispatchTouchEvent(MotionEvent.obtain(t, t + i * 16L, MotionEvent.ACTION_MOVE, cx - step * 1.3f * i / 6, cy, 0))
+        // Le doigt reste posé : la flèche gauche devient « maintenue » et se répète (retour en continu)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1200)); idle()
+        pad.dispatchTouchEvent(MotionEvent.obtain(t, t + 1300, MotionEvent.ACTION_UP, cx - step * 1.3f, cy, 0))
+        idle()
+        val n = tv.keys.size
+        assertTrue("flèche maintenue non répétée : ${tv.keys}", n >= 3 && tv.keys.all { it == RemoteKey.LEFT })
+        // Doigt levé : plus rien n'est envoyé
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(800)); idle()
+        assertEquals(n, tv.keys.size)
     }
 
     @Test fun screenshots() {

@@ -19,14 +19,18 @@ import kotlin.math.abs
  * Pavé tactile :
  *  - glisser = flèches (un pas tous les ~48 dp, on peut enchaîner sans lever le doigt) ;
  *  - toucher = OK ; appui long = menu ;
+ *  - glisser puis garder le doigt posé = touche maintenue (retour / avance rapide en continu, défilement) ;
  *  - double-toucher sur le tiers gauche / droit = −10 s / +10 s ;
- *  - bande verticale à droite = volume (glisser vers le haut / le bas).
+ *  - barre de gauche = chaînes, barre de droite = volume (toucher le haut / le bas, rester appuyé
+ *    pour répéter, ou glisser le long de la barre) ; le milieu de la barre de volume = muet.
  */
 class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
 
-    enum class Gesture { UP, DOWN, LEFT, RIGHT, TAP, LONG_PRESS, SEEK_BACK, SEEK_FORWARD, VOL_UP, VOL_DOWN }
+    enum class Gesture { UP, DOWN, LEFT, RIGHT, TAP, LONG_PRESS, SEEK_BACK, SEEK_FORWARD, VOL_UP, VOL_DOWN, MUTE, CH_UP, CH_DOWN }
 
     var listener: ((Gesture) -> Unit)? = null
+    /** Flèche maintenue (après un glissement, le doigt reste posé) : true au début, false au relâchement. */
+    var holdListener: ((Gesture, Boolean) -> Unit)? = null
 
     /**
      * Mode souris = pavé tactile d'ordinateur portable : le curseur suit le doigt
@@ -77,10 +81,14 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private val d = resources.displayMetrics.density
     private val step = 48 * d
     private val volStep = 26 * d
-    /** Bande de volume dans le pavé (désactivée : le volume a ses propres touches). */
-    var showVolumeStrip = false
+    /** Barres latérales : chaînes à gauche, volume à droite (masquées en mode souris). */
+    var showStrips = true
         set(v) { field = v; invalidate() }
-    private val stripW get() = if (showVolumeStrip) 40 * d else 0f
+    private val stripsOn get() = showStrips && !mouseMode
+    private val stripW = 46 * d
+    private val stripM = 8 * d
+    /** Largeur occupée par une barre et sa marge (zone de toucher un peu plus large que le dessin). */
+    private val stripZone get() = if (stripsOn) stripW + stripM + 8 * d else 0f
     private val slop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private val longPressMs = ViewConfiguration.getLongPressTimeout().toLong()
     private val doubleTapMs = ViewConfiguration.getDoubleTapTimeout().toLong()
@@ -108,7 +116,44 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private var touchX = -1f; private var touchY = -1f
     private var downTime = 0L
     private var moved = false
-    private var inStrip = false
+    /** Barre touchée : -1 = chaînes (gauche), 1 = volume (droite), 0 = pavé. */
+    private var strip = 0
+    /** Zone de la barre : 1 = haut (+), -1 = bas (−), 0 = milieu (muet sur le volume). */
+    private var stripPart = 0
+    private val stripRepeat = object : Runnable {
+        override fun run() {
+            stripFire(); postDelayed(this, if (strip < 0) 450 else 150)
+        }
+    }
+    /** Flèche maintenue en ce moment (null = aucune). */
+    private var holding: Gesture? = null
+    private var lastSwipe: Gesture? = null
+    private val holdCheck = Runnable {
+        val g = lastSwipe ?: return@Runnable
+        if (touchX >= 0 && holding == null && !mouseMode) {
+            holding = g
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            holdListener?.invoke(g, true)
+            invalidate()
+        }
+    }
+
+    private fun stopHold() {
+        removeCallbacks(holdCheck)
+        holding?.let { g -> holding = null; holdListener?.invoke(g, false); invalidate() }
+    }
+
+    private fun stripFire() {
+        fire(when {
+            strip < 0 && stripPart >= 0 -> Gesture.CH_UP
+            strip < 0 -> Gesture.CH_DOWN
+            stripPart > 0 -> Gesture.VOL_UP
+            stripPart < 0 -> Gesture.VOL_DOWN
+            else -> Gesture.MUTE
+        })
+    }
+
+    override fun onDetachedFromWindow() { stopHold(); removeCallbacks(stripRepeat); super.onDetachedFromWindow() }
     private var longFired = false
     private var lastTapTime = 0L
     private var lastTapZone = 0
@@ -145,14 +190,15 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
         canvas.drawRoundRect(rect, r, r, strokePaint)
         rect.set(0f, 0f, width.toFloat(), height.toFloat())
 
-        val padW = width - (if (showVolumeStrip) stripW + 10 * d else 0f)
-        val cx = padW / 2f
+        val left = stripZone
+        val right = width - stripZone
+        val cx = (left + right) / 2f
         val cy = height / 2f
-        val m = 36 * d
+        val m = 30 * d
         val c = 9 * d
         fun chev(x: Float, y: Float, dir: Gesture) {
-            chevron.color = if (flashDir == dir) ContextCompat.getColor(context, R.color.accent) else muted
-            chevron.strokeWidth = (if (flashDir == dir) 3.4f else 2.4f) * d
+            chevron.color = ContextCompat.getColor(context, R.color.accent)
+            chevron.strokeWidth = 3.2f * d
             path.reset()
             when (dir) {
                 Gesture.UP -> { path.moveTo(x - c, y + c / 2); path.lineTo(x, y - c / 2); path.lineTo(x + c, y + c / 2) }
@@ -189,36 +235,83 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
             }
             return
         }
-        chev(cx, m, Gesture.UP); chev(cx, height - m, Gesture.DOWN)
-        chev(m, cy, Gesture.LEFT); chev(padW - m, cy, Gesture.RIGHT)
-        // Bouton « OK » central : halo indigo, pastille claire, point indigo (grossit au toucher)
+        // Flèche envoyée (ou maintenue) : brève confirmation sur le bord du pavé
+        when (val f = holding ?: flashDir) {
+            Gesture.UP -> chev(cx, m, f); Gesture.DOWN -> chev(cx, height - m - 18 * d, f)
+            Gesture.LEFT -> chev(left + m, cy, f); Gesture.RIGHT -> chev(right - m, cy, f)
+            else -> {}
+        }
+        // Bouton « OK » central (maquette Aurora) : halo indigo doux, pastille blanche ombrée
         val tap = flashDir == Gesture.TAP
+        val haloR = minOf(66 * d, (right - left) * 0.27f)
         centerDot.color = ContextCompat.getColor(context, R.color.accent)
-        centerDot.alpha = if (tap) 70 else 34
-        canvas.drawCircle(cx, cy, (if (tap) 62f else 56f) * d, centerDot)
+        centerDot.alpha = if (tap) 60 else 30
+        canvas.drawCircle(cx, cy, if (tap) haloR * 1.08f else haloR, centerDot)
         centerDot.color = ContextCompat.getColor(context, R.color.surface)
         centerDot.alpha = 255
-        centerDot.setShadowLayer(10 * d, 0f, 4 * d, (ContextCompat.getColor(context, R.color.accent) and 0x00FFFFFF) or 0x55000000)
-        canvas.drawCircle(cx, cy, (if (tap) 34f else 30f) * d, centerDot)
+        centerDot.setShadowLayer(12 * d, 0f, 5 * d, (ContextCompat.getColor(context, R.color.accent) and 0x00FFFFFF) or 0x50000000)
+        canvas.drawCircle(cx, cy, haloR * (if (tap) 0.6f else 0.55f), centerDot)
         centerDot.clearShadowLayer()
-        centerDot.color = ContextCompat.getColor(context, R.color.accent)
-        canvas.drawCircle(cx, cy, (if (tap) 10f else 7f) * d, centerDot)
-        if (!mouseMode && touchX < 0) {
-            // Aide sous le bouton central, seulement s'il reste la place avant la flèche du bas
+        holding?.let { g ->
+            textPaint.color = ContextCompat.getColor(context, R.color.accent)
+            canvas.drawText(when (g) { Gesture.LEFT -> "◀◀  en continu"; Gesture.RIGHT -> "en continu  ▶▶"; else -> "en continu" }, cx, cy - haloR - 14 * d, textPaint)
+            textPaint.color = muted
+        }
+        if (touchX < 0 && height > 200 * d) {
+            // Aide en bas du pavé, entre les deux barres
+            textPaint.textSize = 11 * d
             val lines = hint.split("\n")
-            val y0 = cy + (if (tap) 62f else 56f) * d + 20 * d
-            if (y0 + (lines.size - 1) * 16 * d < height - m - 22 * d)
-                lines.forEachIndexed { i, line -> canvas.drawText(line, cx, y0 + i * 16 * d, textPaint) }
+            lines.forEachIndexed { i, line -> canvas.drawText(line, cx, height - 18 * d - (lines.size - 1 - i) * 15 * d, textPaint) }
+            textPaint.textSize = 12 * d
         }
-        if (touchX >= 0) canvas.drawCircle(touchX, touchY, 34 * d, touchPaint)
+        if (touchX >= 0 && strip == 0) canvas.drawCircle(touchX, touchY, 30 * d, touchPaint)
 
-        if (showVolumeStrip) {
-            val sx = width - stripW - 10 * d
-            rect.set(sx, 24 * d, sx + stripW, height - 24 * d)
-            canvas.drawRoundRect(rect, stripW / 2, stripW / 2, stripPaint)
-            canvas.drawText("+", rect.centerX(), rect.top + 26 * d, stripText)
-            canvas.drawText("−", rect.centerX(), rect.bottom - 14 * d, stripText)
+        if (stripsOn) {
+            drawStrip(canvas, stripM, "CH", strip < 0, false)
+            drawStrip(canvas, width - stripM - stripW, "VOL", strip > 0, true)
         }
+    }
+
+    private val stripFill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val stripPressed = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val stripLabel = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; letterSpacing = 0.12f }
+    private val stripSign = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+
+    /** Barre verticale en pilule : « + » en haut, libellé au milieu, « − » en bas ; la partie touchée s'allume. */
+    private fun drawStrip(canvas: Canvas, x: Float, label: String, active: Boolean, volume: Boolean) {
+        val top = 16 * d; val bottom = height - 16 * d
+        rect.set(x, top, x + stripW, bottom)
+        stripFill.color = ContextCompat.getColor(context, R.color.surface); stripFill.alpha = 215
+        stripFill.setShadowLayer(6 * d, 0f, 2 * d, 0x22000000)
+        canvas.drawRoundRect(rect, stripW / 2, stripW / 2, stripFill)
+        stripFill.clearShadowLayer()
+        val accent = ContextCompat.getColor(context, R.color.accent)
+        if (active) {
+            stripPressed.color = accent; stripPressed.alpha = 40
+            val h = bottom - top
+            val r2 = when { stripPart > 0 || (!volume && stripPart == 0) -> RectF(x, top, x + stripW, top + h * 0.42f)
+                stripPart < 0 -> RectF(x, bottom - h * 0.42f, x + stripW, bottom)
+                else -> RectF(x, top + h * 0.38f, x + stripW, bottom - h * 0.38f) }
+            canvas.save(); canvas.clipRect(r2); canvas.drawRoundRect(rect, stripW / 2, stripW / 2, stripPressed); canvas.restore()
+        }
+        stripSign.color = if (volume) accent else ink; stripSign.textSize = 24 * d
+        canvas.drawText("+", rect.centerX(), top + 34 * d, stripSign)
+        stripSign.color = ink
+        canvas.drawText("−", rect.centerX(), bottom - 16 * d, stripSign)
+        stripLabel.color = muted; stripLabel.textSize = 11 * d; stripLabel.isFakeBoldText = true
+        val cy = (top + bottom) / 2f
+        if (volume) {
+            // Haut-parleur barré : toucher le milieu = muet
+            canvas.drawText(label, rect.centerX(), cy + 22 * d, stripLabel)
+            chevron.color = muted; chevron.strokeWidth = 1.8f * d
+            path.reset()
+            val sx = rect.centerX() - 7 * d; val sy = cy - 4 * d
+            path.moveTo(sx, sy - 3 * d); path.lineTo(sx + 4 * d, sy - 3 * d); path.lineTo(sx + 8 * d, sy - 7 * d)
+            path.lineTo(sx + 8 * d, sy + 7 * d); path.lineTo(sx + 4 * d, sy + 3 * d); path.lineTo(sx, sy + 3 * d); path.close()
+            canvas.drawPath(path, chevron)
+            canvas.drawLine(sx + 11 * d, sy - 3 * d, sx + 16 * d, sy + 3 * d, chevron)
+            canvas.drawLine(sx + 16 * d, sy - 3 * d, sx + 11 * d, sy + 3 * d, chevron)
+        } else canvas.drawText(label, rect.centerX(), cy + 4 * d, stripLabel)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -231,8 +324,18 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
                 touchX = e.x; touchY = e.y
                 downTime = SystemClock.uptimeMillis()
                 moved = false; longFired = false
-                inStrip = showVolumeStrip && e.x > width - stripW - 18 * d
-                if (!inStrip && !mouseMode) postDelayed(longPress, longPressMs)
+                lastSwipe = null; stopHold()
+                strip = when { !stripsOn -> 0; e.x < stripZone -> -1; e.x > width - stripZone -> 1; else -> 0 }
+                if (strip != 0) {
+                    val h = height.toFloat()
+                    stripPart = when {
+                        strip > 0 && e.y > h * 0.4f && e.y < h * 0.6f -> 0
+                        e.y < h / 2f -> 1
+                        else -> -1
+                    }
+                    stripFire()
+                    if (!(strip > 0 && stripPart == 0)) postDelayed(stripRepeat, 450)
+                } else if (!mouseMode) postDelayed(longPress, longPressMs)
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
@@ -249,13 +352,27 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
                 }
                 val dx = e.x - anchorX; val dy = e.y - anchorY
                 if (!moved && (abs(e.x - downX) > slop || abs(e.y - downY) > slop)) { moved = true; removeCallbacks(longPress) }
-                if (inStrip) {
-                    if (abs(dy) >= volStep) { fire(if (dy < 0) Gesture.VOL_UP else Gesture.VOL_DOWN); anchorY = e.y }
+                if (strip != 0) {
+                    // Glisser le long de la barre : un cran tous les ~26 dp (la répétition automatique s'arrête)
+                    if (abs(dy) >= volStep) {
+                        removeCallbacks(stripRepeat)
+                        stripPart = if (dy < 0) 1 else -1
+                        stripFire(); anchorY = e.y
+                    }
                 } else if (moved && !longFired) {
-                    if (abs(dx) >= step && abs(dx) > abs(dy)) {
-                        fire(if (dx > 0) Gesture.RIGHT else Gesture.LEFT); anchorX = e.x; anchorY = e.y
-                    } else if (abs(dy) >= step && abs(dy) > abs(dx)) {
-                        fire(if (dy > 0) Gesture.DOWN else Gesture.UP); anchorX = e.x; anchorY = e.y
+                    val g = when {
+                        abs(dx) >= step && abs(dx) > abs(dy) -> if (dx > 0) Gesture.RIGHT else Gesture.LEFT
+                        abs(dy) >= step && abs(dy) > abs(dx) -> if (dy > 0) Gesture.DOWN else Gesture.UP
+                        else -> null
+                    }
+                    if (g != null) {
+                        stopHold()
+                        fire(g); anchorX = e.x; anchorY = e.y
+                        // Doigt qui reste posé après le glissement : la flèche devient « maintenue »
+                        lastSwipe = g; removeCallbacks(holdCheck); postDelayed(holdCheck, 380)
+                    } else if (lastSwipe != null && holding == null && kotlin.math.hypot(dx, dy) > slop) {
+                        // le doigt bouge encore : on repousse le passage en « maintenu »
+                        removeCallbacks(holdCheck); postDelayed(holdCheck, 380)
                     }
                 }
                 invalidate()
@@ -264,18 +381,22 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
                 twoFinger = true; moved = true; scrollAccY = 0f; lastTwoY = (e.getY(0) + e.getY(1)) / 2f
             }
             MotionEvent.ACTION_UP -> {
-                removeCallbacks(longPress)
+                removeCallbacks(longPress); removeCallbacks(stripRepeat); stopHold(); lastSwipe = null
                 twoFinger = false
                 if (mouseMode) {
                     releaseListener?.invoke()
                     if (!moved && SystemClock.uptimeMillis() - downTime < 350) fire(Gesture.TAP)
                     touchX = -1f; trail.clear(); invalidate(); performClick(); return true
                 }
-                if (!moved && !longFired) handleTap(e.x, e.y)
+                if (!moved && !longFired && strip == 0) handleTap(e.x, e.y)
+                strip = 0
                 touchX = -1f; invalidate()
                 performClick()
             }
-            MotionEvent.ACTION_CANCEL -> { removeCallbacks(longPress); releaseListener?.invoke(); touchX = -1f; trail.clear(); invalidate() }
+            MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(longPress); removeCallbacks(stripRepeat); stopHold(); lastSwipe = null; strip = 0
+                releaseListener?.invoke(); touchX = -1f; trail.clear(); invalidate()
+            }
         }
         return true
     }
@@ -283,11 +404,8 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
     override fun performClick(): Boolean { super.performClick(); return true }
 
     private fun handleTap(x: Float, y: Float) {
-        if (inStrip) {
-            fire(if (y < height / 2f) Gesture.VOL_UP else Gesture.VOL_DOWN); return
-        }
-        val padW = width - stripW
-        val zone = when { x < padW / 3f -> -1; x > padW * 2f / 3f -> 1; else -> 0 }
+        val l = stripZone; val w = width - 2 * stripZone
+        val zone = when { x < l + w / 3f -> -1; x > l + w * 2f / 3f -> 1; else -> 0 }
         val now = SystemClock.uptimeMillis()
         if (zone == 0) { fire(Gesture.TAP); return }  // centre : OK immédiat
         if (now - lastTapTime < doubleTapMs && zone == lastTapZone && pendingTap != null) {
