@@ -140,6 +140,8 @@ class GuardService : AccessibilityService() {
             // Classification affichée quelques secondes (« 16+ · violence » au début d'une lecture) : on la garde 30 s
             if (progWatch && event.packageName?.toString() == current) harvest(event)
             if (event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT && event.packageName?.toString() == current)
+                DETAILS_TITLE.find(event.text?.joinToString(" ").orEmpty())?.groupValues?.get(1)?.trim()?.let { chosenTitle[current!!] = it to System.currentTimeMillis() }
+            if (event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT && event.packageName?.toString() == current)
                 BoxLog.change("ANNONCE", "${label(current ?: "")} : « ${event.text?.joinToString(" ").orEmpty().take(200)} »")
             if (event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT) return
             // Pendant « finir l'épisode » : on guette l'écran « Épisode suivant »
@@ -159,11 +161,11 @@ class GuardService : AccessibilityService() {
                 BoxLog.change("VU", "${label(ePkg)} · ${AccessibilityEvent.eventTypeToString(event.eventType)} : « ${said.take(160)} »")
             }
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
-                val label = (event.text?.joinToString(" ").orEmpty() + " " + (event.contentDescription ?: "") + " " +
-                    runCatching { event.source?.let { nodeLabel(it) } }.getOrNull().orEmpty()).trim()
+                val label = listOf(event.text?.joinToString(" ").orEmpty(), (event.contentDescription ?: "").toString(),
+                    runCatching { event.source?.let { nodeLabel(it) } }.getOrNull().orEmpty()).filter { it.isNotBlank() }.joinToString(" | ")
                 event.packageName?.toString()?.let { rememberChoice(it, label) }
                 val pkg = event.packageName?.toString()
-                val play = pkg != null && fr.paul.telecommande.shared.PlayButtons.isPlay(label)
+                val play = pkg != null && label.split(" | ").any { fr.paul.telecommande.shared.PlayButtons.isPlay(it) }
                 if (pkg != null && pkg != packageName && runCatching { event.source?.isEditable }.getOrNull() != true)
                     BoxLog.log("CLIC", "${label(pkg)} : « ${label.take(120)} »" + (if (play) " → bouton Lecture reconnu" else ""))
                 if (play) main.post { playClicked(pkg!!) }
@@ -333,15 +335,19 @@ class GuardService : AccessibilityService() {
     private fun nodeLabel(n: android.view.accessibility.AccessibilityNodeInfo): String {
         val out = ArrayList<String>()
         runCatching { walk(n, 12) { t, _ -> t.toString().trim().takeIf { it.isNotEmpty() && it.length <= 200 }?.let { out += it } } }
-        return out.distinct().joinToString(" ").take(400)
+        return out.distinct().joinToString(" | ").take(600)
     }
 
     /** Classification du programme choisi (vignette ou page de détail) : appliquée si la lecture démarre ensuite sans classification lisible. */
     private val chosenAge = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Long>>()
+    private val chosenTitle = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
     private fun rememberChoice(pkg: String, label: String) {
         if (!fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg)) return
         fr.paul.telecommande.shared.RatingReader.read(listOf(label)).age?.let { chosenAge[pkg] = it to System.currentTimeMillis() }
+        label.split(" | ").firstNotNullOfOrNull { TILE_TITLE.find(it)?.groupValues?.get(1)?.trim() }?.let { chosenTitle[pkg] = it to System.currentTimeMillis() }
     }
+    /** Titre du programme choisi juste avant (vignette « 9-1-1: Lone Star, Classé 16+… », annonce « Détails de … »). */
+    private fun recentTitle(pkg: String): String? = chosenTitle[pkg]?.takeIf { System.currentTimeMillis() - it.second < 5 * 60_000L }?.first
     private var lastFocusAt = 0L
 
     /**
@@ -358,7 +364,7 @@ class GuardService : AccessibilityService() {
         val focus = runCatching { findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT)?.let { nodeLabel(it) } }.getOrNull().orEmpty()
         rememberChoice(pkg, focus)
         val sel = focus.ifBlank { lastFocusLabel.takeIf { System.currentTimeMillis() - lastFocusAt < 15_000 }.orEmpty() }
-        val play = k == android.view.KeyEvent.KEYCODE_MEDIA_PLAY || fr.paul.telecommande.shared.PlayButtons.isPlay(sel)
+        val play = k == android.view.KeyEvent.KEYCODE_MEDIA_PLAY || sel.split(" | ").any { fr.paul.telecommande.shared.PlayButtons.isPlay(it) }
         BoxLog.log("TOUCHE", "${label(pkg)} : ${android.view.KeyEvent.keyCodeToString(k)} sur « ${sel.take(100)} »" + if (play) " → Lecture" else "")
         if (play) main.post { playClicked(pkg) }
         return false
@@ -472,7 +478,8 @@ class GuardService : AccessibilityService() {
         val profile = activeProfile(allRules)
 
         // journal (l'accueil et les Paramètres ne comptent pas comme du temps d'écran)
-        val counted = pkg?.takeIf { it !in exempt && !ProtectedApps.isSettings(it) && !ProtectedApps.isInstaller(it) }
+        val counted = pkg?.takeIf { it !in exempt && !ProtectedApps.isSettings(it) && !ProtectedApps.isInstaller(it) &&
+            !(overlays.blockVisible && lastBlockPkg == it) }
         if (counted != sessionPkg) {
             if (sessionId >= 0) log.extend(sessionId, now)
             sessionId = if (counted != null) log.open(counted, now, profile?.id ?: "") else -1L
@@ -784,7 +791,7 @@ class GuardService : AccessibilityService() {
             (reason?.let { " · ${if (allowed) "autorisé par le parent" else "à bloquer"} : $it" } ?: ""))
         if (progId >= 0 && playing) log.extendProgram(progId, now, progRating?.let { ratingLabel(it) }, reason != null && !allowed)
         if (reason == null || allowed) return false
-        blockProgram(pkg, title, reason, day, key, profile, unknown)
+        blockProgram(pkg, title ?: recentTitle(pkg), reason, day, key, profile, unknown)
         return true
     }
 
@@ -890,7 +897,7 @@ class GuardService : AccessibilityService() {
             (reason?.let { "BLOQUÉ : $it" } ?: "autorisé") + " · textes : " + texts.take(25).joinToString(" | ") { it.take(60) })
         if (reason == null) return
         addDiag("program", "Lecture interceptée sur ${label(pkg)} (" + (age?.let { "$it+" } ?: "sans classification") + ")")
-        blockProgram(pkg, null, reason, day, key, profile, unknown)
+        blockProgram(pkg, recentTitle(pkg), reason, day, key, profile, unknown)
     }
 
     private fun usage(pkg: String, now: Long, allRules: BoxRules, profile: fr.paul.telecommande.shared.Profile?): UsageContext {
@@ -1366,6 +1373,10 @@ class GuardService : AccessibilityService() {
 
         val SETTINGS = ProtectedApps.SETTINGS + ProtectedApps.INSTALLERS
         val DREAMS = setOf("com.google.android.backdrop", "com.android.dreams.basic", "com.android.dreams.phototable")
+        /** « 9-1-1: Lone Star, Classé 16+, Sortie… » → « 9-1-1: Lone Star ». */
+        val TILE_TITLE = Regex("^\\s*([^,|]{2,80}?),\\s*(?:[^,]*,\\s*)?(?:Classé|Rated|Déconseillé|Tous publics)", RegexOption.IGNORE_CASE)
+        /** Annonce d'accessibilité « Sur l'écran Détails de 9-1-1: Lone Star. » */
+        val DETAILS_TITLE = Regex("(?:Détails de|Details for)\\s+(.{2,80}?)\\.\\s*$", RegexOption.IGNORE_CASE)
         val TRANSIENT = setOf("com.android.systemui", "android", "com.google.android.katniss", "com.google.android.tvrecommendations")
 
         fun enabled(ctx: Context): Boolean =
