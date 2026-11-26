@@ -33,7 +33,7 @@ class ControlNotificationTest {
         svc.onDestroy()
     }
 
-    /** Android 13+ : sans « précédent / suivant », les deux premières actions perso (−10 s, +10 s) prennent ces emplacements. */
+    /** −10 s / +10 s passent par « précédent / suivant » (actions standard), Muet et Télécommande en actions perso. */
     @Test fun quickSettingsButtons() {
         val d = Device(name = "Salon", type = DeviceType.ANDROID_TV, host = "192.168.1.45")
         DeviceStore(c).save(d)
@@ -42,8 +42,9 @@ class ControlNotificationTest {
         val session = TvControlService::class.java.getDeclaredField("session").apply { isAccessible = true }.get(svc)
             as android.support.v4.media.session.MediaSessionCompat
         val st = session.controller.playbackState!!
-        assertEquals(listOf("back10", "fwd10", "mute", "remote"), st.customActions.map { it.action })
-        assertEquals(0L, st.actions and (android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT))
+        assertEquals(listOf("mute", "remote"), st.customActions.map { it.action })
+        val skip = android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+        assertEquals(skip, st.actions and skip)
         svc.onDestroy()
     }
 

@@ -138,12 +138,19 @@ class TvControlService : Service() {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() = toggle()
                 override fun onPause() = toggle()
-                override fun onSkipToPrevious() = seek(-10)
-                override fun onSkipToNext() = seek(10)
-                override fun onRewind() = seek(-10)
-                override fun onFastForward() = seek(10)
+                override fun onSkipToPrevious() { trace("précédent"); seek(-10) }
+                override fun onSkipToNext() { trace("suivant"); seek(10) }
+                override fun onRewind() { trace("retour rapide"); seek(-10) }
+                override fun onFastForward() { trace("avance rapide"); seek(10) }
                 override fun onStop() { stopSelf() }
+                override fun onMediaButtonEvent(mediaButtonEvent: Intent?): Boolean {
+                    val ev = mediaButtonEvent?.getParcelableExtra<android.view.KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                    if (ev?.action == android.view.KeyEvent.ACTION_DOWN) trace("bouton média ${android.view.KeyEvent.keyCodeToString(ev.keyCode)}")
+                    return super.onMediaButtonEvent(mediaButtonEvent)
+                }
+                override fun onCommand(command: String?, extras: android.os.Bundle?, cb: android.os.ResultReceiver?) { trace("commande $command") }
                 override fun onCustomAction(action: String, extras: android.os.Bundle?) {
+                    trace("action $action")
                     when (action) {
                         "back10" -> seek(-10)
                         "fwd10" -> seek(10)
@@ -170,6 +177,9 @@ class TvControlService : Service() {
     }
 
     private fun key(k: RemoteKey) { device?.let { ControlNotification.send(this, it, k) } }
+
+    /** Trace de chaque appui reçu du lecteur, pour savoir ce qu'Android transmet vraiment. */
+    private fun trace(what: String) = DiagLog.log("CONTROLE", "Lecteur : $what reçu")
 
     private fun seek(s: Int) { device?.let { ControlNotification.seek(this, it, s) } }
 
@@ -235,10 +245,10 @@ class TvControlService : Service() {
         s.setMetadata(meta.build())
         s.setPlaybackState(PlaybackStateCompat.Builder()
             .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
                 PlaybackStateCompat.ACTION_REWIND or PlaybackStateCompat.ACTION_FAST_FORWARD or PlaybackStateCompat.ACTION_STOP)
-            // Pas d'« précédent / suivant » : Android place alors −10 s et +10 s dans ces deux emplacements du lecteur.
-            .addCustomAction(PlaybackStateCompat.CustomAction.Builder("back10", "−10 s", R.drawable.ic_back10).build())
-            .addCustomAction(PlaybackStateCompat.CustomAction.Builder("fwd10", "+10 s", R.drawable.ic_fwd10).build())
+            // −10 s / +10 s sur « précédent / suivant » : ces actions standard arrivent toujours (comme Pause),
+            // alors que les actions perso n'arrivent pas sur certains téléphones (Pixel, Android 17 : journal du 26/11).
             .addCustomAction(PlaybackStateCompat.CustomAction.Builder("mute", "Muet", R.drawable.ic_mute).build())
             .addCustomAction(PlaybackStateCompat.CustomAction.Builder("remote", "Télécommande", R.drawable.ic_remote).build())
             .setState(if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
@@ -285,6 +295,7 @@ class TvControlService : Service() {
 class ControlReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, intent: Intent) {
         val key = intent.getStringExtra("key") ?: return
+        DiagLog.log("CONTROLE", "Notification : $key reçu")
         if (key == "close") { ControlNotification.hide(c); return }
         val id = intent.getStringExtra("id") ?: return
         val d = DeviceStore(c).get(id) ?: return
