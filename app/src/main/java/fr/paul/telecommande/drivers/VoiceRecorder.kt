@@ -23,6 +23,26 @@ class VoiceRecorder {
 
     fun stop() { stopRequested = true }
 
+    // Bilan du dernier enregistrement (journal, et pour réécouter ce que la TV a reçu)
+    var sampleRate = 0; private set
+    var peakDb = -96f; private set
+    var gain = 1f; private set
+    var spoke = false; private set
+    var durationMs = 0L; private set
+    private val sent = ByteArrayOutputStream()
+
+    /** Ce qui a été envoyé à la TV, en fichier WAV (PCM 16 bits mono 8 kHz). */
+    fun saveWav(file: java.io.File) {
+        val pcm = sent.toByteArray()
+        java.io.DataOutputStream(file.outputStream().buffered()).use { o ->
+            fun i32(v: Int) { o.write(v and 0xFF); o.write((v shr 8) and 0xFF); o.write((v shr 16) and 0xFF); o.write((v shr 24) and 0xFF) }
+            fun i16(v: Int) { o.write(v and 0xFF); o.write((v shr 8) and 0xFF) }
+            o.writeBytes("RIFF"); i32(36 + pcm.size); o.writeBytes("WAVE")
+            o.writeBytes("fmt "); i32(16); i16(1); i16(1); i32(8000); i32(16000); i16(2); i16(16)
+            o.writeBytes("data"); i32(pcm.size); o.write(pcm)
+        }
+    }
+
     /**
      * @param onChunk reçoit des blocs d'au moins [chunkBytes] octets (dernier bloc éventuellement plus court)
      * @param autoStopOnSilence arrête après ~1,3 s de silence suivant de la parole
@@ -50,10 +70,11 @@ class VoiceRecorder {
         }
         val audio = rec ?: throw IllegalStateException("Micro indisponible")
         val out = ByteArrayOutputStream()
+        sent.reset(); sampleRate = rate; spoke = false; gain = 1f
         val buf = ShortArray(rate / 20)        // blocs de 50 ms
         val start = System.currentTimeMillis()
-        var spoke = false
         var silenceSince = 0L
+        var maxPeak = 0
         try {
             audio.startRecording()
             while (coroutineContext.isActive && !stopRequested && System.currentTimeMillis() - start < maxMs) {
@@ -63,7 +84,14 @@ class VoiceRecorder {
                 var peak = 0
                 for (s in pcm8k) peak = maxOf(peak, abs(s.toInt()))
                 level = (peak / 12000f).coerceIn(0f, 1f)
-                for (s in pcm8k) { out.write(s.toInt() and 0xFF); out.write((s.toInt() shr 8) and 0xFF) }
+                // Gain automatique : la source « reconnaissance vocale » n'a pas de réglage de volume et sort souvent très bas
+                maxPeak = maxOf(maxPeak, peak)
+                gain = if (maxPeak > 400) (20000f / maxPeak).coerceIn(1f, 8f) else 4f
+                for (s in pcm8k) {
+                    val v = (s * gain).toInt().coerceIn(-32768, 32767)
+                    out.write(v and 0xFF); out.write((v shr 8) and 0xFF)
+                    sent.write(v and 0xFF); sent.write((v shr 8) and 0xFF)
+                }
                 if (out.size() >= chunkBytes) { onChunk(out.toByteArray()); out.reset() }
                 if (autoStopOnSilence) {
                     val now = System.currentTimeMillis()
@@ -74,6 +102,8 @@ class VoiceRecorder {
             }
             if (out.size() > 0) onChunk(out.toByteArray())
         } finally {
+            durationMs = System.currentTimeMillis() - start
+            peakDb = if (maxPeak > 0) (20 * kotlin.math.log10(maxPeak / 32768.0)).toFloat() else -96f
             level = 0f
             runCatching { audio.stop() }
             audio.release()

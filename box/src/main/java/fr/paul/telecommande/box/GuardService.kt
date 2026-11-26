@@ -1204,6 +1204,18 @@ class GuardService : AccessibilityService() {
         return runCatching { startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }.getOrDefault(false)
     }
 
+    /** Recherche texte de la TV (Assistant Google), sans passer par la voix ; à défaut, YouTube. */
+    private fun search(q: String): Boolean {
+        val text = q.trim().take(200).ifBlank { return false }
+        val tries = listOf(
+            Intent("android.search.action.GLOBAL_SEARCH").putExtra(android.app.SearchManager.QUERY, text).setPackage("com.google.android.katniss"),
+            Intent("android.search.action.GLOBAL_SEARCH").putExtra(android.app.SearchManager.QUERY, text),
+            Intent(Intent.ACTION_SEARCH).putExtra(android.app.SearchManager.QUERY, text).setPackage("com.google.android.youtube.tv"),
+            Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.youtube.com/results?search_query=" + android.net.Uri.encode(text))).setPackage("com.google.android.youtube.tv"))
+        BoxLog.log("RECHERCHE", "« $text »")
+        return tries.any { i -> runCatching { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true }.getOrDefault(false) }
+    }
+
     private fun openUrl(url: String): Boolean {
         val uri = android.net.Uri.parse(url.trim())
         if (uri.scheme != "http" && uri.scheme != "https") return false
@@ -1229,6 +1241,7 @@ class GuardService : AccessibilityService() {
         })
         "launch" -> if (launch(req.optString("pkg"))) JSONObject().put("ok", true) else err("Impossible d'ouvrir cette appli")
         "open_url" -> if (openUrl(req.optString("url"))) JSONObject().put("ok", true) else err("Lien non pris en charge")
+        "search" -> if (search(req.optString("q"))) JSONObject().put("ok", true) else err("Recherche impossible sur cette box")
         "continue_watching" -> JSONObject().put("ok", true).put("items", JSONArray(continueWatching(req.optInt("max", 30))))
         "open_row" -> if (openRow(req.optString("id"))) JSONObject().put("ok", true) else err("Programme introuvable")
         "pointer" -> { overlays.movePointer(req.optDouble("dx").toFloat(), req.optDouble("dy").toFloat()); lastInteraction = System.currentTimeMillis(); JSONObject().put("ok", true) }

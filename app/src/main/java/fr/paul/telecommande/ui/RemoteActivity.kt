@@ -99,6 +99,11 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         val text = res.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: return@registerForActivityResult
         val tv = atv ?: return@registerForActivityResult
         lifecycleScope.launch {
+            // Avec l'appli Box : vraie recherche texte (la touche Recherche ouvre l'Assistant vocal sur certaines box)
+            if (device.hasBoxApp) {
+                val r = runCatching { fr.paul.telecommande.core.BoxClient.of(this@RemoteActivity, device).call("search", org.json.JSONObject().put("q", text)) }.getOrNull()
+                if (r?.optBoolean("ok") == true) { toast("« $text » recherché sur la TV"); fr.paul.telecommande.core.DiagLog.log("VOIX", "Reconnu par le téléphone : « $text »"); return@launch }
+            }
             mutex.withLock {
                 if (!ensureConnected()) return@withLock
                 runCatching {
@@ -888,6 +893,8 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         menu.menu.add(if (touchpad.mouseMode) "Quitter le mode souris" else "Mode souris")
         if (device.hasBoxApp) menu.menu.add("Reprendre un programme")
         menu.menu.add(if (fr.paul.telecommande.service.ControlNotification.enabled(this)) "Télécommande dans les réglages rapides : oui" else "Télécommande dans les réglages rapides : non")
+        menu.menu.add(if (getSharedPreferences("ui", MODE_PRIVATE).getBoolean("voice_phone", false)) "Recherche vocale : par le téléphone" else "Recherche vocale : par la TV")
+        if (java.io.File(filesDir, "voix-derniere.wav").exists()) menu.menu.add("Réécouter la dernière recherche vocale")
         menu.menu.add("Vraie souris (Bluetooth)"); menu.menu.add("Plus de touches"); menu.menu.add("Diagnostic de connexion"); menu.menu.add("Journal de diagnostic"); menu.menu.add("Rechercher une mise à jour"); menu.menu.add("Modifier l'adresse")
         menu.setOnMenuItemClickListener {
             when (it.title.toString()) {
@@ -899,6 +906,14 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
                 "Mode souris", "Quitter le mode souris" -> setMouse(!touchpad.mouseMode)
                 "Plus de touches" -> showMoreKeys()
                 "Reprendre un programme" -> showContinue()
+                "Recherche vocale : par la TV" -> { getSharedPreferences("ui", MODE_PRIVATE).edit().putBoolean("voice_phone", true).apply()
+                    Ui.toast(this, "Le téléphone reconnaît la voix et tape la recherche sur la TV") }
+                "Recherche vocale : par le téléphone" -> { getSharedPreferences("ui", MODE_PRIVATE).edit().putBoolean("voice_phone", false).apply()
+                    Ui.toast(this, "La voix est envoyée à l'Assistant de la TV") }
+                "Réécouter la dernière recherche vocale" -> runCatching {
+                    android.media.MediaPlayer().apply { setDataSource(java.io.File(filesDir, "voix-derniere.wav").path); setOnCompletionListener { it.release() }; prepare(); start() }
+                    Ui.toast(this, "Lecture de ce que la TV a reçu…")
+                }.onFailure { Ui.toast(this, "Lecture impossible") }
                 "Télécommande dans les réglages rapides : oui" -> { fr.paul.telecommande.service.ControlNotification.setEnabled(this, false); Ui.toast(this, "Retirée des réglages rapides") }
                 "Télécommande dans les réglages rapides : non" -> {
                     fr.paul.telecommande.service.ControlNotification.setEnabled(this, true)
@@ -975,6 +990,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         voiceJob = lifecycleScope.launch {
             val ok = mutex.withLock { ensureConnected() }
             if (!ok) return@launch
+            if (getSharedPreferences("ui", MODE_PRIVATE).getBoolean("voice_phone", false)) { phoneRecognition(); return@launch }
             val session = runCatching { if (tv.voiceSupported) tv.startVoice() else null }.getOrNull()
             if (session == null) { phoneRecognition(); return@launch }
             val rec = VoiceRecorder()
@@ -990,6 +1006,8 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
                 showStatus("Micro : ${e.message ?: "erreur"}")
             } finally {
                 tv.endVoice(session)
+                runCatching { rec.saveWav(java.io.File(filesDir, "voix-derniere.wav")) }
+                fr.paul.telecommande.core.DiagLog.log("VOIX", "Envoyé à la TV : ${rec.durationMs / 100 / 10.0} s · micro ${rec.sampleRate} Hz · crête ${"%.0f".format(rec.peakDb)} dB · gain ×${"%.1f".format(rec.gain)} · parole " + if (rec.spoke) "détectée" else "non détectée")
                 anim.cancel()
                 mic.scaleX = 1f; mic.scaleY = 1f
                 mic.backgroundTintList = null
