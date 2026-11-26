@@ -153,10 +153,37 @@ class BoxDashboardActivity : AppCompatActivity() {
     /** « Parental » : la règle du jour en une phrase, un réglage rapide du temps, les actions et les applis. */
     private fun renderParental(rules: fr.paul.telecommande.shared.BoxRules) {
         val c = this
-        // ----- La règle en une phrase + réglage rapide -----
+        // ----- Profils : les règles de temps sont propres à chaque profil -----
+        val watching = status?.optJSONObject("profile")?.optString("id")
+        val profiles = rules.profiles
+        if (selected == null || (selected != FAMILY && profiles.none { it.id == selected }))
+            selected = watching?.takeIf { w -> profiles.any { it.id == w } } ?: profiles.firstOrNull { !it.unlimited }?.id ?: FAMILY
+        val head = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
+        head.addView(Ui.title(c, "Profils", 18f), LinearLayout.LayoutParams(0, -2, 1f))
+        head.addView(Ui.text(c, "+ Ajouter", 14f).apply {
+            setTextColor(Ui.color(c, R.color.accent)); typeface = Ui.medium; setPadding(Ui.dp(c, 12), Ui.dp(c, 10), Ui.dp(c, 4), Ui.dp(c, 10))
+            isClickable = true; isFocusable = true; contentDescription = "Ajouter un profil"
+            setOnClickListener { openRules(-1) }
+        })
+        root.addView(head, Ui.lp(c, 18))
+        val strip = LinearLayout(c).apply { setPadding(0, Ui.dp(c, 4), Ui.dp(c, 8), Ui.dp(c, 6)) }
+        profiles.forEach { p -> strip.addView(avatar(p.emoji, p.name, profileShort(p, rules), p.id == selected, p.id == watching) { selected = p.id; render() }) }
+        strip.addView(avatar("👪", "Famille", "règles générales", selected == FAMILY, false) { selected = FAMILY; render() })
+        root.addView(android.widget.HorizontalScrollView(c).apply {
+            isHorizontalScrollBarEnabled = false; clipToPadding = false
+            isHorizontalFadingEdgeEnabled = true; setFadingEdgeLength(Ui.dp(c, 32))
+            addView(strip)
+        }, Ui.lp(c, 4))
+
+        // ----- La règle du profil choisi, en une phrase + réglage rapide -----
+        val prof = profiles.firstOrNull { it.id == selected }
         val sum = Ui.card(c)
-        sum.addView(Ui.text(c, "", 16.5f).apply { text = sentence(rules); setLineSpacing(0f, 1.2f) })
-        if (rules.enabled) {
+        if (prof != null && prof.id == watching) sum.addView(Ui.pill(c, "Devant la TV en ce moment", Ui.color(c, R.color.ok)), LinearLayout.LayoutParams(-2, -2).apply { bottomMargin = Ui.dp(c, 12) })
+        sum.addView(Ui.text(c, "", 16.5f).apply { text = sentence(rules, prof); setLineSpacing(0f, 1.2f) })
+        if (profiles.isEmpty()) sum.addView(Ui.text(c, "Créez un profil par enfant : chacun aura son temps de TV et ses programmes selon son âge. La TV demande « Qui regarde ? » à l'allumage.", 13f, muted = true), Ui.lp(c, 10))
+        val editable = rules.enabled && prof?.unlimited != true
+        if (editable) {
+            val effective = if (prof != null && prof.dailyTotalMin > 0) prof.dailyTotalMin else rules.dailyTotalMin
             val step = LinearLayout(c).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 background = android.graphics.drawable.GradientDrawable().apply { setColor(Ui.color(c, R.color.surface2)); cornerRadius = Ui.dp(c, 30).toFloat() }
@@ -170,25 +197,32 @@ class BoxDashboardActivity : AppCompatActivity() {
                 }
                 elevation = Ui.dp(c, 1).toFloat()
                 isClickable = true; isFocusable = true
-                setOnClickListener { changeDaily(delta) }
+                setOnClickListener { changeDaily(prof?.id, delta) }
             }
             step.addView(stepBtn("−", "Réduire de 15 minutes", false, -15), LinearLayout.LayoutParams(Ui.dp(c, 50), Ui.dp(c, 50)))
             val mid = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
-            mid.addView(Ui.title(c, if (rules.dailyTotalMin > 0) Usage.format(rules.dailyTotalMin * 60_000L) else "Sans limite", 22f).apply { gravity = Gravity.CENTER })
-            mid.addView(Ui.text(c, "de TV par jour", 12f, muted = true).apply { gravity = Gravity.CENTER })
+            mid.addView(Ui.title(c, if (effective > 0) Usage.format(effective * 60_000L) else "Sans limite", 22f).apply { gravity = Gravity.CENTER })
+            mid.addView(Ui.text(c, when {
+                prof == null -> "par jour · toute la famille"
+                prof.dailyTotalMin == 0 -> "par jour · comme la famille"
+                else -> "par jour pour ${prof.name}"
+            }, 12f, muted = true).apply { gravity = Gravity.CENTER; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END })
             step.addView(mid, LinearLayout.LayoutParams(0, -2, 1f))
             step.addView(stepBtn("+", "Ajouter 15 minutes", true, 15), LinearLayout.LayoutParams(Ui.dp(c, 50), Ui.dp(c, 50)))
             sum.addView(step, Ui.lp(c, 16))
         }
         val links = LinearLayout(c)
-        links.addView(Ui.button(c, if (rules.enabled) "Toutes les règles" else "Activer et régler", primary = !rules.enabled) {
-            startActivity(Intent(c, BoxRulesActivity::class.java).putExtra(BoxRulesActivity.EXTRA_ID, device.id))
+        val idx = if (prof != null) profiles.indexOf(prof) else -2
+        links.addView(Ui.button(c, when { !rules.enabled -> "Activer et régler"; prof != null -> "Modifier le profil"; profiles.isEmpty() -> "Créer un profil"; else -> "Toutes les règles" },
+            primary = !rules.enabled || profiles.isEmpty()) {
+            openRules(if (prof != null) idx else if (profiles.isEmpty() && rules.enabled) -1 else -2)
         }.compact(), LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1f).apply { marginEnd = Ui.dp(c, 5) })
-        links.addView(Ui.button(c, "Pas à pas") {
-            startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
+        links.addView(Ui.button(c, if (prof != null) "Toutes les règles" else "Pas à pas") {
+            if (prof != null) openRules(-2)
+            else startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
         }.compact(), LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1f).apply { marginStart = Ui.dp(c, 5) })
         sum.addView(links, Ui.lp(c, 14))
-        root.addView(sum, Ui.lp(c, 14))
+        root.addView(sum, Ui.lp(c, 10))
 
         // ----- Actions rapides : 4 boutons ronds -----
         val acts = LinearLayout(c)
@@ -216,14 +250,14 @@ class BoxDashboardActivity : AppCompatActivity() {
         root.addView(acts, Ui.lp(c, 20))
 
         // ----- Applis : temps du jour et limite -----
-        val head = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
-        head.addView(Ui.title(c, "Applis", 18f), LinearLayout.LayoutParams(0, -2, 1f))
-        head.addView(Ui.text(c, "Tout voir", 14f).apply {
+        val appsHead = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
+        appsHead.addView(Ui.title(c, "Applis", 18f), LinearLayout.LayoutParams(0, -2, 1f))
+        appsHead.addView(Ui.text(c, "Tout voir", 14f).apply {
             setTextColor(Ui.color(c, R.color.accent)); typeface = Ui.medium; setPadding(Ui.dp(c, 12), Ui.dp(c, 10), Ui.dp(c, 4), Ui.dp(c, 10))
             isClickable = true; isFocusable = true
             setOnClickListener { startActivity(Intent(c, BoxRulesActivity::class.java).putExtra(BoxRulesActivity.EXTRA_ID, device.id)) }
         })
-        root.addView(head, Ui.lp(c, 24))
+        root.addView(appsHead, Ui.lp(c, 24))
         val apps = Ui.group(c)
         val today = status?.optJSONObject("today"); val labels = status?.optJSONObject("labels")
         val pkgs = ((today?.keys()?.asSequence()?.toList() ?: emptyList()) + rules.apps.filterValues { !it.isDefault }.keys).distinct()
@@ -276,8 +310,8 @@ class BoxDashboardActivity : AppCompatActivity() {
         ellipsize = android.text.TextUtils.TruncateAt.END
     }
 
-    /** La règle du jour, en français courant, chiffres en couleur. */
-    private fun sentence(r: fr.paul.telecommande.shared.BoxRules): CharSequence {
+    /** La règle du profil (ou de toute la famille), en français courant, chiffres en couleur. */
+    private fun sentence(r: fr.paul.telecommande.shared.BoxRules, p: fr.paul.telecommande.shared.Profile?): CharSequence {
         val b = android.text.SpannableStringBuilder()
         fun strong(t: String) {
             val s = b.length; b.append(t)
@@ -285,24 +319,82 @@ class BoxDashboardActivity : AppCompatActivity() {
             b.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), s, b.length, 0)
         }
         fun hm(m: Int) = if (m % 60 == 0) "${m / 60} h" else "${m / 60} h %02d".format(m % 60)
-        if (!r.enabled) { b.append("Le contrôle parental est "); strong("en pause"); b.append(" : la TV n'a aucune limite."); return b }
-        b.append("La TV peut être regardée ")
-        if (r.dailyTotalMin > 0) { strong(Usage.format(r.dailyTotalMin * 60_000L) + " par jour") } else strong("sans limite de temps")
+        if (!r.enabled) { b.append("Le contrôle parental est "); strong("en pause"); b.append(" : la TV n'a aucune limite, pour aucun profil."); return b }
+        if (p != null && p.unlimited) { strong(p.name); b.append(" : "); strong("aucune limite"); b.append(". Ce profil est protégé par le code parent."); return b }
+        val daily = if (p != null && p.dailyTotalMin > 0) p.dailyTotalMin else r.dailyTotalMin
+        if (p != null) { strong(p.name); p.age()?.let { b.append(" ($it ans)") }; b.append(" peut regarder la TV ") }
+        else b.append("Sans profil choisi, la TV peut être regardée ")
+        if (daily > 0) strong(Usage.format(daily * 60_000L) + " par jour") else strong("sans limite de temps")
         if (r.activeFrom != r.activeTo) { b.append(", entre "); strong(hm(r.activeFrom)); b.append(" et "); strong(hm(r.activeTo)) }
         b.append(".")
         if (r.bedtimeEnabled) { b.append(" Couvre-feu à "); strong(hm(r.bedtimeStart)); b.append(".") }
+        val age = p?.programMaxAge() ?: r.maxAge
+        if (age > 0) { b.append(" Programmes "); strong("jusqu'à $age ans"); b.append(".") }
         val blocked = r.apps.values.count { it.blocked }
         if (blocked > 0) { b.append(" "); strong("$blocked appli" + if (blocked > 1) "s bloquées" else " bloquée"); b.append(".") }
         return b
     }
 
+    private val FAMILY = "*famille*"
+    private var selected: String? = null
+
+    private fun profileShort(p: fr.paul.telecommande.shared.Profile, r: fr.paul.telecommande.shared.BoxRules) = when {
+        p.unlimited -> "sans limite"
+        p.dailyTotalMin > 0 -> Usage.format(p.dailyTotalMin * 60_000L) + " / jour"
+        r.dailyTotalMin > 0 -> Usage.format(r.dailyTotalMin * 60_000L) + " / jour"
+        else -> p.age()?.let { "$it ans" } ?: "profil enfant"
+    }
+
+    /** Pastille de profil : avatar rond (emoji), nom, temps par jour ; cerclée quand elle est choisie. */
+    private fun avatar(emoji: String, name: String, sub: String, on: Boolean, live: Boolean, action: () -> Unit) = LinearLayout(this).apply {
+        val c = this@BoxDashboardActivity
+        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4), Ui.dp(c, 4))
+        isClickable = true; isFocusable = true
+        contentDescription = "$name, $sub" + (if (live) ", devant la TV" else "") + if (on) ", sélectionné" else ""
+        setOnClickListener { action() }
+        val frame = android.widget.FrameLayout(c)
+        frame.addView(android.widget.TextView(c).apply {
+            text = emoji; textSize = 28f; gravity = Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Ui.color(c, if (on) R.color.accent_soft else R.color.surface))
+                setStroke(Ui.dp(c, if (on) 3 else 1), Ui.color(c, if (on) R.color.accent else R.color.line))
+            }
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, android.widget.FrameLayout.LayoutParams(Ui.dp(c, 64), Ui.dp(c, 64)))
+        if (live) frame.addView(android.view.View(c).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Ui.color(c, R.color.ok)); setStroke(Ui.dp(c, 3), Ui.color(c, R.color.bg))
+            }
+        }, android.widget.FrameLayout.LayoutParams(Ui.dp(c, 18), Ui.dp(c, 18), Gravity.END or Gravity.BOTTOM))
+        addView(frame, LinearLayout.LayoutParams(Ui.dp(c, 64), Ui.dp(c, 64)))
+        addView(Ui.text(c, name, 13.5f).apply { typeface = if (on) Ui.bold else Ui.medium; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(Ui.dp(c, 84), -2).apply { topMargin = Ui.dp(c, 6) })
+        addView(Ui.text(c, sub, 11.5f, muted = true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(Ui.dp(c, 84), -2))
+        layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = Ui.dp(c, 4) }
+    }
+
+    /** Ouvre les règles complètes ; [profileIndex] ≥ 0 : directement la fiche du profil, −1 : nouveau profil. */
+    private fun openRules(profileIndex: Int) {
+        startActivity(Intent(this, BoxRulesActivity::class.java).putExtra(BoxRulesActivity.EXTRA_ID, device.id)
+            .apply { if (profileIndex >= -1) putExtra(BoxRulesActivity.EXTRA_PROFILE, profileIndex) })
+    }
+
     /** Réglage rapide du temps par jour (pas de 15 min), protégé par le code parent, envoyé tout de suite à la TV. */
-    private fun changeDaily(delta: Int) {
+    private fun changeDaily(profileId: String?, delta: Int) {
         val apply = {
             unlocked = true
             val store = ParentalStore(this)
             val r = store.boxRules(device.id)
-            r.dailyTotalMin = (r.dailyTotalMin + delta).coerceIn(0, 24 * 60)
+            val i = r.profiles.indexOfFirst { it.id == profileId }
+            if (i >= 0) {
+                // Profil enfant : son propre temps (au moins 15 min ; il part du temps de la famille s'il n'en avait pas)
+                val p = r.profiles[i]
+                val base = if (p.dailyTotalMin > 0) p.dailyTotalMin else r.dailyTotalMin.takeIf { it > 0 } ?: 120
+                r.profiles[i] = p.copy(dailyTotalMin = (base + delta).coerceIn(15, 24 * 60))
+            } else r.dailyTotalMin = (r.dailyTotalMin + delta).coerceIn(0, 24 * 60)
             r.pinHash = store.boxPinHash
             r.version = System.currentTimeMillis()
             store.saveBoxRules(device.id, r)

@@ -24,7 +24,11 @@ import org.json.JSONObject
 
 /** Règles appliquées par l'appli Box : limites et horaires par appli, temps total, couvre-feu. */
 class BoxRulesActivity : AppCompatActivity() {
-    companion object { const val EXTRA_ID = "device_id" }
+    companion object {
+        const val EXTRA_ID = "device_id"
+        /** Index du profil à ouvrir tout de suite (−1 = nouveau profil). */
+        const val EXTRA_PROFILE = "profile_index"
+    }
 
     private lateinit var device: Device
     private lateinit var store: ParentalStore
@@ -44,7 +48,11 @@ class BoxRulesActivity : AppCompatActivity() {
         setContentView(ScrollView(this).apply { setBackgroundResource(R.drawable.bg_screen); addView(root) })
         render()
         Ui.createPinIfNeeded(this) {
-            Ui.requirePin(this, "Saisissez le code parent pour modifier les règles.") { unlocked = true; render(); load() }
+            Ui.requirePin(this, "Saisissez le code parent pour modifier les règles.") {
+                unlocked = true; render(); load()
+                // Ouvert depuis l'écran Parental sur un profil : sa fiche directement
+                intent.getIntExtra(EXTRA_PROFILE, -2).takeIf { it >= -1 && it < rules.profiles.size }?.let { editProfile(it) }
+            }
         }
     }
 

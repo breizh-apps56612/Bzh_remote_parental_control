@@ -256,7 +256,10 @@ class MainActivity : AppCompatActivity() {
         val box = if (d.hasBoxApp) parental.boxRules(d.id) else null
         val phone = parental.rules(d.id)
         val enabled = box?.enabled ?: phone.enabled
-        val limit = if (!enabled) 0 else box?.dailyTotalMin ?: phone.dailyTotalMin
+        // Les limites de temps sont propres au profil qui regarde (« Qui regarde ? » sur la TV)
+        val watcherId = status[d.id]?.optJSONObject("profile")?.optString("id")
+        val watcher = box?.profiles?.firstOrNull { it.id == watcherId }
+        val limit = if (!enabled || watcher?.unlimited == true) 0 else box?.forProfile(watcher)?.dailyTotalMin ?: phone.dailyTotalMin
         val tracking = d.hasBoxApp || d.monitorEnabled || phone.enabled
         val today: Long? = when {
             d.hasBoxApp -> status[d.id]?.optLong("todayTotal")
@@ -271,7 +274,7 @@ class MainActivity : AppCompatActivity() {
         if (today != null && limit > 0) {
             val over = today >= limit * 60_000L
             t1.addView(Ui.progress(this, today.toFloat() / (limit * 60_000L), over), LinearLayout.LayoutParams(-1, dp(8)).apply { topMargin = dp(10) })
-            t1.addView(small("sur " + fr.paul.telecommande.core.Usage.format(limit * 60_000L) + " aujourd'hui"), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
+            t1.addView(small("sur " + fr.paul.telecommande.core.Usage.format(limit * 60_000L) + (watcher?.let { " · ${it.name}" } ?: " aujourd'hui")), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
         } else t1.addView(small(when { today == null && !tracking -> "Suivi désactivé"; today == null -> "TV injoignable"; else -> "aujourd'hui · sans limite" }),
             LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
         t1.setOnClickListener { AuroraNav.open(this, AuroraNav.Tab.ACTIVITY) }
