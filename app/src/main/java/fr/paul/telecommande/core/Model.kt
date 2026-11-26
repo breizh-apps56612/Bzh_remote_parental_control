@@ -87,4 +87,5 @@ data class Device(
     }
 }
 
-class RemoteException(message: String, cause: Throwable? = null) : Exception(message, cause)
+/** Erreur de pilote. [unreachable] : l'appareil ne répond pas du tout (éteint, veille profonde, hors du Wi-Fi). */
+class RemoteException(message: String, cause: Throwable? = null, val unreachable: Boolean = false) : Exception(message, cause)

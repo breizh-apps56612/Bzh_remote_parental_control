@@ -661,6 +661,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
                 }
             }
             connectedFlow.value = false
+            unreachableErr = isUnreachable(e)
             errorFlow.value = e.message ?: e.javaClass.simpleName
             showStatus(null)
             false
@@ -725,15 +726,63 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
     }
 
     private suspend fun sendKey(key: RemoteKey) = mutex.withLock {
-        if (!ensureConnected()) return@withLock
+        // TV déjà signalée injoignable : on n'envoie plus rien tant que l'utilisateur n'a pas touché « Réessayer »
+        // (sauf Marche, qui tente de la réveiller).
+        if (offline) {
+            if (key == RemoteKey.POWER) { withContext(Dispatchers.Main) { powerOn() }; return@withLock }
+            offlineNotice()
+            return@withLock
+        }
+        if (!ensureConnected()) { if (offline) offlineNotice(); return@withLock }
         try {
             if (!driver.send(key)) toast("Touche non disponible sur cet appareil")
         } catch (e: RemoteException) {
             connected = false; connectedFlow.value = false
             driver.close()
-            if (ensureConnected()) runCatching { driver.send(key) }.onFailure { showStatus("Erreur : ${it.message}") }
+            if (isUnreachable(e)) { goOffline(e); return@withLock }
+            // Lien simplement coupé : on se reconnecte et on renvoie la touche une fois
+            if (ensureConnected()) runCatching { driver.send(key) }.onFailure {
+                if (it is RemoteException && isUnreachable(it)) goOffline(it) else showStatus("Erreur : ${it.message}")
+            } else if (offline) offlineNotice()
         } catch (e: Exception) {
-            showStatus("Erreur : ${e.message ?: e.javaClass.simpleName}")
+            if (isUnreachable(e)) { connected = false; connectedFlow.value = false; driver.close(); goOffline(e) }
+            else showStatus("Erreur : ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    /** La TV ne répond pas du tout : éteinte, veille profonde ou hors du Wi-Fi (pas une simple coupure du lien). */
+    private fun isUnreachable(e: Throwable): Boolean {
+        if (e is RemoteException && e.unreachable) return true
+        var c: Throwable? = e
+        while (c != null) {
+            if (c is java.net.ConnectException || c is java.net.NoRouteToHostException || c is java.net.SocketTimeoutException) return true
+            c = c.cause
+        }
+        return false
+    }
+
+    /** Signalée injoignable : la carte « En cours » le dit, avec « Réessayer », et les touches ne partent plus. */
+    private var unreachableErr = false
+    private val offline get() = unreachableErr && errorFlow.value != null && !connected
+    private var lastOfflineNotice = 0L
+
+    private suspend fun goOffline(e: Throwable) {
+        val msg = e.message ?: "${device.name} ne répond pas."
+        fr.paul.telecommande.core.DiagLog.log("TV", "${device.name} injoignable : envoi des touches suspendu (" + msg + ")")
+        unreachableErr = true
+        errorFlow.value = msg
+        showStatus(null)
+        offlineNotice()
+    }
+
+    /** Rappel discret (au plus toutes les 3 s) : vibration d'erreur + message. */
+    private suspend fun offlineNotice() {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastOfflineNotice < 3000) return
+        lastOfflineNotice = now
+        withContext(Dispatchers.Main) {
+            window.decorView.performHapticFeedback(if (Build.VERSION.SDK_INT >= 30) android.view.HapticFeedbackConstants.REJECT else android.view.HapticFeedbackConstants.LONG_PRESS)
+            toast("${device.name} ne répond pas : allumez-la, puis touchez « Réessayer »")
         }
     }
 

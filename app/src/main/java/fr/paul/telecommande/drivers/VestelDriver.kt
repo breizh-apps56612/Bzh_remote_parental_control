@@ -37,10 +37,15 @@ class VestelDriver(device: Device) : Driver(device) {
     val method: Method? get() = Method.of(device.secret)
 
     override suspend fun connect(ui: PairingUi) {
-        if (method != null) return
+        if (method != null) {
+            // Déjà réglée : on vérifie seulement qu'elle répond, pour dire tout de suite « éteinte ou injoignable »
+            val alive = withContext(Dispatchers.IO) { httpStatus("GET", "/apps/SmartCenter") != -1 || portOpen(device.host, dialPort) }
+            if (!alive) throw RemoteException("${device.name} ne répond pas : TV éteinte (veille profonde) ou hors du Wi-Fi.", unreachable = true)
+            return
+        }
         // Pas encore testé : on prend le premier chemin que la TV expose (le test guidé l'affinera).
         val found = available().firstOrNull()
-            ?: throw RemoteException("TV Vestel injoignable à ${device.host}. Vérifiez qu'elle est allumée et connectée au même réseau.")
+            ?: throw RemoteException("TV Vestel injoignable à ${device.host}. Vérifiez qu'elle est allumée et connectée au même réseau.", unreachable = true)
         DiagLog.log("VESTEL", "Chemin provisoire : ${found.id} (${device.host})")
         device.secret = found.id; persist()
     }
@@ -75,7 +80,9 @@ class VestelDriver(device: Device) : Driver(device) {
         }
         val status = result.getOrNull()
         DiagLog.log("VESTEL", "Touche $code par ${m.id} → " + (result.exceptionOrNull()?.let { "erreur ${it.message}" } ?: if (status == 0) "envoyée" else "HTTP $status"))
-        if (result.isFailure || (status != null && status >= 400) || status == -1)
+        if (status == -1 || result.exceptionOrNull() is java.io.IOException)
+            throw RemoteException("${device.name} ne répond pas : TV éteinte (veille profonde) ou hors du Wi-Fi.", result.exceptionOrNull(), unreachable = true)
+        if (result.isFailure || (status != null && status >= 400))
             throw RemoteException("La TV n'a pas accepté la touche (${m.label}).", result.exceptionOrNull())
     }
 
