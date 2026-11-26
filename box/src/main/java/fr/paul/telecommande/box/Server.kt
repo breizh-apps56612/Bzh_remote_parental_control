@@ -23,6 +23,8 @@ class Server(private val guard: GuardService) {
     private val active = AtomicInteger(0)
     /** Connexions de téléphones non appairés : peu nombreuses et courtes, pour qu'elles ne bloquent jamais celui du parent. */
     private val untrusted = AtomicInteger(0)
+    /** Connexions ouvertes par adresse : un seul appareil du Wi-Fi ne peut pas occuper toutes les places. */
+    private val perIp = java.util.concurrent.ConcurrentHashMap<String, AtomicInteger>()
     private var socket: SSLServerSocket? = null
     @Volatile private var running = false
 
@@ -59,8 +61,12 @@ class Server(private val guard: GuardService) {
                     socket = ss
                     while (running) {
                         val c = ss.accept() as SSLSocket
-                        if (active.get() >= 12) { runCatching { c.close() }; continue }
-                        pool.execute { handle(c) }
+                        val ip = c.inetAddress?.hostAddress ?: "?"
+                        val n = perIp.getOrPut(ip) { AtomicInteger(0) }
+                        if (active.get() >= MAX_ACTIVE || n.incrementAndGet() > MAX_PER_IP) {
+                            n.decrementAndGet(); runCatching { c.close() }; continue
+                        }
+                        pool.execute { try { handle(c) } finally { if (n.decrementAndGet() <= 0) perIp.remove(ip, n) } }
                     }
                 } catch (e: Exception) {
                     if (running) SystemClock.sleep(3000)   // port occupé, réseau pas prêt… on réessaie
@@ -88,8 +94,10 @@ class Server(private val guard: GuardService) {
         var subscribed: OutputStream? = null
         var countedUntrusted = false
         try {
-            c.soTimeout = 30_000
+            // Poignée de main TLS courte : une connexion muette est fermée vite et ne bloque pas le parent.
+            c.soTimeout = HANDSHAKE_TIMEOUT_MS
             c.startHandshake()
+            c.soTimeout = 30_000
             val peer = c.session.peerCertificates.firstOrNull() as? X509Certificate ?: return
             val clientFp = BoxProtocol.fingerprint(peer)
             if (!store.phones().containsKey(clientFp)) {
@@ -98,6 +106,7 @@ class Server(private val guard: GuardService) {
                 c.soTimeout = 15_000
             }
             var lines = 0
+            var spake: fr.paul.telecommande.shared.Spake2.Session? = null
             val boxFp = BoxProtocol.fingerprint(store.identity().second)
             val reader = BoxProtocol.LineReader(c.inputStream)
             val out = c.outputStream
@@ -110,7 +119,10 @@ class Server(private val guard: GuardService) {
                 val res = try {
                     when {
                         cmd == "pair_start" -> pairStart(req)
-                        cmd == "pair_confirm" -> pairConfirm(req, clientFp, boxFp)
+                        cmd == "pair_spake" -> pairSpake(req, clientFp, boxFp).also { spake = it.second }.first
+                        cmd == "pair_spake_confirm" -> pairSpakeConfirm(req, spake, clientFp).also { spake = null }
+                        // Ancien appairage (preuve HMAC) : le code pouvait être retrouvé hors ligne par une fausse box.
+                        cmd == "pair_confirm" -> err("Mettez à jour l'appli Télécommande du téléphone : l'appairage a été rendu plus sûr.")
                         !trusted -> err("Téléphone non appairé")
                         cmd == "subscribe" -> {
                             c.soTimeout = 0
@@ -124,7 +136,7 @@ class Server(private val guard: GuardService) {
                 }
                 synchronized(out) { BoxProtocol.write(out, res.put("id", id)) }
                 // Téléphone inconnu : seulement l'appairage, quelques messages, puis on ferme
-                if (!store.phones().containsKey(clientFp) && (cmd != "pair_start" && cmd != "pair_confirm" || lines >= 6)) break
+                if (!store.phones().containsKey(clientFp) && (cmd !in PAIR_CMDS || lines >= 6)) break
                 // Téléphone qui vient de se (re)connecter : on lui renvoie la demande de code en cours.
                 if (cmd == "subscribe" && subscribed != null) guard.overlays.pendingPin?.let { (pid, title) ->
                     synchronized(out) { runCatching { BoxProtocol.write(out, JSONObject().put("event", "pin_request").put("id", pid).put("title", title)) } }
@@ -142,7 +154,13 @@ class Server(private val guard: GuardService) {
 
     private fun err(msg: String) = JSONObject().put("ok", false).put("error", msg)
 
-    companion object { const val MAX_UNTRUSTED = 3 }
+    companion object {
+        const val MAX_UNTRUSTED = 3
+        const val MAX_ACTIVE = 24
+        const val MAX_PER_IP = 6
+        const val HANDSHAKE_TIMEOUT_MS = 8_000
+        val PAIR_CMDS = setOf("pair_start", "pair_spake", "pair_spake_confirm", "pair_confirm")
+    }
 
     @Synchronized
     private fun pairStart(req: JSONObject): JSONObject {
@@ -152,17 +170,19 @@ class Server(private val guard: GuardService) {
         val box = android.os.Build.MODEL ?: "Android TV"
         // Déjà un téléphone de parent + un code parent : un enfant ne doit pas pouvoir appairer son propre téléphone
         // simplement en lisant le code affiché sur la TV. Le parent valide d'abord (code sur la TV ou empreinte sur son téléphone).
-        if (store.phones().isNotEmpty() && store.rules().pinHash.isNotBlank()) {
+        // Même sans code parent : un téléphone déjà appairé doit valider (sinon l'enfant appaire le sien en lisant la TV).
+        if (store.phones().isNotEmpty()) {
+            val how = if (store.rules().pinHash.isNotBlank()) "avec le code parent sur la TV (ou sur votre téléphone)" else "sur le téléphone du parent déjà appairé"
             pairCode = null
             if (awaitingApproval && now < approvalExpiry) return JSONObject().put("ok", true).put("box", box).put("approval", true)
-                .put("message", "Validez d'abord avec le code parent sur la TV")
+                .put("message", "Validez d'abord $how").put("spake", true)
             awaitingApproval = true; approvalExpiry = now + 180_000
             guard.approvePairing(onOk = { showCode() }, onCancel = { synchronized(this) { awaitingApproval = false } })
             return JSONObject().put("ok", true).put("box", box).put("approval", true)
-                .put("message", "Validez avec le code parent sur la TV (ou sur votre téléphone), puis saisissez le code affiché")
+                .put("message", "Validez $how, puis saisissez le code affiché").put("spake", true)
         }
         showCode()
-        return JSONObject().put("ok", true).put("box", box)
+        return JSONObject().put("ok", true).put("box", box).put("spake", true)
     }
 
     @Synchronized
@@ -173,19 +193,30 @@ class Server(private val guard: GuardService) {
         guard.overlays.showPairingCode(code, 120_000)
     }
 
+    /** Étape 2 (SPAKE2) : chaque essai ne teste qu'un code, et compte parmi les 3 essais du code affiché. */
     @Synchronized
-    private fun pairConfirm(req: JSONObject, clientFp: String, boxFp: String): JSONObject {
-        val code = pairCode ?: return err(if (awaitingApproval) "Validez d'abord avec le code parent sur la TV, puis saisissez le code affiché" else "Aucun appairage en cours")
-        if (SystemClock.elapsedRealtime() > pairExpiry) { pairCode = null; guard.overlays.hidePairingCode(); return err("Code expiré, recommencez") }
+    private fun pairSpake(req: JSONObject, clientFp: String, boxFp: String): Pair<JSONObject, fr.paul.telecommande.shared.Spake2.Session?> {
+        val code = pairCode ?: return err(if (awaitingApproval) "Validez d'abord sur la TV ou sur le téléphone du parent, puis saisissez le code affiché" else "Aucun appairage en cours") to null
+        if (SystemClock.elapsedRealtime() > pairExpiry) { pairCode = null; guard.overlays.hidePairingCode(); return err("Code expiré, recommencez") to null }
         pairAttempts++
-        val ok = BoxProtocol.safeEquals(BoxProtocol.proof(code, clientFp, boxFp), req.optString("proof"))
-        if (!ok) {
+        if (pairAttempts > 3) { pairCode = null; guard.overlays.hidePairingCode(); return err("Trop d'essais, recommencez") to null }
+        val s = fr.paul.telecommande.shared.Spake2.box(code)
+        return try {
+            s.finish(req.optString("x"), clientFp, boxFp)
+            JSONObject().put("ok", true).put("y", s.message) to s
+        } catch (e: Exception) { err("Échange invalide") to null }
+    }
+
+    @Synchronized
+    private fun pairSpakeConfirm(req: JSONObject, s: fr.paul.telecommande.shared.Spake2.Session?, clientFp: String): JSONObject {
+        if (s == null || pairCode == null) return err("Aucun appairage en cours")
+        if (!BoxProtocol.safeEquals(s.phoneConfirm(), req.optString("confirm"))) {
             if (pairAttempts >= 3) { pairCode = null; guard.overlays.hidePairingCode() }
             return err(if (pairAttempts >= 3) "Trop d'essais, recommencez" else "Code incorrect")
         }
         pairCode = null
         guard.overlays.hidePairingCode()
         store.addPhone(clientFp, req.optString("name", "Téléphone"))
-        return JSONObject().put("ok", true).put("box", android.os.Build.MODEL ?: "Android TV")
+        return JSONObject().put("ok", true).put("confirm", s.boxConfirm()).put("box", android.os.Build.MODEL ?: "Android TV")
     }
 }

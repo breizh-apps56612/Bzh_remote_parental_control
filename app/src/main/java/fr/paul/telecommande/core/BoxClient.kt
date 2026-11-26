@@ -51,20 +51,32 @@ class BoxClient(private val context: Context, private val host: String, private 
         s.use { exchange(it, cmd, params) }
     }
 
-    /** Étape 1 : la box affiche un code sur la TV. */
-    suspend fun pairStart(): String = withContext(Dispatchers.IO) {
+    /** Étape 1 : la box affiche un code sur la TV. Renvoie (nom de la box, message éventuel « validez d'abord… »). */
+    suspend fun pairStart(): Pair<String, String?> = withContext(Dispatchers.IO) {
         val (s, _) = open()
-        s.use { exchange(it, "pair_start", JSONObject()).optString("box") }
+        val r = s.use { exchange(it, "pair_start", JSONObject()) }
+        // Appli Box trop ancienne : elle ne connaît que l'ancien appairage, que l'on n'utilise plus (code devinable hors ligne).
+        if (!r.optBoolean("spake")) throw RemoteException("Mettez d'abord à jour l'appli Box sur la TV (écran d'accueil de l'appli Box › Mises à jour › Rechercher), puis recommencez.")
+        r.optString("box") to r.optString("message").ifBlank { null }
     }
 
-    /** Étape 2 : preuve de connaissance du code ; renvoie l'empreinte de la box à épingler. */
+    /**
+     * Étape 2 : appairage SPAKE2 avec le code affiché. Le code ne circule jamais, même sous forme de preuve
+     * devinable : une fausse box n'apprend rien. Renvoie l'empreinte de la box à épingler.
+     */
     suspend fun pairConfirm(code: String): String = withContext(Dispatchers.IO) {
         val (s, boxFp) = open()
         val phoneFp = BoxProtocol.fingerprint(PhoneIdentity.get(context).second)
+        val session = fr.paul.telecommande.shared.Spake2.phone(code.filter { c -> c.isDigit() })
         s.use {
-            exchange(it, "pair_confirm", JSONObject()
-                .put("proof", BoxProtocol.proof(code.filter { c -> c.isDigit() }, phoneFp, boxFp))
+            val r1 = exchange(it, "pair_spake", JSONObject().put("x", session.message))
+            try { session.finish(r1.optString("y"), phoneFp, boxFp) } catch (e: Exception) { throw RemoteException("Réponse de la box invalide", e) }
+            val r2 = exchange(it, "pair_spake_confirm", JSONObject()
+                .put("confirm", session.phoneConfirm())
                 .put("name", (Build.MANUFACTURER ?: "") + " " + (Build.MODEL ?: "Téléphone")))
+            // La box prouve à son tour qu'elle connaît le code : sinon ce n'est pas la vraie box, on n'enregistre rien.
+            if (!BoxProtocol.safeEquals(session.boxConfirm(), r2.optString("confirm")))
+                throw RemoteException("Sécurité : la TV n'a pas prouvé qu'elle affichait ce code. Appairage annulé.")
         }
         boxFp
     }

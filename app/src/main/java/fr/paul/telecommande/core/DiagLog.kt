@@ -101,7 +101,7 @@ object DiagLog {
 
     private val CLAUDE_PROMPT = """Voici le journal de diagnostic de mon application « Télécommande » (télécommande Android pour box Android TV).
 Explique-moi en termes simples ce qui se passe et ce que je dois faire pour régler le problème.
-Repères : ATV→ = envoyé à la TV, ATV← = reçu de la TV, APK = envoi de l'appli Box par le téléphone, BT = souris Bluetooth, PARENTAL = contrôle parental, BLOQUÉ = action refusée par sécurité. À la fin : le journal de la TV (APPLI, CLIC, ÉCRAN = textes lus, LECTURE, PROGRAMME, BLOCAGE).
+Repères : ATV→ = envoyé à la TV, ATV← = reçu de la TV, APK = envoi de l'appli Box par le téléphone, BT = souris Bluetooth, PARENTAL = contrôle parental, BLOQUÉ = action refusée par sécurité. À la fin : le journal de la TV (APPLI, CLIC, ÉCRAN = nombre de textes lus, contenu masqué, LECTURE, PROGRAMME, BLOCAGE).
 Le problème que je rencontre : """
 
     fun claudeInstalled(c: Context) = runCatching { c.packageManager.getPackageInfo(CLAUDE_PKG, 0); true }.getOrDefault(false)

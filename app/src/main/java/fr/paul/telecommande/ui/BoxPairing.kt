@@ -36,13 +36,13 @@ object BoxPairing {
     private fun askCode(a: Activity, scope: LifecycleCoroutineScope, device: Device, done: () -> Unit) {
         scope.launch {
             val client = BoxClient(a, device.host, null)
-            val box = runCatching { client.pairStart() }.getOrElse {
+            val (box, hint) = runCatching { client.pairStart() }.getOrElse {
                 AlertDialog.Builder(a).setTitle("Box injoignable").setMessage(it.message).setPositiveButton("OK", null).show()
                 return@launch
             }
             val input = EditText(a).apply { inputType = InputType.TYPE_CLASS_NUMBER; hint = "Code à 6 chiffres" }
             val box2 = FrameLayout(a).apply { setPadding(Ui.dp(a, 20), 0, Ui.dp(a, 20), 0); addView(input) }
-            AlertDialog.Builder(a).setTitle("Code affiché sur la TV ($box)").setView(box2)
+            AlertDialog.Builder(a).setTitle("Code affiché sur la TV ($box)").apply { hint?.let { setMessage(it) } }.setView(box2)
                 .setPositiveButton("Appairer") { _, _ ->
                     scope.launch {
                         runCatching { client.pairConfirm(input.text.toString()) }

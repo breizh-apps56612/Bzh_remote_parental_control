@@ -18,6 +18,11 @@ Gratuite, open source (GPL-3.0), sans compte, sans serveur, sans publicité.
 
 Les données restent à la maison : sur la TV et le téléphone appairé, échangées en TLS mutuel sur le Wi-Fi local. Aucun compte, aucun serveur, aucun traceur. Le seul accès Internet sert à vérifier les mises à jour sur le site.
 
+- **Appairage sûr** (téléphone 2.4.39 / Box 1.4.41) : le code affiché sur la TV est vérifié par SPAKE2. Il ne circule jamais, même sous une forme devinable : une fausse box sur le Wi-Fi n'apprend rien, et chaque tentative d'intrus ne teste qu'un seul code (3 essais par code).
+- **Un seul parent décide** : dès qu'un téléphone est appairé, tout nouveau téléphone doit être validé par le parent (code parent sur la TV ou téléphone déjà appairé). Un enfant ne peut pas appairer le sien en lisant le code à l'écran.
+- **Rien dans les sauvegardes** : la clé du téléphone et le code parent ne partent pas dans la sauvegarde Google ni dans une sauvegarde ADB.
+- **Résistant au blocage** : un appareil du Wi-Fi ne peut pas occuper toutes les connexions de la box pour empêcher le parent de se connecter.
+
 ## Installer
 
 1. Sur le téléphone : ouvrez https://telecommande-box.netlify.app et installez l'appli.
@@ -40,7 +45,7 @@ GNU General Public License v3.0 : vous pouvez utiliser, étudier, modifier et re
 
 ## Signaler un problème
 
-Ouvrez une « issue » sur GitHub. Joignez si possible le journal de diagnostic de l'appli (bouton « Partager » du journal) ; il ne contient jamais ce que vous tapez.
+Ouvrez une « issue » sur GitHub. Joignez si possible le journal de diagnostic de l'appli (bouton « Partager » du journal) ; il ne contient jamais ce que vous tapez, ni les textes affichés sur la TV (titres, recherches) : seulement leur nombre et les mentions de classification d'âge.
 
 ---
 

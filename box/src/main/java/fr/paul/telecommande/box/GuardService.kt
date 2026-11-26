@@ -163,7 +163,8 @@ class GuardService : AccessibilityService() {
                 harvest(event)
                 val said = (event.text?.joinToString(" ").orEmpty() + " " + (event.contentDescription ?: "")).trim()
                 if (said.isNotBlank()) { lastFocusLabel = said; lastFocusAt = System.currentTimeMillis() }
-                BoxLog.change("VU", "${label(ePkg)} · ${AccessibilityEvent.eventTypeToString(event.eventType)} : « ${said.take(160)} »")
+                BoxLog.change("VU", "${label(ePkg)} · ${AccessibilityEvent.eventTypeToString(event.eventType)} : " +
+                    (if (said.isBlank()) "rien" else if (fr.paul.telecommande.shared.RatingReader.isPlayerCue(said) || fr.paul.telecommande.shared.PlayButtons.isPlay(said)) "« ${said.take(80)} »" else "${said.length} car. (masqué)"))
             }
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
                 val label = listOf(event.text?.joinToString(" ").orEmpty(), (event.contentDescription ?: "").toString(),
@@ -172,7 +173,7 @@ class GuardService : AccessibilityService() {
                 val pkg = event.packageName?.toString()
                 val play = pkg != null && label.split(" | ").any { fr.paul.telecommande.shared.PlayButtons.isPlay(it) }
                 if (pkg != null && pkg != packageName && runCatching { event.source?.isEditable }.getOrNull() != true)
-                    BoxLog.log("CLIC", "${label(pkg)} : « ${label.take(120)} »" + (if (play) " → bouton Lecture reconnu" else ""))
+                    BoxLog.log("CLIC", "${label(pkg)} : " + (if (play) "« ${label.take(120)} » → bouton Lecture reconnu" else "${label.length} car. (masqué : touches du clavier, titres…)"))
                 if (play) main.post { playClicked(pkg!!) }
             }
             // Une zone de texte vient d'être sélectionnée : le téléphone peut ouvrir son clavier
@@ -735,7 +736,10 @@ class GuardService : AccessibilityService() {
             lastCueRead = now
             val texts = readScreen(pkg).texts + recentTexts()
             if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg))
-                BoxLog.change("ÉCRAN", "${label(pkg)} : ${texts.size} textes lisibles" + (if (texts.isEmpty()) " (l'appli ne montre rien à l'accessibilité)" else " : " + texts.take(30).joinToString(" | ") { it.take(60) }))
+                // Vie privée : le journal (partageable) ne garde jamais les textes de l'écran (titres, recherches tapées…),
+                // seulement leur nombre et les mentions de classification utiles au diagnostic.
+                BoxLog.change("ÉCRAN", "${label(pkg)} : ${texts.size} textes lisibles" + (if (texts.isEmpty()) " (l'appli ne montre rien à l'accessibilité)" else
+                    texts.filter { fr.paul.telecommande.shared.RatingReader.isPlayerCue(it) }.take(3).let { cues -> if (cues.isEmpty()) " (contenu masqué)" else " (contenu masqué) · classification : " + cues.joinToString(" | ") { it.take(40) } }))
             if (texts.any { fr.paul.telecommande.shared.RatingReader.isPlayerCue(it) }) playing = true
         }
         val title = media?.optString("title")?.takeIf { it.isNotBlank() }
@@ -899,7 +903,8 @@ class GuardService : AccessibilityService() {
         }
         BoxLog.log("LECTURE", "${label(pkg)} : clic sur Lecture · classification de la page = " + (age?.let { "$it+" } ?: "aucune") +
             (r.contents.takeIf { it.isNotEmpty() }?.let { " · contenus $it" } ?: "") + " · profil ${profile?.name ?: "aucun"} (âge max ${profile?.programMaxAge() ?: 0}) · " +
-            (reason?.let { "BLOQUÉ : $it" } ?: "autorisé") + " · textes : " + texts.take(25).joinToString(" | ") { it.take(60) })
+            (reason?.let { "BLOQUÉ : $it" } ?: "autorisé") + " · ${texts.size} textes (masqués)" +
+            texts.filter { fr.paul.telecommande.shared.RatingReader.isPlayerCue(it) }.take(3).let { c -> if (c.isEmpty()) "" else " · classification : " + c.joinToString(" | ") { it.take(40) } })
         if (reason == null) return
         addDiag("program", "Lecture interceptée sur ${label(pkg)} (" + (age?.let { "$it+" } ?: "sans classification") + ")")
         blockProgram(pkg, recentTitle(pkg), reason, day, key, profile, unknown)
