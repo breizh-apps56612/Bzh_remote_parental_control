@@ -16,7 +16,6 @@ import androidx.appcompat.app.AlertDialog
 import fr.paul.telecommande.R
 import fr.paul.telecommande.core.Device
 import fr.paul.telecommande.core.DeviceStore
-import fr.paul.telecommande.core.ParentalStore
 
 /**
  * Navigation « Aurora » partagée par les écrans principaux :
@@ -116,10 +115,15 @@ object AuroraNav {
             Tab.SETTINGS -> settings(a)
             Tab.PARENTAL, Tab.ACTIVITY -> {
                 if (d == null) { Ui.toast(a, "Ajoutez d'abord votre TV"); return }
+                if (!d.isSmartBox) {
+                    val box = DeviceStore(a).all().firstOrNull { it.isSmartBox }
+                    if (box == null) { Ui.toast(a, "Le contrôle parental et l'activité fonctionnent avec une box ou TV Android TV."); return }
+                    setPrimary(a, box); open(a, tab); return
+                }
                 val i = when {
                     d.hasBoxApp -> Intent(a, BoxDashboardActivity::class.java).putExtra(BoxDashboardActivity.EXTRA_ID, d.id)
                         .putExtra(BoxDashboardActivity.EXTRA_MODE, if (tab == Tab.PARENTAL) BoxDashboardActivity.MODE_PARENTAL else BoxDashboardActivity.MODE_ACTIVITY)
-                    tab == Tab.PARENTAL && ParentalStore(a).rules(d.id).enabled -> Intent(a, ParentalActivity::class.java).putExtra(ParentalActivity.EXTRA_ID, d.id)
+                    tab == Tab.PARENTAL -> Intent(a, ParentalActivity::class.java).putExtra(ParentalActivity.EXTRA_ID, d.id)
                     else -> Intent(a, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, d.id)
                 }
                 a.startActivity(i)
