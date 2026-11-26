@@ -85,11 +85,25 @@ class Server(private val guard: GuardService) {
 
     fun stop() {
         running = false
+        runCatching { pushExec.shutdown() }
         runCatching { socket?.close() }
         subscribers.forEach { runCatching { it.close() } }
     }
 
+    /** Envois aux téléphones abonnés : un seul fil, dans l'ordre, jamais sur le fil principal. */
+    private val pushExec = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "box-push").apply { isDaemon = true } }
+
+    /**
+     * Prévient les téléphones (appli à l'écran, demande de temps, code parent…).
+     * Avant : appelé depuis le fil principal, l'écriture réseau était refusée par Android
+     * (NetworkOnMainThreadException) et le téléphone était retiré des abonnés sans rien recevoir.
+     */
     fun push(event: JSONObject) {
+        val text = event.toString()
+        runCatching { pushExec.execute { send(JSONObject(text)) } }
+    }
+
+    private fun send(event: JSONObject) {
         val dead = mutableListOf<OutputStream>()
         subscribers.forEach { out -> synchronized(out) { runCatching { BoxProtocol.write(out, event) }.onFailure { dead += out } } }
         subscribers.removeAll(dead.toSet())
