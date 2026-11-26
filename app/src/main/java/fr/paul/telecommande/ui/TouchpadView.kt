@@ -130,13 +130,15 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     override fun onDraw(canvas: Canvas) {
-        val r = 28 * d
+        val r = 36 * d
         rect.set(0f, 0f, width.toFloat(), height.toFloat())
-        // fond : verre sombre + halo violet très doux au centre + liseré
-        bgPaint.shader = android.graphics.LinearGradient(0f, 0f, 0f, height.toFloat(),
-            ContextCompat.getColor(context, R.color.surface_hi), ContextCompat.getColor(context, R.color.pad), android.graphics.Shader.TileMode.CLAMP)
+        // fond Aurora : dégradé en diagonale (carte → lueur indigo → menthe) + halo doux au centre + liseré
+        bgPaint.shader = android.graphics.LinearGradient(0f, 0f, width * 0.45f, height.toFloat(),
+            intArrayOf(ContextCompat.getColor(context, R.color.surface_hi), ContextCompat.getColor(context, R.color.aurora_a),
+                ContextCompat.getColor(context, R.color.aurora_b)),
+            floatArrayOf(0f, 0.55f, 1f), android.graphics.Shader.TileMode.CLAMP)
         canvas.drawRoundRect(rect, r, r, bgPaint)
-        glowPaint.shader = android.graphics.RadialGradient(width / 2f, height / 2f, maxOf(1f, minOf(width, height) * 0.55f),
+        glowPaint.shader = android.graphics.RadialGradient(width / 2f, height / 2f, maxOf(1f, minOf(width, height) * 0.5f),
             ContextCompat.getColor(context, R.color.accent_soft), 0x00000000, android.graphics.Shader.TileMode.CLAMP)
         canvas.drawRoundRect(rect, r, r, glowPaint)
         rect.inset(strokePaint.strokeWidth / 2, strokePaint.strokeWidth / 2)
@@ -189,13 +191,20 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
         }
         chev(cx, m, Gesture.UP); chev(cx, height - m, Gesture.DOWN)
         chev(m, cy, Gesture.LEFT); chev(padW - m, cy, Gesture.RIGHT)
+        // Bouton « OK » central : halo indigo, pastille claire, point indigo (grossit au toucher)
+        val tap = flashDir == Gesture.TAP
         centerDot.color = ContextCompat.getColor(context, R.color.accent)
-        centerDot.alpha = 60
-        canvas.drawCircle(cx, cy, (if (flashDir == Gesture.TAP) 26f else 20f) * d, centerDot)
+        centerDot.alpha = if (tap) 70 else 34
+        canvas.drawCircle(cx, cy, (if (tap) 62f else 56f) * d, centerDot)
+        centerDot.color = ContextCompat.getColor(context, R.color.surface)
         centerDot.alpha = 255
-        canvas.drawCircle(cx, cy, (if (flashDir == Gesture.TAP) 10f else 7f) * d, centerDot)
-        if (!mouseMode && touchX < 0 && height > 230 * d) {
-            hint.split("\n").forEachIndexed { i, line -> canvas.drawText(line, cx, cy + 46 * d + i * 16 * d, textPaint) }
+        centerDot.setShadowLayer(10 * d, 0f, 4 * d, (ContextCompat.getColor(context, R.color.accent) and 0x00FFFFFF) or 0x55000000)
+        canvas.drawCircle(cx, cy, (if (tap) 34f else 30f) * d, centerDot)
+        centerDot.clearShadowLayer()
+        centerDot.color = ContextCompat.getColor(context, R.color.accent)
+        canvas.drawCircle(cx, cy, (if (tap) 10f else 7f) * d, centerDot)
+        if (!mouseMode && touchX < 0 && height > 250 * d) {
+            hint.split("\n").forEachIndexed { i, line -> canvas.drawText(line, cx, cy + 82 * d + i * 16 * d, textPaint) }
         }
         if (touchX >= 0) canvas.drawCircle(touchX, touchY, 34 * d, touchPaint)
 

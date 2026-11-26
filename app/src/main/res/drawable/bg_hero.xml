@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Grande carte foncée « à la une » (Ma maison) -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#33FFFFFF">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/hero" />
+            <corners android:radius="32dp" />
+        </shape>
+    </item>
+</ripple>

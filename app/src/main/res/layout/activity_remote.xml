@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Télécommande — style Aurora.
+  Haut : appareil, veille, menu. Milieu : carte « En cours » puis grand pavé tactile.
+  Bas (zone du pouce) : volume et chaînes en pilules, retour / accueil / micro / lecture / plus,
+  puis la barre de navigation flottante.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -9,21 +15,22 @@
     <!-- En-tête : appareil (pilule, changer), marche/veille, menu -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="68dp"
+        android:layout_height="72dp"
         android:gravity="center_vertical"
-        android:paddingStart="14dp"
-        android:paddingEnd="12dp">
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
 
         <LinearLayout
             android:id="@+id/deviceChip"
             android:layout_width="wrap_content"
-            android:layout_height="46dp"
+            android:layout_height="48dp"
             android:background="@drawable/bg_chip"
             android:clickable="true"
+            android:elevation="2dp"
             android:focusable="true"
             android:gravity="center_vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="12dp">
+            android:paddingStart="18dp"
+            android:paddingEnd="14dp">
 
             <View
                 android:id="@+id/stateDot"
@@ -36,7 +43,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="sans-serif-medium"
+                android:fontFamily="@font/sora_semibold"
                 android:maxLines="1"
                 android:maxWidth="200dp"
                 android:textColor="@color/ink"
@@ -58,9 +65,9 @@
 
         <ImageButton
             android:id="@+id/btnPower"
-            android:layout_width="46dp"
-            android:layout_height="46dp"
-            android:layout_marginEnd="8dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="10dp"
             android:background="@drawable/bg_power"
             android:contentDescription="Marche / veille (appui long : allumer)"
             android:src="@drawable/ic_power"
@@ -68,10 +75,11 @@
 
         <ImageButton
             android:id="@+id/btnMenu"
-            android:layout_width="46dp"
-            android:layout_height="46dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:background="@drawable/bg_round"
             android:contentDescription="Plus d'options"
+            android:elevation="2dp"
             android:rotation="90"
             android:src="@drawable/ic_more"
             app:tint="@color/ink" />
@@ -81,106 +89,140 @@
         android:id="@+id/status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
+        android:paddingStart="22dp"
+        android:paddingEnd="22dp"
         android:paddingBottom="4dp"
         android:textColor="@color/muted"
         android:textSize="12sp"
         android:visibility="gone" />
 
-    <!-- Carte « En cours » synchronisée avec la TV + suggestions -->
+    <!-- Carte « En cours » synchronisée avec la TV + raccourcis du moment -->
     <LinearLayout
         android:id="@+id/contextPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="14dp"
-        android:layout_marginEnd="14dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
         android:background="@drawable/bg_card"
+        android:elevation="2dp"
         android:orientation="vertical"
         android:padding="16dp" />
 
+    <!-- Grand pavé tactile : glisser, toucher, double-toucher -->
     <fr.paul.telecommande.ui.TouchpadView
         android:id="@+id/touchpad"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginStart="14dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginEnd="14dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="14dp"
+        android:layout_marginEnd="16dp"
         android:layout_weight="1"
         android:minHeight="150dp" />
 
-    <!-- VOL | boutons ronds | CH -->
+    <!-- Volume (− muet +) et chaînes (− CH +) : deux pilules côte à côte -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="56dp"
         android:layout_marginTop="14dp"
-        android:layout_marginBottom="12dp"
-        android:gravity="center"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp">
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
 
         <LinearLayout
-            android:layout_width="68dp"
-            android:layout_height="196dp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="5dp"
+            android:layout_weight="1"
             android:background="@drawable/bg_rocker"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
+            android:elevation="2dp"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
 
-            <ImageButton android:id="@+id/btnVolUp" android:layout_width="68dp" android:layout_height="0dp" android:layout_weight="1"
-                android:background="@drawable/bg_rocker_btn" android:contentDescription="Volume plus"
-                android:src="@drawable/ic_chevron_up" app:tint="@color/rocker_ink" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:importantForAccessibility="no"
-                android:text="VOL" android:textColor="@color/muted" android:textSize="11sp" android:letterSpacing="0.15" android:fontFamily="sans-serif-medium" />
-            <ImageButton android:id="@+id/btnVolDown" android:layout_width="68dp" android:layout_height="0dp" android:layout_weight="1"
+            <ImageButton android:id="@+id/btnVolDown" android:layout_width="48dp" android:layout_height="48dp"
                 android:background="@drawable/bg_rocker_btn" android:contentDescription="Volume moins"
-                android:src="@drawable/ic_chevron_down" app:tint="@color/rocker_ink" />
+                android:src="@drawable/ic_vol_down" app:tint="@color/rocker_ink" />
+            <ImageButton android:id="@+id/btnMute" android:layout_width="0dp" android:layout_height="48dp" android:layout_weight="1"
+                android:background="@drawable/bg_rocker_btn" android:contentDescription="Muet"
+                android:src="@drawable/ic_mute" app:tint="@color/muted" />
+            <ImageButton android:id="@+id/btnVolUp" android:layout_width="48dp" android:layout_height="48dp"
+                android:background="@drawable/bg_rocker_btn" android:contentDescription="Volume plus"
+                android:src="@drawable/ic_vol_up" app:tint="@color/accent" />
         </LinearLayout>
 
-        <GridLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="14dp"
-            android:layout_marginEnd="14dp"
-            android:columnCount="2">
-
-            <ImageButton android:id="@+id/btnHome" android:layout_width="60dp" android:layout_height="60dp" android:layout_margin="3dp"
-                android:background="@drawable/bg_round" android:contentDescription="Accueil" android:src="@drawable/ic_home" app:tint="@color/ink" />
-            <ImageButton android:id="@+id/btnBack" android:layout_width="60dp" android:layout_height="60dp" android:layout_margin="3dp"
-                android:background="@drawable/bg_round" android:contentDescription="Retour" android:src="@drawable/ic_return" app:tint="@color/ink" />
-            <ImageButton android:id="@+id/btnMute" android:layout_width="60dp" android:layout_height="60dp" android:layout_margin="3dp"
-                android:background="@drawable/bg_round" android:contentDescription="Muet" android:src="@drawable/ic_mute" app:tint="@color/ink" />
-            <ImageButton android:id="@+id/btnPlay" android:layout_width="60dp" android:layout_height="60dp" android:layout_margin="3dp"
-                android:background="@drawable/bg_round" android:contentDescription="Lecture / pause" android:src="@drawable/ic_playpause" app:tint="@color/ink" />
-            <ImageButton android:id="@+id/btnMic" android:layout_width="60dp" android:layout_height="60dp" android:layout_margin="3dp"
-                android:background="@drawable/bg_round" android:contentDescription="Recherche vocale (maintenir pour parler)" android:src="@drawable/ic_mic" app:tint="@color/ink" />
-            <ImageButton android:id="@+id/btnMore" android:layout_width="60dp" android:layout_height="60dp" android:layout_margin="3dp"
-                android:background="@drawable/bg_round" android:contentDescription="Plus : clavier, souris, 123, couleurs" android:src="@drawable/ic_more" app:tint="@color/ink" />
-        </GridLayout>
-
         <LinearLayout
-            android:layout_width="68dp"
-            android:layout_height="196dp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="5dp"
+            android:layout_weight="1"
             android:background="@drawable/bg_rocker"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
+            android:elevation="2dp"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
 
-            <ImageButton android:id="@+id/btnChUp" android:layout_width="68dp" android:layout_height="0dp" android:layout_weight="1"
-                android:background="@drawable/bg_rocker_btn" android:contentDescription="Chaîne suivante"
-                android:src="@drawable/ic_chevron_up" app:tint="@color/rocker_ink" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:importantForAccessibility="no"
-                android:text="CH" android:textColor="@color/muted" android:textSize="11sp" android:letterSpacing="0.15" android:fontFamily="sans-serif-medium" />
-            <ImageButton android:id="@+id/btnChDown" android:layout_width="68dp" android:layout_height="0dp" android:layout_weight="1"
+            <ImageButton android:id="@+id/btnChDown" android:layout_width="48dp" android:layout_height="48dp"
                 android:background="@drawable/bg_rocker_btn" android:contentDescription="Chaîne précédente"
                 android:src="@drawable/ic_chevron_down" app:tint="@color/rocker_ink" />
+            <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:gravity="center" android:importantForAccessibility="no"
+                android:text="CH" android:textColor="@color/muted" android:textSize="12sp" android:letterSpacing="0.15"
+                android:fontFamily="@font/sora_semibold" />
+            <ImageButton android:id="@+id/btnChUp" android:layout_width="48dp" android:layout_height="48dp"
+                android:background="@drawable/bg_rocker_btn" android:contentDescription="Chaîne suivante"
+                android:src="@drawable/ic_chevron_up" app:tint="@color/accent" />
         </LinearLayout>
     </LinearLayout>
 
+    <!-- Retour · Accueil · MICRO (au centre, sous le pouce) · Lecture · Plus -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="84dp"
+        android:layout_marginTop="6dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp">
+
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <ImageButton android:id="@+id/btnBack" android:layout_width="54dp" android:layout_height="54dp" android:layout_gravity="center"
+                android:background="@drawable/bg_round" android:elevation="2dp" android:contentDescription="Retour"
+                android:src="@drawable/ic_return" app:tint="@color/ink" />
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <ImageButton android:id="@+id/btnHome" android:layout_width="54dp" android:layout_height="54dp" android:layout_gravity="center"
+                android:background="@drawable/bg_round" android:elevation="2dp" android:contentDescription="Accueil"
+                android:src="@drawable/ic_home" app:tint="@color/ink" />
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1.2"
+            android:clipChildren="false" android:clipToPadding="false">
+            <ImageButton android:id="@+id/btnMic" android:layout_width="70dp" android:layout_height="70dp" android:layout_gravity="center"
+                android:background="@drawable/bg_fab" android:elevation="8dp" android:contentDescription="Recherche vocale (maintenir pour parler)"
+                android:src="@drawable/ic_mic" app:tint="#FFFFFF" />
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <ImageButton android:id="@+id/btnPlay" android:layout_width="54dp" android:layout_height="54dp" android:layout_gravity="center"
+                android:background="@drawable/bg_round" android:elevation="2dp" android:contentDescription="Lecture / pause"
+                android:src="@drawable/ic_playpause" app:tint="@color/ink" />
+        </FrameLayout>
+        <FrameLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1">
+            <ImageButton android:id="@+id/btnMore" android:layout_width="54dp" android:layout_height="54dp" android:layout_gravity="center"
+                android:background="@drawable/bg_round" android:elevation="2dp" android:contentDescription="Plus : clavier, souris, 123, couleurs"
+                android:src="@drawable/ic_more" app:tint="@color/ink" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- Navigation flottante en pilule -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
         android:id="@+id/bottomNav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="14dp"
         android:background="@drawable/bg_nav"
-        app:elevation="0dp"
+        app:elevation="6dp"
         app:itemIconTint="@color/nav_item"
         app:itemTextColor="@color/nav_item"
         app:itemRippleColor="@color/accent_soft"

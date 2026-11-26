@@ -71,7 +71,7 @@ class RulesWizardActivity : AppCompatActivity() {
         content = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; val p = Ui.dp(c, 18); setPadding(p, p * 2, p, p) }
         nav = LinearLayout(c).apply {
             setPadding(Ui.dp(c, 16), Ui.dp(c, 12), Ui.dp(c, 16), Ui.dp(c, 16))
-            setBackgroundResource(R.drawable.bg_nav)
+            setBackgroundResource(R.drawable.bg_bar)
         }
         setContentView(LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL

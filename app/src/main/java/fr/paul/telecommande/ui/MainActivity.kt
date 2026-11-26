@@ -18,7 +18,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import fr.paul.telecommande.R
 import fr.paul.telecommande.core.Device
 import fr.paul.telecommande.core.DeviceStore
@@ -40,7 +39,7 @@ class MainActivity : AppCompatActivity() {
         store = DeviceStore(this)
         list = findViewById(R.id.list)
         empty = findViewById(R.id.empty)
-        findViewById<FloatingActionButton>(R.id.fab).setOnClickListener { showAddMenu() }
+        findViewById<View>(R.id.fab).setOnClickListener { showAddMenu() }
         // Relance le suivi / l'assistant s'ils étaient actifs (après une mise à jour par exemple)
         val parental = fr.paul.telecommande.core.ParentalStore(this)
         if (store.all().any { it.isSmartBox && (it.hasBoxApp || it.monitorEnabled || parental.rules(it.id).enabled ||
@@ -59,28 +58,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun refresh() {
         while (list.childCount > 1) list.removeViewAt(1)
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        findViewById<TextView>(R.id.greeting).text = if (hour >= 18 || hour < 5) "Bonsoir" else "Bonjour"
         val devices = store.all()
-        if (devices.count { it.hasBoxApp } >= 1) {
-            val c = this
-            val home = LinearLayout(this).apply {
-                gravity = android.view.Gravity.CENTER_VERTICAL
-                setBackgroundResource(R.drawable.bg_card); setPadding(dp(16), dp(14), dp(16), dp(14))
-                isClickable = true; setOnClickListener { startActivity(Intent(c, HomeOverviewActivity::class.java)) }
-            }
-            home.addView(TextView(this).apply { text = "🏠"; textSize = 26f }, LinearLayout.LayoutParams(dp(44), -2))
-            val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            t.addView(TextView(this).apply { text = "Ma maison"; textSize = 17f; typeface = Ui.bold; setTextColor(Ui.color(c, R.color.ink)) })
-            t.addView(TextView(this).apply { text = "Toutes les TV, messages et récompenses"; textSize = 13f; setTextColor(Ui.color(c, R.color.muted)) })
-            home.addView(t, LinearLayout.LayoutParams(0, -2, 1f))
-            list.addView(home, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(16), dp(2), dp(16), dp(10)) })
-        }
+        val c = this
+        if (devices.count { it.hasBoxApp } >= 1) list.addView(homeCard(devices),
+            LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(16), dp(2), dp(16), dp(18)) })
         empty.visibility = if (devices.isEmpty()) View.VISIBLE else View.GONE
+        if (devices.isNotEmpty()) list.addView(Ui.label(this, "Mes appareils"),
+            LinearLayout.LayoutParams(-2, -2).apply { setMargins(dp(24), dp(2), dp(24), dp(6)) })
         devices.forEach { d ->
-            val c = this
-            // Carte d'appareil : pastille dégradée + nom + détail + chevron
+            // Carte d'appareil : pastille en dégradé Aurora + nom + détail + flèche ronde
             val card = LinearLayout(this).apply {
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 setBackgroundResource(R.drawable.bg_card)
+                elevation = dp(2).toFloat()
                 setPadding(dp(16), dp(16), dp(14), dp(16))
                 isClickable = true; isFocusable = true
                 setOnClickListener { openRemote(d) }
@@ -90,8 +82,9 @@ class MainActivity : AppCompatActivity() {
                 text = when (d.type) { DeviceType.IR -> "IR"; DeviceType.ANDROID_TV -> "TV"; else -> d.type.label.take(2).uppercase() }
                 gravity = android.view.Gravity.CENTER; textSize = 15f; typeface = Ui.bold; setTextColor(android.graphics.Color.WHITE)
                 background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
-                    intArrayOf(Ui.color(c, R.color.accent), Ui.color(c, R.color.accent2))).apply { cornerRadius = dp(16).toFloat() }
-            }, LinearLayout.LayoutParams(dp(52), dp(52)))
+                    intArrayOf(Ui.color(c, R.color.brand_a), Ui.color(c, R.color.brand_b))).apply { cornerRadius = dp(18).toFloat() }
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(dp(54), dp(54)))
             val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             texts.addView(TextView(this).apply { text = d.name; textSize = 17f; typeface = Ui.bold; setTextColor(Ui.color(c, R.color.ink)) })
             val detail = when (d.type) {
@@ -101,14 +94,68 @@ class MainActivity : AppCompatActivity() {
             }
             texts.addView(TextView(this).apply { text = detail; textSize = 13f; setTextColor(Ui.color(c, R.color.muted)); maxLines = 2 })
             card.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(14); marginEnd = dp(8) })
-            card.addView(android.widget.ImageView(this).apply {
-                setImageResource(R.drawable.ic_chevron_down); rotation = -90f
-                imageTintList = android.content.res.ColorStateList.valueOf(Ui.color(c, R.color.muted))
-            }, LinearLayout.LayoutParams(dp(20), dp(20)))
+            card.addView(arrowBubble(Ui.color(c, R.color.surface2), Ui.color(c, R.color.ink)))
             list.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(dp(16), dp(6), dp(16), dp(6))
             })
         }
+    }
+
+    /** Petite bulle ronde avec une flèche « ouvrir ». */
+    private fun arrowBubble(bg: Int, fg: Int) = android.widget.ImageView(this).apply {
+        setImageResource(R.drawable.ic_chevron_down); rotation = -90f
+        imageTintList = android.content.res.ColorStateList.valueOf(fg)
+        background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(bg) }
+        val p = dp(10); setPadding(p, p, p, p)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+    }
+
+    /** Grande carte foncée « Ma maison » : toutes les TV, et le temps de TV du jour si le suivi est actif. */
+    private fun homeCard(devices: List<Device>): View {
+        val c = this
+        val parental = fr.paul.telecommande.core.ParentalStore(this)
+        val tracked = devices.filter { it.isSmartBox && (it.monitorEnabled || parental.rules(it.id).enabled) }
+        val today = tracked.sumOf { fr.paul.telecommande.core.TvMonitor.todayUsage(this, it.id).values.sum() }
+        val protectedCount = devices.count { it.isSmartBox && (it.hasBoxApp || parental.rules(it.id).enabled) }
+        val onHero = android.graphics.Color.WHITE
+        val onHeroMuted = 0xFFDCDDF5.toInt()
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundResource(R.drawable.bg_hero)
+            elevation = dp(8).toFloat()
+            setPadding(dp(20), dp(18), dp(18), dp(20))
+            isClickable = true; isFocusable = true
+            contentDescription = "Ma maison : toutes les TV, messages et récompenses"
+            setOnClickListener { startActivity(Intent(c, HomeOverviewActivity::class.java)) }
+        }
+        val top = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        top.addView(View(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(Ui.color(c, R.color.ok)) }
+        }, LinearLayout.LayoutParams(dp(8), dp(8)).apply { marginEnd = dp(8) })
+        top.addView(TextView(this).apply {
+            text = if (protectedCount > 0) "Contrôle parental actif" + (if (protectedCount > 1) " · $protectedCount TV" else "") else "Toutes les TV de la maison"
+            textSize = 13f; setTextColor(onHeroMuted)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        top.addView(arrowBubble(0x26FFFFFF, onHero))
+        card.addView(top)
+        card.addView(TextView(this).apply {
+            text = "Ma maison"; textSize = 24f; typeface = Ui.bold; setTextColor(onHero); letterSpacing = -0.01f
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(6) })
+        card.addView(TextView(this).apply {
+            text = "Toutes les TV, messages et récompenses"; textSize = 14f; setTextColor(onHeroMuted)
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(2) })
+        if (tracked.isNotEmpty()) {
+            val stat = LinearLayout(this).apply {
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(20).toFloat(); setColor(0x1FFFFFFF) }
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+            }
+            stat.addView(TextView(this).apply { text = "Temps de TV aujourd'hui"; textSize = 13f; setTextColor(onHeroMuted) }, LinearLayout.LayoutParams(0, -2, 1f))
+            stat.addView(TextView(this).apply { text = fr.paul.telecommande.core.Usage.format(today); textSize = 18f; typeface = Ui.bold; setTextColor(onHero) })
+            card.addView(stat, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+        }
+        return card
     }
 
     private fun openRemote(d: Device) {

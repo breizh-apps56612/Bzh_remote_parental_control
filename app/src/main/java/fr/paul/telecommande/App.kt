@@ -16,6 +16,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         DiagLog.init(this)
+        fr.paul.telecommande.ui.Ui.init(this)
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(a: Activity) { started++; foreground = true }
             override fun onActivityStopped(a: Activity) { started = maxOf(0, started - 1); foreground = started > 0 }

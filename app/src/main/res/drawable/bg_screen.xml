@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item><shape><solid android:color="@color/bg" /></shape></item>
-    <!-- halo violet discret en haut de l'écran -->
-    <item android:gravity="top" android:height="420dp">
-        <shape>
-            <gradient android:type="radial" android:gradientRadius="420dp" android:centerX="0.5" android:centerY="0"
-                android:startColor="@color/bg_glow" android:endColor="#00000000" />
+    <!-- Aurora : halo indigo en haut à gauche, halo sarcelle en haut à droite -->
+    <item android:gravity="top|start" android:height="460dp" android:width="460dp" android:top="-160dp" android:left="-120dp">
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="230dp" android:startColor="@color/bg_glow" android:endColor="#00000000" />
+        </shape>
+    </item>
+    <item android:gravity="top|end" android:height="380dp" android:width="380dp" android:top="-80dp" android:right="-150dp">
+        <shape android:shape="oval">
+            <gradient android:type="radial" android:gradientRadius="190dp" android:startColor="@color/bg_glow2" android:endColor="#00000000" />
         </shape>
     </item>
 </layer-list>

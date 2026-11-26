@@ -1,29 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Premium — variante claire (téléphone en thème clair) -->
-    <color name="bg">#F5F4FA</color>
-    <color name="bg_glow">#99DCD3FF</color>
+    <!-- Aurora — variante claire (téléphone en thème clair) : fond lavande pâle, cartes blanches, encre nuit -->
+    <color name="bg">#F3F4FA</color>
+    <color name="bg_glow">#334B48E0</color>
+    <color name="bg_glow2">#2E0EA5A0</color>
     <color name="surface">#FFFFFF</color>
     <color name="surface_hi">#FFFFFF</color>
-    <color name="surface2">#EFEDF7</color>
-    <color name="stroke">#140F0A2A</color>
+    <color name="surface2">#ECEDF6</color>
+    <color name="stroke">#1412142B</color>
     <color name="pad">#FFFFFF</color>
-    <color name="pad_dot">#E1DDEE</color>
+    <color name="pad_dot">#D5D6EC</color>
     <color name="rocker">#FFFFFF</color>
-    <color name="rocker_ink">#1A1730</color>
-    <color name="line">#E3E0EE</color>
-    <color name="track">#E7E4F1</color>
-    <color name="bar">#D8D3E8</color>
-    <color name="ink">#15131F</color>
-    <color name="muted">#6B6880</color>
-    <color name="accent">#6E4BFF</color>
-    <color name="accent2">#A64BFF</color>
-    <color name="accent_soft">#266E4BFF</color>
-    <color name="ok">#10B981</color>
-    <color name="danger">#E5484D</color>
-    <color name="power_bg">#FDECEF</color>
-    <color name="power">#E5484D</color>
-    <color name="key_pressed">#E9E4FB</color>
+    <color name="rocker_ink">#12142B</color>
+    <color name="line">#E3E4F0</color>
+    <color name="track">#E6E7F3</color>
+    <color name="bar">#D5D7EA</color>
+    <color name="ink">#12142B</color>
+    <color name="muted">#5A5D7A</color>
+    <color name="accent">#4B48E0</color>
+    <color name="accent2">#0B8783</color>
+    <color name="accent_soft">#244B48E0</color>
+    <!-- Remplissage des boutons principaux (texte blanc dessus) -->
+    <color name="primary">#12142B</color>
+    <!-- Grande carte foncée « Ma maison » -->
+    <color name="hero">#12142B</color>
+    <!-- Dégradé signature indigo → sarcelle (micro, ajout, pastilles) : identique en clair et en sombre -->
+    <color name="brand_a">#4B48E0</color>
+    <color name="brand_b">#0B8783</color>
+    <!-- Fond du pavé tactile : lueur indigo puis menthe -->
+    <color name="aurora_a">#ECEBFF</color>
+    <color name="aurora_b">#DDF5F3</color>
+    <color name="ok">#14B8A6</color>
+    <color name="danger">#D92D20</color>
+    <color name="power_bg">#FFE4E8</color>
+    <color name="power">#C8102E</color>
+    <color name="key_pressed">#ECEBFF</color>
     <color name="k_red">#E11D48</color>
     <color name="k_green">#16A34A</color>
     <color name="k_yellow">#CA8A04</color>

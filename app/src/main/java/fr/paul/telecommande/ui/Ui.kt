@@ -23,9 +23,15 @@ object Ui {
     fun dp(c: Context, v: Int) = (v * c.resources.displayMetrics.density).toInt()
     fun color(c: Context, id: Int) = ContextCompat.getColor(c, id)
 
-    /** Polices : titres serrés et gras, textes courants lisibles. */
-    val bold: Typeface = Typeface.create("sans-serif", Typeface.BOLD)
+    /** Polices (style Aurora) : titres en Sora, textes courants dans la police du téléphone. */
+    var bold: Typeface = Typeface.create("sans-serif", Typeface.BOLD)
+        private set
     val medium: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+
+    /** Charge la police des titres (Sora, incluse dans l'appli). Appelé au démarrage par [fr.paul.telecommande.App]. */
+    fun init(c: Context) {
+        runCatching { androidx.core.content.res.ResourcesCompat.getFont(c, R.font.sora_semibold) }.getOrNull()?.let { bold = it }
+    }
 
     fun title(c: Context, text: String, size: Float = 30f) = TextView(c).apply {
         this.text = text; textSize = size; setTextColor(color(c, R.color.ink)); typeface = bold
@@ -46,18 +52,19 @@ object Ui {
     fun card(c: Context) = LinearLayout(c).apply {
         orientation = LinearLayout.VERTICAL
         setBackgroundResource(R.drawable.bg_card)
-        val p = dp(c, 18); setPadding(p, p, p, p)
+        val p = dp(c, 20); setPadding(p, p, p, p)
+        elevation = dp(c, 2).toFloat()
     }
 
     fun lp(c: Context, topDp: Int = 12) = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         .apply { topMargin = dp(c, topDp) }
 
-    /** Bouton : principal = pilule dégradée violette ; secondaire = pilule cerclée. */
+    /** Bouton : principal = pilule pleine couleur encre ; secondaire = pilule blanche cerclée. */
     fun button(c: Context, label: String, primary: Boolean = false, action: () -> Unit) = TextView(c).apply {
         text = label; gravity = Gravity.CENTER; textSize = 15f; typeface = medium; letterSpacing = 0.01f
         setTextColor(if (primary) Color.WHITE else color(c, R.color.ink))
         setBackgroundResource(if (primary) R.drawable.bg_chip_on else R.drawable.bg_chip)
-        minHeight = dp(c, 50); setPadding(dp(c, 18), 0, dp(c, 18), 0)
+        minHeight = dp(c, 52); setPadding(dp(c, 20), 0, dp(c, 20), 0)
         if (primary && android.os.Build.VERSION.SDK_INT >= 21) { elevation = dp(c, 3).toFloat(); stateListAnimator = null }
         isClickable = true; isFocusable = true
         setOnClickListener { action() }
@@ -70,6 +77,7 @@ object Ui {
         orientation = LinearLayout.VERTICAL
         setBackgroundResource(R.drawable.bg_card)
         setPadding(0, dp(c, 4), 0, dp(c, 4))
+        elevation = dp(c, 2).toFloat()
     }
 
     fun divider(c: Context) = View(c).apply { setBackgroundColor(color(c, R.color.line)) }
@@ -199,7 +207,7 @@ object Ui {
         val night = (a.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
             android.content.res.Configuration.UI_MODE_NIGHT_YES
         a.window.statusBarColor = color(a, R.color.bg)
-        a.window.navigationBarColor = color(a, if (a is RemoteActivity) R.color.surface else R.color.bg)
+        a.window.navigationBarColor = color(a, R.color.bg)
         androidx.core.view.WindowCompat.getInsetsController(a.window, a.window.decorView).apply {
             isAppearanceLightStatusBars = !night
             isAppearanceLightNavigationBars = !night

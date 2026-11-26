@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Barre d'actions pleine largeur en bas d'écran (assistants) : filet en haut -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape><solid android:color="@color/stroke" /></shape></item>
+    <item android:top="1dp"><shape><solid android:color="@color/surface" /></shape></item>
+</layer-list>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bouton rond signature (micro, ajout) : dégradé indigo → sarcelle -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#40FFFFFF">
+    <item>
+        <shape android:shape="oval">
+            <gradient android:angle="315" android:startColor="@color/brand_a" android:endColor="@color/brand_b" />
+        </shape>
+    </item>
+</ripple>

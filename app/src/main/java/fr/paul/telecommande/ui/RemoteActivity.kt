@@ -1045,7 +1045,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             val rec = VoiceRecorder()
             recorder = rec
             val mic = findViewById<View>(R.id.btnMic)
-            mic.backgroundTintList = ColorStateList.valueOf(color(R.color.accent))
+            mic.backgroundTintList = ColorStateList.valueOf(color(R.color.power))
             showStatus("Parlez maintenant… (relâchez ou faites une pause pour envoyer)")
             val anim = launch { while (isActive) { val s = 1f + rec.level * 0.25f; mic.scaleX = s; mic.scaleY = s; delay(60) } }
             try {
