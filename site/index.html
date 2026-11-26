@@ -9,11 +9,11 @@
 <meta property="og:url" content="https://telecommande-box.netlify.app/">
 <meta name="twitter:card" content="summary_large_image">
 <style>
-:root{--bg:#08080c;--surface:#13131b;--hi:#1c1c28;--stroke:rgba(255,255,255,.12);--ink:#f3f2fa;--muted:#8f8ca6;--soft:#c8c5dc;--accent:#8b6cff;--accent2:#c46bff;--ok:#3ddc97}
+:root{--bg:#08080c;--surface:#13131b;--hi:#1c1c28;--stroke:rgba(255,255,255,.12);--ink:#f3f2fa;--muted:#8f8ca6;--soft:#c8c5dc;--accent:#6f6cff;--accent2:#19b3ad;--ok:#3ddc97}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);line-height:1.55;
-  background:radial-gradient(1100px 560px at 50% -120px,rgba(58,42,140,.55),transparent 70%),var(--bg);min-height:100vh}
+  background:radial-gradient(1100px 560px at 50% -120px,rgba(60,58,190,.5),transparent 70%),var(--bg);min-height:100vh}
 a{color:#b9a6ff}
 img{max-width:100%;height:auto;display:block}
 .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
@@ -56,6 +56,12 @@ ul.ticks b{color:var(--ink)}
 .gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:26px}
 .gallery figure{margin:0}
 .gallery img{border-radius:14px;border:1px solid var(--stroke)}
+.ports{width:100%;border-collapse:collapse;margin:18px 0 6px;font-size:.92rem}
+.ports th,.ports td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--stroke);vertical-align:top}
+.ports th{color:var(--muted);font-weight:600;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase}
+.ports td:first-child{white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace;color:#fff}
+.nerd h3{margin-top:0}.nerd ul{margin:8px 0 0;padding-left:20px;color:var(--soft)}.nerd li{margin:6px 0}
+.tablewrap{overflow-x:auto}
 .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:26px}
 .card{background:linear-gradient(180deg,var(--hi),var(--surface));border:1px solid var(--stroke);border-radius:22px;padding:22px}
 .card p{color:var(--soft);margin:0;font-size:.97rem}
@@ -107,7 +113,7 @@ small{color:var(--muted)}
 </style></head><body>
 <div class="wrap">
 <nav><a class="brand" href="#">📺 Télécommande</a>
-<span class="links"><a href="#parental">Contrôle parental</a><a href="#telecommande">Télécommande</a><a href="#vie-privee">Vie privée</a><a href="#installer">Installer</a></span></nav>
+<span class="links"><a href="#parental">Contrôle parental</a><a href="#telecommande">Télécommande</a><a href="#vie-privee">Vie privée</a><a href="#installer">Installer</a><a href="#nerds">Pour les nerds</a></span></nav>
 
 <header class="hero">
   <div class="kicker">Appli Android · Gratuite · Open source</div>
@@ -136,8 +142,8 @@ small{color:var(--muted)}
       <p class="compat">Le temps se compte par enfant : avec deux profils, chacun a ses 45 min de YouTube. Le profil Parents n'a aucune limite.</p>
     </div>
     <div class="perapp-shots">
-      <figure><img src="applis.webp" width="420" height="401" loading="lazy" alt="Liste des applis de la TV avec leurs règles : Disney+ le week-end de 14 h à 18 h, Netflix 1 h par jour, Twitch bloquée, YouTube 45 min par jour, france.tv sans règle."><figcaption>Toutes les applis de la TV, chacune avec sa règle</figcaption></figure>
-      <figure><img src="regle-appli.webp" width="420" height="640" loading="lazy" alt="Réglage de Disney+ : limite par jour, jours autorisés samedi et dimanche, horaires de 14 h à 18 h, bouton Bloquer cette appli."><figcaption>Disney+ : le week-end, de 14 h à 18 h</figcaption></figure>
+      <figure><img src="applis.webp" width="420" height="427" loading="lazy" alt="Liste des applis de la TV avec leurs règles : Disney+ le week-end de 14 h à 18 h, Netflix 1 h par jour, Twitch bloquée, YouTube 45 min par jour, france.tv sans règle."><figcaption>Toutes les applis de la TV, chacune avec sa règle</figcaption></figure>
+      <figure><img src="regle-appli.webp" width="420" height="776" loading="lazy" alt="Réglage de Disney+ : limite par jour, jours autorisés samedi et dimanche, horaires de 14 h à 18 h, bouton Bloquer cette appli."><figcaption>Disney+ : le week-end, de 14 h à 18 h</figcaption></figure>
     </div>
   </div>
 
@@ -154,8 +160,8 @@ small{color:var(--muted)}
 
   <div class="trio">
     <figure><img src="demande.gif" width="360" height="780" loading="lazy" alt="Une demande de 15 minutes de YouTube arrive sur le tableau de bord et le parent l'accepte."><figcaption><b>Accepter une demande</b>« 15 min de YouTube ? » Un geste et c'est réglé.</figcaption></figure>
-    <figure><img src="regles.gif" width="360" height="780" loading="lazy" alt="Défilement de l'écran des règles : temps par jour, couvre-feu, profils, règles par appli."><figcaption><b>Les règles, simplement</b>Temps par jour, couvre-feu, profils, et une règle par appli.</figcaption></figure>
-    <figure><img src="activite.gif" width="420" height="600" loading="lazy" alt="Statistiques : aujourd'hui par appli, la semaine en barres, les heures d'utilisation."><figcaption><b>Voir où passe le temps</b>Aujourd'hui, la semaine, les heures où la TV est allumée.</figcaption></figure>
+    <figure><img src="regles.gif" width="360" height="780" loading="lazy" alt="Défilement de l'écran des règles : temps par jour, couvre-feu, un profil par enfant, règles par appli, programmes selon l'âge."><figcaption><b>Les règles, simplement</b>Temps par jour, couvre-feu, profils, et une règle par appli.</figcaption></figure>
+    <figure><img src="activite.gif" width="420" height="720" loading="lazy" alt="Activité : qui regarde et le temps du jour, puis aujourd'hui par appli, la semaine en barres, les heures d'utilisation."><figcaption><b>Voir où passe le temps</b>Aujourd'hui, la semaine, les heures où la TV est allumée.</figcaption></figure>
   </div>
 
 
@@ -182,14 +188,15 @@ small{color:var(--muted)}
 
 <section id="telecommande">
   <div class="split">
-    <div class="media phone"><img src="telecommande.gif" width="360" height="780" loading="lazy" alt="Démonstration des gestes du pavé tactile."></div>
+    <div class="media phone"><img src="telecommande.gif" width="360" height="780" loading="lazy" alt="Démonstration du pavé tactile : glisser pour les flèches, toucher pour OK, rester appuyé pour reculer en continu, barre de droite pour le volume, barre de gauche pour les chaînes, puis Lecture et Accueil."></div>
     <div>
       <div class="kicker">2 · La télécommande</div>
       <h2>En bonus : plus besoin de chercher la télécommande sous le canapé.</h2>
       <ul class="ticks">
         <li><b>Un grand pavé tactile :</b> on glisse pour se déplacer, on touche pour valider.</li>
-        <li><b>Double-toucher à gauche ou à droite</b> pour reculer ou avancer de 10 secondes.</li>
-        <li><b>Volume, chaînes, accueil, retour, lecture</b> : tout est à portée de pouce.</li>
+        <li><b>Glisser puis rester appuyé</b> : la flèche se répète, pour reculer ou avancer en continu comme avec la télécommande d'origine.</li>
+        <li><b>Volume à droite, chaînes à gauche</b> : deux barres le long du pavé, on touche ou on fait glisser.</li>
+        <li><b>Retour, accueil, lecture</b> dans la barre du bas, à portée de pouce. Double-toucher à gauche ou à droite pour reculer ou avancer de 10 secondes.</li>
         <li><b>Le clavier du téléphone</b> pour taper une recherche, au lieu de la lettre par lettre.</li>
         <li><b>Ce qui passe à l'écran</b> s'affiche en haut, avec des raccourcis adaptés.</li>
       </ul>
@@ -292,6 +299,69 @@ small{color:var(--muted)}
   <details><summary>Pourquoi Netflix n'est-il pas filtré par âge ?</summary><p>Netflix ne laisse aucune autre appli lire son écran ni savoir ce qui passe. Télécommande y applique le temps et les horaires ; pour l'âge, réglez le contrôle parental de Netflix : <a href="#netflix">le guide est ici</a>.</p></details>
   <details><summary>Ma TV est-elle compatible ?</summary><p>Le contrôle parental fonctionne sur les box et TV Android TV / Google TV (Android 6 et plus). Il est testé sur Freebox Pop. La télécommande seule fonctionne avec beaucoup plus d'appareils.</p></details>
   <details><summary>Je trouve un bug, je fais comment ?</summary><p>Ouvrez un ticket sur <a href="https://github.com/breizh-apps56612/Bzh_remote_parental_control/issues">GitHub</a>, idéalement avec le journal de l'appli (menu ⋮ › Journal de diagnostic).</p></details>
+</section>
+
+<section id="nerds">
+  <div class="kicker">5 · Pour les nerds</div>
+  <h2>Sous le capot.</h2>
+  <p class="lead">Comment le téléphone et la TV se parlent, sur quels ports, ce qui tourne sur la TV, et ce qui sort (ou pas) de la maison. Tout est vérifiable dans le <a href="https://github.com/breizh-apps56612/Bzh_remote_parental_control">code source</a>.</p>
+
+  <div class="cards">
+    <div class="card nerd"><div class="ico">🔗</div><h3>Le lien téléphone ↔ appli Box</h3>
+      <ul>
+        <li><b>TCP 7363</b>, chiffré en <b>TLS avec certificat des deux côtés</b> : chaque appareil génère sa propre clé RSA 2048 et un certificat auto-signé.</li>
+        <li><b>Appairage SPAKE2</b> (RFC 9382, groupe MODP 2048 bits de la RFC 3526) avec le code à 6 chiffres affiché sur la TV. Le code n'est jamais envoyé : un intrus ne peut tester qu'un code à la fois, en direct, contre la vraie box. Code valable 2 minutes, 3 essais.</li>
+        <li>Les <b>empreintes SHA-256 des deux certificats</b> entrent dans la clé finale : une interception (deux liaisons TLS différentes) fait échouer la confirmation.</li>
+        <li>Ensuite, <b>épinglage</b> : la box n'accepte que les téléphones appairés, le téléphone n'accepte que l'empreinte de sa box.</li>
+        <li>Messages : une ligne JSON par message, 256 Ko maximum tant que l'appareil n'est pas appairé.</li>
+      </ul></div>
+    <div class="card nerd"><div class="ico">🏠</div><h3>Le fonctionnement local</h3>
+      <ul>
+        <li><b>Aucun serveur central.</b> Les règles vivent sur la TV et s'appliquent même téléphone éteint ou hors de la maison.</li>
+        <li>Sur la TV, un <b>service d'accessibilité</b> voit quelle appli est au premier plan et lit le texte de l'écran (titre, classification) ; c'est analysé sur la TV et seul le titre en cours va au téléphone, les <b>statistiques d'utilisation</b> d'Android donnent les durées, le <b>guide TV</b> (<code>READ_TV_LISTINGS</code>) donne la classification des programmes.</li>
+        <li>Les réglages de la box sont stockés en <b>AES-256</b> (EncryptedSharedPreferences, clé dans le Keystore Android).</li>
+        <li>Côté téléphone, le code parent est validé par une <b>clé AES-GCM du Keystore</b> qui exige une empreinte « forte » : un mot de passe du téléphone ne suffit pas.</li>
+        <li>Pour installer l'appli Box, le téléphone ouvre un <b>mini-serveur HTTP temporaire</b> (port 8765, adresse aléatoire, 15 minutes au plus) qui ne sert que ce fichier.</li>
+      </ul></div>
+  </div>
+
+  <div class="card nerd" style="margin-top:16px"><div class="ico">🔌</div><h3>Protocoles et ports</h3>
+    <div class="tablewrap"><table class="ports">
+      <tr><th>Port</th><th>Usage</th><th>Notes</th></tr>
+      <tr><td>7363/tcp</td><td>Téléphone → appli Box</td><td>TLS mutuel, appairage SPAKE2, épinglage</td></tr>
+      <tr><td>6466/tcp<br>6467/tcp</td><td>Android TV / Google TV (protocole Android TV Remote v2)</td><td>Commandes en protobuf sur TLS (6466) ; appairage par code sur 6467</td></tr>
+      <tr><td>5353/udp</td><td>mDNS / DNS-SD</td><td>Découverte des TV : <code>_androidtvremote2._tcp</code></td></tr>
+      <tr><td>1900/udp</td><td>SSDP + DIAL</td><td>Retrouver l'appli YouTube de la TV pour l'associer sans code</td></tr>
+      <tr><td>8765/tcp</td><td>Mini-serveur du téléphone</td><td>Envoi de l'appli Box à la TV pendant l'installation, puis fermé</td></tr>
+      <tr><td>8002 / 8001</td><td>Samsung Tizen</td><td>WebSocket sécurisé (8002), repli 8001 sur les modèles 2016-2017</td></tr>
+      <tr><td>3001 / 3000</td><td>LG webOS</td><td>WebSocket sécurisé (3001), repli 3000</td></tr>
+      <tr><td>8060</td><td>Roku (ECP)</td><td>HTTP, sans authentification côté Roku</td></tr>
+      <tr><td>1925</td><td>Philips JointSpace</td><td>TV Philips non-Android</td></tr>
+      <tr><td>55000</td><td>Panasonic Viera</td><td>SOAP non chiffré (2011-2018)</td></tr>
+      <tr><td>8080</td><td>Kodi</td><td>JSON-RPC HTTP</td></tr>
+      <tr><td>56789 / 4660</td><td>TV Vestel</td><td>DIAL et commandes TCP</td></tr>
+      <tr><td>—</td><td>Infrarouge</td><td>Émetteur IR du téléphone, s'il en a un</td></tr>
+    </table></div>
+    <p style="color:var(--muted);font-size:.9rem;margin:8px 0 0">Roku, Panasonic, Kodi et les vieux modèles en repli ne chiffrent pas leurs commandes : c'est une limite du fabricant, pas de l'appli. Le contrôle parental, lui, passe toujours par le lien chiffré 7363.</p>
+  </div>
+
+  <div class="cards">
+    <div class="card nerd"><div class="ico">🌐</div><h3>Ce qui sort de la maison</h3>
+      <ul>
+        <li><b>Les mises à jour</b> : <code>version.json</code> sur ce site, au plus une fois par jour. L'APK téléchargé est refusé si son SHA-256 ne correspond pas <b>ou</b> s'il n'est pas signé avec la même clé que l'appli installée.</li>
+        <li><b>YouTube</b>, seulement si vous utilisez ses raccourcis : association d'écran (API Lounge), titres et miniatures.</li>
+        <li><b>SponsorBlock</b> (passer les sponsors) : seuls les 4 premiers caractères du hachage de l'identifiant de la vidéo sont envoyés ; le serveur ne sait pas ce qui est regardé.</li>
+        <li><b>Le journal de diagnostic</b> reste sur le téléphone. Il ne part que si vous l'envoyez vous-même.</li>
+        <li>Pas de compte, pas de statistiques d'audience, pas de traceur, pas de publicité.</li>
+      </ul></div>
+    <div class="card nerd"><div class="ico">⚖️</div><h3>Éthique et sécurité</h3>
+      <ul>
+        <li><b>Transparent pour l'enfant</b> : la TV montre qui regarde, le temps qu'il reste et pourquoi c'est bloqué. Il peut demander du temps plutôt que contourner. Aucune caméra, aucun micro, aucune image de l'écran enregistrée côté TV.</li>
+        <li><b>Contre la triche</b> : 5 codes faux imposent une pause sur la TV comme sur le téléphone, une empreinte ajoutée après coup n'est pas acceptée, les Paramètres de la TV sont protégés.</li>
+        <li><b>Chaîne de build ouverte</b> : les APK sont compilés et signés par GitHub Actions à partir du code public (GPL-3.0).</li>
+        <li><b>Limites assumées</b> : une remise à zéro de la TV efface l'appli Box ; Netflix ne laisse pas lire son écran, donc pas de filtre par âge dedans ; le réseau local doit rester le vôtre (Wi-Fi protégé).</li>
+      </ul></div>
+  </div>
 </section>
 
 <footer>Télécommande · logiciel libre sous licence GPL-3.0 · <a href="https://github.com/breizh-apps56612/Bzh_remote_parental_control">code source</a><br>Les captures montrent des profils fictifs.</footer>

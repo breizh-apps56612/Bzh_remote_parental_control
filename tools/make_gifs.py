@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fabrique les GIF animés du site à partir des vraies captures de l'appli (Robolectric)."""
-import math, os, shutil, subprocess, sys
+import json, math, os, shutil, subprocess, sys
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 SRC = os.environ.get("SCREENS_DIR", "app/build/screens")
@@ -21,6 +21,16 @@ def load(name):
     if not os.path.exists(p):
         p = f"{SRC}/frames/{name}.png"
     return Image.open(p).convert("RGB")
+
+
+def pos(name):
+    """Positions des éléments notées par les tests de capture (px écran 1080×2400)."""
+    with open(f"{SRC}/{name}.json") as f:
+        return json.load(f)
+
+
+def center(b):
+    return (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
 
 
 def rounded(im, r):
@@ -83,7 +93,7 @@ def trail(img, pts, alpha=1.0):
     d = ImageDraw.Draw(ov)
     for i in range(1, len(pts)):
         a = int(150 * alpha * i / len(pts))
-        d.line((pts[i - 1], pts[i]), fill=(185, 160, 255, a), width=10 * S)
+        d.line((pts[i - 1], pts[i]), fill=(120, 150, 255, a), width=10 * S)
     img.alpha_composite(ov.filter(ImageFilter.GaussianBlur(2 * S)))
 
 
@@ -98,7 +108,15 @@ def caption(img, text, y, alpha=1.0, size=17, sub=None):
     x0 = (img.size[0] - tw) / 2 - pad
     ov = Image.new("RGBA", img.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(ov)
-    d.rounded_rectangle((x0, y, x0 + tw + 2 * pad, y + h), h / 2, fill=(139, 108, 255, int(235 * alpha)))
+    w = int(tw + 2 * pad)
+    grad = Image.new("RGBA", (w, int(h)))
+    gd = ImageDraw.Draw(grad)
+    for x in range(w):  # dégradé Aurora : indigo -> sarcelle
+        t = x / max(1, w - 1)
+        gd.line((x, 0, x, h), fill=(int(75 + (11 - 75) * t), int(72 + (135 - 72) * t), int(224 + (131 - 224) * t), int(240 * alpha)))
+    m = Image.new("L", grad.size, 0)
+    ImageDraw.Draw(m).rounded_rectangle((0, 0, w - 1, int(h) - 1), h / 2, fill=255)
+    ov.paste(grad, (int(x0), int(y)), m)
     d.text((img.size[0] / 2, y + h / 2), text, font=f, fill=(255, 255, 255, int(255 * alpha)), anchor="mm")
     img.alpha_composite(ov)
 
@@ -174,13 +192,36 @@ def remote():
             finger(c, *P(*p), alpha=1 if t < 0.7 else (1 - t) / 0.3, ripple=min(1, t * 1.6))
             caption(c, text, cy); g.add(c)
 
+    q = pos("00-telecommande")
+    l, t, r, btm = q["pad"]
+    cx, cyy = center(q["pad"])
+    strip = 46 * q["density"]
+    volx, chx = r - strip / 2 - 12, l + strip / 2 + 12
+
+    def hold_left(text, s=2.2):
+        """Glisser vers la gauche puis garder le doigt posé : retour en continu."""
+        a, z = (cx + 80, cyy), (cx - 170, cyy)
+        n = sec(0.5); pts = []
+        for i in range(n):
+            e = ease(i / (n - 1))
+            pts.append(P(a[0] + (z[0] - a[0]) * e, a[1]))
+            c = base(); trail(c, pts[-8:]); finger(c, *pts[-1]); caption(c, text, cy); g.add(c)
+        m = sec(s)
+        for i in range(m):
+            c = base()
+            # le doigt reste posé : ondes répétées comme les appuis envoyés en continu
+            finger(c, *pts[-1], ripple=(i % sec(0.45)) / sec(0.45))
+            caption(c, text, cy); g.add(c)
+
     still("Le téléphone devient la télécommande", 1.4)
-    swipe("Glisser : flèche droite", (540, 1090), (860, 1090))
-    swipe("Glisser : flèche bas", (540, 900), (540, 1300))
-    tap("Toucher : OK", (540, 1090))
-    tap("Volume +", (192, 1740))
-    tap("Lecture / pause", (640, 1900))
-    tap("Accueil", (440, 1700))
+    swipe("Glisser : flèche droite", (cx - 120, cyy), (cx + 220, cyy))
+    swipe("Glisser : flèche bas", (cx, cyy - 260), (cx, cyy + 200))
+    tap("Toucher : OK", (cx, cyy))
+    hold_left("Rester appuyé : retour en continu")
+    tap("Barre de droite : volume +", (volx, t + 120))
+    tap("Barre de gauche : chaîne suivante", (chx, t + 120))
+    tap("Lecture / pause", center(q["play"]))
+    tap("Accueil", center(q["home"]))
     still("Le téléphone devient la télécommande", 0.6)
     g.save()
 
@@ -255,7 +296,8 @@ def request():
         return c
     for i in range(sec(1.8)):
         g.add(fr(0, "La TV demande 15 min de YouTube"))
-    fx, fy = ox + 9 * S + 330 * k, oy + 9 * S + 670 * k
+    ax, ay = center(pos("01-tableau-de-bord")["accept"])
+    fx, fy = ox + 9 * S + ax * k, oy + 9 * S + ay * k
     m = sec(0.9)
     for i in range(m):
         t = i / (m - 1)
@@ -273,7 +315,8 @@ def request():
 # ---------- 4. Les règles (défilement réel) ----------
 def rules():
     g = Gif("regles", 360, 780)
-    frames = [phone(load(f"regles-{i:02d}"), 300)[0] for i in range(41)]
+    N = len([f for f in os.listdir(f"{SRC}/frames") if f.startswith("regles-")])
+    frames = [phone(load(f"regles-{i:02d}"), 300)[0] for i in range(N)]
     ox, oy = (g.w * S - frames[0].size[0]) // 2, 14 * S
     cy = 726 * S
 
@@ -284,41 +327,42 @@ def rules():
         return c
 
     def label(i):
-        return "Temps par jour, couvre-feu" if i < 14 else ("Un profil par enfant" if i < 27 else "Appli par appli")
+        f = i / (N - 1)
+        return ("Temps par jour, couvre-feu" if f < 0.31 else "Un profil par enfant" if f < 0.56
+                else "Appli par appli" if f < 0.78 else "Programmes selon l'âge")
     for _ in range(sec(1.2)):
         g.add(fr(0, label(0)))
-    for i in range(41):
+    pauses = {round(N * 0.41), round(N * 0.66)}
+    for i in range(N):
         g.add(fr(i, label(i)), 2)
-        if i in (13, 26):
+        if i in pauses:
             for _ in range(sec(1.0)):
                 g.add(fr(i, label(i)))
     for _ in range(sec(1.4)):
-        g.add(fr(40, label(40)))
-    for i in range(40, -1, -4):
+        g.add(fr(N - 1, label(N - 1)))
+    for i in range(N - 1, -1, -6):
         g.add(fr(i, ""))
     g.save()
 
 
 # ---------- 5. Les statistiques (onglets réels) ----------
 def stats():
-    W = 420
-    g = Gif("activite", W, 600)
-    off = {0: 164, 1: 40, 2: 40}
+    W, H = 420, 720
+    g = Gif("activite", W, H)
+    q = pos("activite")
+    top, bot = q["hero"][1] - 30, 2040  # de l'anneau « qui regarde » jusqu'aux barres de la semaine
+    w = W * S - 40 * S
+    k = w / 1080
     crops = {}
     for t in range(3):
-        im = load(f"activite-{t}")
-        cr = im.crop((0, off[t] - 30, 1080, off[t] - 30 + 1290))
-        w = W * S - 40 * S
+        cr = load(f"activite-{t}").crop((0, top, 1080, bot))
         h = round(w * cr.size[1] / cr.size[0])
         cr = cr.resize((w, h), Image.LANCZOS)
         card = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         card.paste(cr, (0, 0), rounded(cr, 28 * S))
         crops[t] = card
-    k = (W * S - 40 * S) / 1080
     ox, oy = 20 * S, 14 * S
-    cy = 530 * S
-    tabs = {0: 267, 1: 580, 2: 892}  # x des onglets, écran 1080
-    tab_y = (off[1] + 175 - (off[1] - 30))  # y de la rangée d'onglets dans la découpe
+    cy = (H - 62) * S
 
     def fr(a, b, t, text, fing=None):
         c = g.canvas()
@@ -333,7 +377,8 @@ def stats():
         a, b = seq[j], seq[j + 1]
         for _ in range(sec(2.0)):
             g.add(fr(a, a, 0, names[a]))
-        fx, fy = ox + tabs[b] * k, oy + tab_y * k
+        tx, ty = center(q[f"tab{b}"])
+        fx, fy = ox + tx * k, oy + (ty - top) * k
         m = sec(0.7)
         for i in range(m):
             t = i / (m - 1)
