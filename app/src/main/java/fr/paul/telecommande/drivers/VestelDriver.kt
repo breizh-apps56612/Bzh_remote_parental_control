@@ -25,6 +25,7 @@ class VestelDriver(device: Device) : Driver(device) {
 
     enum class Method(val id: String, val label: String) {
         SMART_CENTER("sc", "SmartCenter (HTTP)"),
+        SMART_CENTER_XML("sx", "SmartCenter (HTTP, XML complet)"),
         VIRTUAL_REMOTE("vr", "télécommande virtuelle (HTTP)"),
         TCP("tcp", "port 4660");
 
@@ -47,7 +48,7 @@ class VestelDriver(device: Device) : Driver(device) {
     /** Chemins que la TV accepte au niveau réseau (ne prouve pas qu'elle réagit aux touches). */
     suspend fun available(): List<Method> = withContext(Dispatchers.IO) {
         val list = mutableListOf<Method>()
-        if (httpStatus("GET", "/apps/SmartCenter") == 200) list += Method.SMART_CENTER
+        if (httpStatus("GET", "/apps/SmartCenter") == 200) { list += Method.SMART_CENTER; list += Method.SMART_CENTER_XML }
         if (portOpen(device.host, dialPort)) list += Method.VIRTUAL_REMOTE
         if (portOpen(device.host, TCP_PORT)) list += Method.TCP
         DiagLog.log("VESTEL", "Chemins ouverts sur ${device.host} : ${list.joinToString { it.id }.ifBlank { "aucun" }}")
@@ -65,7 +66,9 @@ class VestelDriver(device: Device) : Driver(device) {
     suspend fun sendCode(m: Method, code: Int) = withContext(Dispatchers.IO) {
         val result = runCatching {
             when (m) {
-                Method.SMART_CENTER -> httpStatus("POST", "/apps/SmartCenter", "<remote><key code=$code /></remote>", "application/xml")
+                // Format des applis Vestel / Telefunken : XML sans guillemets, sans type de contenu.
+                Method.SMART_CENTER -> httpStatus("POST", "/apps/SmartCenter", "<remote><key code=$code/></remote>", null)
+                Method.SMART_CENTER_XML -> httpStatus("POST", "/apps/SmartCenter", "<?xml version=\"1.0\" ?><remote><key code=\"$code\" /></remote>", "text/xml; charset=utf-8")
                 Method.VIRTUAL_REMOTE -> httpStatus("POST", "/apps/vr/remote", "<?xml version=\"1.0\" ?><remote><key code=\"$code\"/></remote>", "text/xml")
                 Method.TCP -> { tcpSend(code); 0 }
             }
@@ -97,11 +100,11 @@ class VestelDriver(device: Device) : Driver(device) {
     }
 
     /** Renvoie le code HTTP, ou -1 si la TV ne répond pas. */
-    private fun httpStatus(method: String, path: String, body: String? = null, type: String = "text/plain", origin: String? = null): Int {
+    private fun httpStatus(method: String, path: String, body: String? = null, type: String? = "text/plain", origin: String? = null): Int {
         val req = Request.Builder().url("http://${device.host}:$dialPort$path").header("Connection", "close")
         origin?.let { req.header("Origin", it) }
         when (method) {
-            "POST" -> req.post((body ?: "").toRequestBody(type.toMediaType()))
+            "POST" -> req.post((body ?: "").toRequestBody(type?.toMediaType()))
             else -> req.get()
         }
         return runCatching { Net.client.newCall(req.build()).execute().use { it.code } }.getOrDefault(-1)

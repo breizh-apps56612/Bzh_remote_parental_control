@@ -73,8 +73,15 @@ object VestelSetup {
         val msg = if (unreachable)
             "La TV ne répond pas à ${device.host}.\n\nVérifiez qu'elle est allumée et connectée au même Wi-Fi que le téléphone, puis relancez le test (appui long sur la TV > « Tester la télécommande »)."
         else
-            "La TV est bien sur le réseau, mais elle n'a réagi à aucune méthode.\n\nOuvrez la télécommande, menu ⋮ > « Journal de diagnostic » > « Analyser avec Claude » : le journal contient les réponses de la TV."
-        AlertDialog.Builder(activity).setTitle("La TV n'a pas réagi").setMessage(msg)
-            .setPositiveButton("OK") { _, _ -> onDone() }.setCancelable(false).show()
+            "La TV est bien sur le réseau, mais elle refuse encore les touches envoyées par le Wi-Fi.\n\n" +
+            "Sur ces TV, il faut l'autoriser une fois, avec la télécommande de la TV :\n" +
+            "Menu (ou Paramètres) > Système > Plus > « Télécommande virtuelle » : Activé.\n" +
+            "Activez aussi, si vous le voyez, « Réveil par réseau » / « Wake on LAN ».\n\n" +
+            "Puis touchez « Refaire le test »."
+        val b = AlertDialog.Builder(activity).setTitle("La TV n'a pas réagi").setMessage(msg).setCancelable(false)
+        if (unreachable) b.setPositiveButton("OK") { _, _ -> onDone() }
+        else b.setPositiveButton("Refaire le test") { _, _ -> probe(activity, device, onDone) }
+            .setNegativeButton("Plus tard") { _, _ -> onDone() }
+        b.show()
     }
 }
