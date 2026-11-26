@@ -3,14 +3,12 @@
      fenêtres de plantage (diagnostic). Contenu des fenêtres : écrire le texte envoyé par le téléphone, repérer
      « l'appli s'est arrêtée », et lire le titre et la classification (7+, -12, violence…) quand le parent a fixé
      des règles de programmes. Rien n'est envoyé ailleurs qu'au téléphone du parent. Gestes : vraie souris.
-     Lecteur d'écran muet : les applis de films (Netflix…) ne décrivent leur écran qu'à un lecteur d'écran ; la TV
-     se déclare comme tel pour lire titres et classifications, sans jamais parler. Touche OK : seulement repérée
+     Touche OK : seulement repérée
      (jamais bloquée ni enregistrée) pour vérifier la classification au moment où l'on lance la lecture. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeViewFocused|typeViewClicked|typeViewSelected|typeViewAccessibilityFocused|typeViewHoverEnter"
-    android:accessibilityFeedbackType="feedbackSpoken|feedbackGeneric"
-    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows|flagReportViewIds|flagRequestTouchExplorationMode|flagRequestFilterKeyEvents"
-    android:canRequestTouchExplorationMode="true"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows|flagReportViewIds|flagRequestFilterKeyEvents"
     android:canRequestFilterKeyEvents="true"
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="true"
