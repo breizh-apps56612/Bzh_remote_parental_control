@@ -164,7 +164,8 @@ class TvControlService : Service() {
         update()
         val type = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0
         ServiceCompat.startForeground(this, ControlNotification.ID, notification(), type)
-        if (poll?.isActive != true) poll = scope.launch { while (isActive) { refresh(); delay(15_000) } }
+        if (poll?.isActive != true) poll = scope.launch { while (isActive) { if (!stillReachable()) break; refresh(); delay(15_000) } }
+        watchNetwork()
         return START_NOT_STICKY
     }
 
@@ -173,6 +174,46 @@ class TvControlService : Service() {
     private fun seek(s: Int) { device?.let { ControlNotification.seek(this, it, s) } }
 
     private fun toggle() { key(RemoteKey.PLAY_PAUSE); playing = !playing; update(); notifyAgain() }
+
+    private var misses = 0
+    private var netCallback: android.net.ConnectivityManager.NetworkCallback? = null
+
+    /** Le téléphone est-il sur un réseau local (Wi-Fi ou Ethernet) ? Sans cela, aucune TV n'est joignable. */
+    private fun onLocalNetwork(): Boolean {
+        val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return true
+        if (Build.VERSION.SDK_INT < 23) return cm.activeNetworkInfo?.type.let { it == android.net.ConnectivityManager.TYPE_WIFI || it == android.net.ConnectivityManager.TYPE_ETHERNET }
+        return cm.allNetworks.any { n -> cm.getNetworkCapabilities(n)?.let {
+            it.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) || it.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET) } == true }
+    }
+
+    /**
+     * La TV répond-elle ? Hors Wi-Fi : non, tout de suite. Sinon, deux vérifications ratées d'affilée (~15 s d'écart).
+     * Sinon le lecteur est retiré ; il revient à la prochaine ouverture de l'appli.
+     */
+    private suspend fun stillReachable(): Boolean {
+        val d = device ?: return false
+        if (!d.type.needsHost) return true  // infrarouge : pas de réseau à vérifier
+        val ok = onLocalNetwork() && kotlinx.coroutines.withContext(Dispatchers.IO) {
+            runCatching { java.net.Socket().use { it.connect(java.net.InetSocketAddress(d.host, d.port), 2500) } }.isSuccess
+        }
+        misses = if (ok) 0 else if (!onLocalNetwork()) 2 else misses + 1
+        if (misses >= 2) {
+            DiagLog.log("CONTROLE", if (onLocalNetwork()) "${d.name} ne répond plus : lecteur des réglages rapides retiré" else "Plus de Wi-Fi : lecteur des réglages rapides retiré")
+            kotlinx.coroutines.withContext(Dispatchers.Main) { stopSelf() }
+            return false
+        }
+        return true
+    }
+
+    /** Perte du Wi-Fi : vérification immédiate, sans attendre le prochain passage. */
+    private fun watchNetwork() {
+        if (netCallback != null || Build.VERSION.SDK_INT < 24) return
+        val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        val cb = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onLost(network: android.net.Network) { scope.launch { delay(1_000); stillReachable() } }
+        }
+        if (runCatching { cm.registerDefaultNetworkCallback(cb) }.isSuccess) netCallback = cb
+    }
 
     /** Ce qui passe sur la TV, d'après l'appli Box (titre du programme, sinon nom de l'appli). */
     private suspend fun refresh() {
@@ -232,6 +273,8 @@ class TvControlService : Service() {
     private fun notifyAgain() { runCatching { getSystemService(NotificationManager::class.java)?.notify(ControlNotification.ID, notification()) } }
 
     override fun onDestroy() {
+        netCallback?.let { cb -> runCatching { getSystemService(android.net.ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } }
+        netCallback = null
         scope.cancel()
         session?.run { isActive = false; release() }
         session = null
