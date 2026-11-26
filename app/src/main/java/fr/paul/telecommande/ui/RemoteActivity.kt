@@ -69,7 +69,11 @@ import java.util.Date
 import kotlin.coroutines.resume
 
 class RemoteActivity : AppCompatActivity(), PairingUi {
-    companion object { const val EXTRA_ID = "device_id" }
+    companion object {
+        const val EXTRA_ID = "device_id"
+        /** Ouvre directement le menu Administrateur (depuis Réglages). */
+        const val EXTRA_ADMIN = "admin"
+    }
 
     private lateinit var store: DeviceStore
     private lateinit var device: Device
@@ -149,6 +153,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             finish()
         }
         AuroraNav.setPrimary(this, device)
+        if (intent.getBooleanExtra(EXTRA_ADMIN, false)) window.decorView.post { showAdmin() }
         findViewById<View>(R.id.btnApps).apply {
             if (device.isSmartBox) setOnClickListener { it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); showAppsSheet() }
             else {
@@ -851,6 +856,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         tool("🔵  Souris Bluetooth") { startActivity(Intent(this, BtMouseActivity::class.java)) }
         if (device.hasBoxApp) tool("⏯️  Reprendre") { showContinue() }
         tool("⚙️  Réglages") { showSettings() }
+        if (AdminMenu.enabled(this)) tool("🛠️  Administrateur") { showAdmin() }
         tool("❓  Aide") { showHelp() }
         box0.addView(tools)
 
@@ -939,6 +945,22 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             true
         }
         menu.show()
+    }
+
+    /** Menu caché Administrateur, avec les outils propres à la connexion en cours. */
+    private fun showAdmin() {
+        val voiceFile = java.io.File(filesDir, "voix-derniere.wav")
+        AdminMenu.open(this, device, AdminMenu.RemoteTools(
+            diagnostic = { showDiagnostic() },
+            editHost = { editHost() },
+            replayVoice = if (voiceFile.exists()) ({
+                runCatching {
+                    android.media.MediaPlayer().apply { setDataSource(voiceFile.path); setOnCompletionListener { it.release() }; prepare(); start() }
+                    Ui.toast(this, "Lecture de ce que la TV a reçu…")
+                }.onFailure { Ui.toast(this, "Lecture impossible") }
+                Unit
+            }) else null
+        ))
     }
 
     private fun showSettings() {

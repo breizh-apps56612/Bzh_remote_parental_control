@@ -56,6 +56,15 @@ object DiagLog {
 
     fun clear() { io.execute { current()?.delete(); old()?.delete() } }
 
+    /** Les [n] dernières lignes du journal du téléphone (pour l'afficher dans le menu Administrateur). */
+    fun tail(n: Int = 300): String = runCatching {
+        val lines = (old()?.takeIf { it.exists() }?.readLines() ?: emptyList()) + (current()?.takeIf { it.exists() }?.readLines() ?: emptyList())
+        lines.takeLast(n).joinToString("\n")
+    }.getOrDefault("")
+
+    /** Taille totale du journal, en octets. */
+    fun size(): Long = (current()?.length() ?: 0L) + (old()?.length() ?: 0L)
+
     // ---------- Lecture lisible des messages du protocole Android TV ----------
 
     private val names = mapOf(

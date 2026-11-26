@@ -139,7 +139,8 @@ object AuroraNav {
             "Ajouter un appareil" to { a.startActivity(Intent(a, MainActivity::class.java).putExtra(MainActivity.EXTRA_ADD, true).top()) },
             "Ma maison : toutes les TV" to { a.startActivity(Intent(a, HomeOverviewActivity::class.java)) },
             "Rechercher une mise à jour" to { PhoneUpdate.checkAndOffer(a, force = true) }
-        )
+        ) + if (AdminMenu.enabled(a) && a is androidx.appcompat.app.AppCompatActivity)
+            listOf("🛠️  Administrateur" to { AdminMenu.open(a, primary(a)) }) else emptyList()
         AlertDialog.Builder(a).setTitle("Réglages")
             .setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }
             .setNegativeButton("Fermer", null).show()

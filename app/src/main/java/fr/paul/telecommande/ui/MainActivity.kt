@@ -118,6 +118,8 @@ class MainActivity : AppCompatActivity() {
         texts.addView(TextView(this).apply {
             text = if (hour >= 18 || hour < 5) "Bonsoir" else "Bonjour"
             textSize = 30f; typeface = Ui.bold; letterSpacing = -0.02f; setTextColor(col(R.color.ink)); includeFontPadding = false
+            // Accès caché au menu Administrateur : 7 touches rapprochées
+            setOnClickListener { AdminMenu.secretTap(this@MainActivity) }
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
         row.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
         row.addView(AuroraNav.roundButton(this, R.drawable.ic_settings, "Réglages") { AuroraNav.settings(this) })
