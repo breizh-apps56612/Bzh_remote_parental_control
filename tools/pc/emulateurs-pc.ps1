@@ -1,4 +1,4 @@
-<#
+﻿<#
   Émulateurs téléphone + TV sur le PC (Windows), pour travailler en direct avec Claude.
   Claude les pilote par adb (discussion reliée au PC par l'appli Claude), vous les voyez et pouvez cliquer dedans.
 
@@ -12,6 +12,8 @@
 #>
 param([switch]$Demarrer, [switch]$Arreter, [int]$Api = 30)
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'   # téléchargements beaucoup plus rapides sous PowerShell 5.1
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Site = 'https://telecommande-box.netlify.app'
 $Tel = 'Telecommande_Telephone'; $Tv = 'Telecommande_TV'
 
@@ -21,10 +23,23 @@ function Ecrire($t) { Write-Host "» $t" -ForegroundColor Cyan }
 $Sdk = @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT, "$env:LOCALAPPDATA\Android\Sdk") | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 if (-not $Sdk) { $Sdk = "$env:LOCALAPPDATA\Android\Sdk"; New-Item -ItemType Directory -Force $Sdk | Out-Null }
 $env:ANDROID_HOME = $Sdk; $env:ANDROID_SDK_ROOT = $Sdk
-if (-not $env:JAVA_HOME) {
-  $jbr = @("$env:ProgramFiles\Android\Android Studio\jbr", "$env:LOCALAPPDATA\Programs\Android Studio\jbr") | Where-Object { Test-Path $_ } | Select-Object -First 1
-  if ($jbr) { $env:JAVA_HOME = $jbr }
+if (-not $env:JAVA_HOME -or -not (Test-Path "$env:JAVA_HOME\bin\java.exe")) {
+  $jbr = @("$env:ProgramFiles\Android\Android Studio\jbr", "$env:LOCALAPPDATA\Programs\Android Studio\jbr", "$env:LOCALAPPDATA\telecommande-jdk17") |
+    Where-Object { Test-Path "$_\bin\java.exe" } | Select-Object -First 1
+  if ($jbr) { $env:JAVA_HOME = $jbr } else { $env:JAVA_HOME = $null }
 }
+if (-not $env:JAVA_HOME -and -not $Arreter -and -not $Demarrer) {
+  # Java 17 portable (Eclipse Temurin), dans le dossier utilisateur : sans droits administrateur, sans redémarrage
+  Write-Host "» Téléchargement de Java 17 (portable, ~190 Mo)…" -ForegroundColor Cyan
+  $a = (Invoke-RestMethod 'https://api.adoptium.net/v3/assets/latest/17/hotspot?os=windows&architecture=x64&image_type=jdk')[0].binary.package
+  $zip = "$env:TEMP\jdk17.zip"; Invoke-WebRequest $a.link -OutFile $zip
+  if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne $a.checksum.ToLower()) { throw "Empreinte de Java inattendue : installation annulée." }
+  $tmp = "$env:TEMP\jdk17"; Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue; Expand-Archive $zip $tmp -Force
+  $dst = "$env:LOCALAPPDATA\telecommande-jdk17"; Remove-Item $dst -Recurse -Force -ErrorAction SilentlyContinue
+  Move-Item (Get-ChildItem $tmp -Directory | Select-Object -First 1).FullName $dst
+  $env:JAVA_HOME = $dst
+}
+if ($env:JAVA_HOME) { $env:Path = "$env:JAVA_HOME\bin;$env:Path" }
 $SdkManager = "$Sdk\cmdline-tools\latest\bin\sdkmanager.bat"
 $AvdManager = "$Sdk\cmdline-tools\latest\bin\avdmanager.bat"
 $Adb = "$Sdk\platform-tools\adb.exe"; $Emu = "$Sdk\emulator\emulator.exe"
@@ -38,7 +53,6 @@ if ($Arreter) {
 
 if (-not $Demarrer) {
   if (-not (Test-Path $SdkManager)) {
-    if (-not $env:JAVA_HOME) { throw "Java introuvable : installez Android Studio (il fournit Java), puis relancez ce script." }
     Ecrire 'Installation des outils Android (ligne de commande)…'
     $zip = "$env:TEMP\clt.zip"
     Invoke-WebRequest 'https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip' -OutFile $zip
@@ -54,9 +68,23 @@ if (-not $Demarrer) {
   if ($avds -notcontains $Tv)  { 'no' | & $AvdManager create avd -n $Tv  -k "system-images;android-$Api;android-tv;x86" -d tv_1080p | Out-Null }
 }
 
-# --- Démarrage (fenêtres visibles) ---
+# --- Accélération matérielle (WHPX de Windows, ou pilote AEHD de Google) : jamais de redémarrage demandé ---
 $accel = (& $Emu -accel-check 2>&1) -join ' '
-if ($accel -notmatch 'is installed and usable') { Write-Host "Accélération matérielle indisponible : les émulateurs seront lents, mais fonctionnent." -ForegroundColor Yellow }
+if ($accel -notmatch 'is installed and usable' -and -not $Demarrer) {
+  Write-Host "» Installation du pilote d'accélération de Google (AEHD)…" -ForegroundColor Cyan
+  & $SdkManager 'extras;google;Android_Emulator_Hypervisor_Driver' | Out-Null
+  $aehd = "$Sdk\extras\google\Android_Emulator_Hypervisor_Driver\silent_install.bat"
+  $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  if ((Test-Path $aehd) -and $admin) { & cmd /c "`"$aehd`"" | Out-Null }
+  elseif (Test-Path $aehd) { Write-Host "Relancez ce script dans un PowerShell ouvert « en tant qu'administrateur » pour installer le pilote d'accélération." -ForegroundColor Yellow }
+  $accel = (& $Emu -accel-check 2>&1) -join ' '
+}
+if ($accel -notmatch 'is installed and usable') {
+  Write-Host "Accélération matérielle indisponible : $accel" -ForegroundColor Yellow
+  Write-Host "Copiez ce message à Claude. (Aucun redémarrage n'est nécessaire pour la suite.)" -ForegroundColor Yellow
+}
+
+# --- Démarrage (fenêtres visibles) ---
 Adb start-server | Out-Null
 foreach ($e in @(@{n=$Tv; p=5556}, @{n=$Tel; p=5554})) {
   if (-not ((Adb devices) -match "emulator-$($e.p)")) {
