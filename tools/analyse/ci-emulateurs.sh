@@ -67,6 +67,27 @@ sleep 8; cap $TV 01-tv-demarrage; cap $PH 01-telephone-accueil
 vivant $TV $PKG_TV && ok "Appli Box lancée" || ko "Appli Box lancée"
 vivant $PH $PKG_PH && ok "Appli téléphone lancée" || ko "Appli téléphone lancée"
 
+# ---------- 2b. Menus rangés (Téléphone 2.6.6) : onglet Réglages sans informations mélangées aux actions ----------
+ecran() { timeout 30 adb -s $PH shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; timeout 20 adb -s $PH exec-out cat /sdcard/ui.xml 2>/dev/null; }
+toucher() { # toucher l'élément dont le texte est exactement $1 (dans le dernier écran lu, $2)
+  local b; b=$(printf '%s' "$2" | python3 -c 'import sys,re,html
+t=sys.argv[1]; x=sys.stdin.read()
+for m in re.finditer(r"<node [^>]*>", x):
+    n=m.group(0); tt=re.search(r" text=\"([^\"]*)\"", n); bb=re.search(r"bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", n)
+    if tt and bb and html.unescape(tt.group(1))==t:
+        a=list(map(int,bb.groups())); print((a[0]+a[2])//2,(a[1]+a[3])//2); break' "$1")
+  [ -n "$b" ] && timeout 20 adb -s $PH shell input tap $b && sleep 2
+}
+x=$(ecran); toucher "Passer" "$x"; x=$(ecran)
+if toucher "Réglages" "$x"; then
+  x=$(ecran); cap $PH 02-telephone-reglages
+  if [[ $x == *'MES ÉCRANS'* && $x == *"L&apos;APPLI"* || $x == *'MES ÉCRANS'* && $x == *"L'APPLI"* ]]; then
+    if [[ $x == *'text="Vos données restent chez vous"'* ]]; then ko "Réglages : actions et informations séparées" "« Vos données » encore en ligne de menu"
+    else ok "Réglages : actions et informations séparées" "Mes écrans · Enfants · L'appli, note « Vos données » en bas"; fi
+  else ko "Réglages : actions et informations séparées" "parties attendues absentes"; fi
+  timeout 20 adb -s $PH shell input keyevent KEYCODE_BACK
+else info "Réglages : onglet non atteint par le banc (vérifié par le test MenusTest du build)"; fi
+
 # ---------- 3. Sécurité du serveur de la Box (port 7363) ----------
 timeout 20 adb -s $TV forward tcp:7363 tcp:7363 >/dev/null   # 127.0.0.1:7363 ici : vu par la TV comme venant de 127.0.0.1
 timeout 20 adb -s $TV emu redir add tcp:7364:7363 >/dev/null  # 127.0.0.1:7364 ici : vu par la TV comme venant de 10.0.2.2 (un autre appareil)

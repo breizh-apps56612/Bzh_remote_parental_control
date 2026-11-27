@@ -1014,16 +1014,15 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             TileSheet.Tile("🎨", "Touches de couleur", "Rouge, vert, jaune, bleu", T.ROSE) { sheet.push(colors) },
             TileSheet.Tile("🧩", "Autres touches", "Source, menu, guide…", T.AMBER) { sheet.push(others) })
 
-        val remote = mutableListOf(
-            TileSheet.Tile("⚙️", "Réglages", "De cette télécommande", T.INDIGO) { sheet.push(settingsPage()) },
-            TileSheet.Tile("❓", "Aide", "Les gestes du pavé", T.MINT) { sheet.dismiss(); showHelp() })
-        if (AdminMenu.enabled(this)) remote += TileSheet.Tile("🛠️", "Administrateur", "Outils avancés", T.AMBER) { sheet.dismiss(); showAdmin() }
+        // Une seule entrée pour tout ce qui concerne la télécommande elle-même (réglages, dépannage) :
+        // le volet « Plus » ne mélange plus ce qu'on fait sur la TV et les options de l'appli.
+        val remote = listOf(TileSheet.Tile("⚙️", "Réglages et aide", "Voix, réglages rapides, dépannage", T.INDIGO) { sheet.push(optionsPage()) })
 
-        sheet.show(TileSheet.Page("✨", "Plus", "Outils et autres touches de ${device.name}") { sh, col ->
+        sheet.show(TileSheet.Page("✨", "Plus", "Pour piloter ${device.name}") { sh, col ->
             sh.sections(col,
-                TileSheet.Section("Outils", tools, grid = true),
-                TileSheet.Section("Touches de la TV", keysTiles),
-                TileSheet.Section("La télécommande", remote))
+                TileSheet.Section("Sur la TV", tools, grid = true),
+                TileSheet.Section("Autres touches", keysTiles),
+                TileSheet.Section("Cette télécommande", remote))
         })
     }
 
@@ -1062,17 +1061,11 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         })
     }
 
-    /** Menu ⋮ : seulement deux entrées. Le contrôle parental est dans l'onglet du bas, les touches et la souris dans « ⋯ ». */
+    /** Menu ⋮ : une seule entrée, « Réglages et aide ». Le contrôle parental est dans l'onglet du bas, les touches et la souris dans « ⋯ ». */
     private fun showMenu(anchor: View) {
         val menu = android.widget.PopupMenu(this, anchor)
-        menu.menu.add("Réglages"); menu.menu.add("Aide et dépannage")
-        menu.setOnMenuItemClickListener {
-            when (it.title.toString()) {
-                "Réglages" -> showSettings()
-                "Aide et dépannage" -> showHelp()
-            }
-            true
-        }
+        menu.menu.add("Réglages et aide")
+        menu.setOnMenuItemClickListener { showSettings(); true }
         menu.show()
     }
 
@@ -1092,52 +1085,60 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         ))
     }
 
-    /** Réglages de la télécommande, en tuiles qui basculent d'un geste (page du volet « Plus »). */
-    private fun settingsPage(): TileSheet.Page = TileSheet.Page("⚙️", "Réglages", "De la télécommande de ${device.name}") { sh, col ->
+    /**
+     * « Réglages et aide » de la télécommande : deux parties qui ne se mélangent pas.
+     * Réglages = ce qui change le comportement (bascule d'un geste) ; En cas de souci = diagnostic et journal.
+     * La mise à jour de l'appli est dans l'onglet Réglages, la saisie d'adresse dans le menu Administrateur.
+     */
+    private fun optionsPage(): TileSheet.Page = TileSheet.Page("⚙️", "Réglages et aide", device.name) { sh, col ->
         val prefs = getSharedPreferences("ui", MODE_PRIVATE)
         val voicePhone = prefs.getBoolean("voice_phone", false)
         val quick = fr.paul.telecommande.service.ControlNotification.enabled(this)
-        sh.sections(col, TileSheet.Section(null, listOf(
-            TileSheet.Tile("🎙️", "Recherche vocale", if (voicePhone) "Le téléphone écoute" else "La TV écoute", TileSheet.VIOLET) {
-                prefs.edit().putBoolean("voice_phone", !voicePhone).apply()
-                Ui.toast(this, if (!voicePhone) "Le téléphone reconnaît la voix et tape la recherche sur la TV" else "La voix est envoyée à l'Assistant de la TV")
-                sh.refresh()
-            },
-            TileSheet.Tile("⚡", "Réglages rapides", if (quick) "Télécommande présente" else "Absente", TileSheet.AMBER) {
-                if (quick) {
-                    fr.paul.telecommande.service.ControlNotification.setEnabled(this, false); Ui.toast(this, "Retirée des réglages rapides")
-                } else {
-                    fr.paul.telecommande.service.ControlNotification.setEnabled(this, true)
-                    if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
-                        androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 12)
-                    fr.paul.telecommande.service.ControlNotification.show(this, device.id)
-                    Ui.toast(this, "Télécommande ajoutée au lecteur des réglages rapides")
-                }
-                sh.refresh()
-            },
-            TileSheet.Tile("🌐", "Adresse de l'appareil", "Si la TV n'est pas trouvée", TileSheet.SKY) { sh.dismiss(); editHost() }
-        )))
+        val settings = mutableListOf<TileSheet.Tile>()
+        if (atv != null) settings += TileSheet.Tile("🎙️", "Recherche vocale", if (voicePhone) "Le téléphone écoute" else "La TV écoute", TileSheet.VIOLET) {
+            prefs.edit().putBoolean("voice_phone", !voicePhone).apply()
+            Ui.toast(this, if (!voicePhone) "Le téléphone reconnaît la voix et tape la recherche sur la TV" else "La voix est envoyée à l'Assistant de la TV")
+            sh.refresh()
+        }
+        settings += TileSheet.Tile("⚡", "Réglages rapides", if (quick) "Télécommande présente" else "Absente", TileSheet.AMBER) {
+            if (quick) {
+                fr.paul.telecommande.service.ControlNotification.setEnabled(this, false); Ui.toast(this, "Retirée des réglages rapides")
+            } else {
+                fr.paul.telecommande.service.ControlNotification.setEnabled(this, true)
+                if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 12)
+                fr.paul.telecommande.service.ControlNotification.show(this, device.id)
+                Ui.toast(this, "Télécommande ajoutée au lecteur des réglages rapides")
+            }
+            sh.refresh()
+        }
+        val trouble = helpTiles { sh.dismiss() }
+        val sections = mutableListOf(
+            TileSheet.Section("Réglages", settings),
+            TileSheet.Section("En cas de souci", trouble))
+        if (AdminMenu.enabled(this)) sections += TileSheet.Section(null, listOf(
+            TileSheet.Tile("🛠️", "Administrateur", "Outils avancés", TileSheet.AMBER) { sh.dismiss(); showAdmin() }))
+        sh.sections(col, *sections.toTypedArray())
+        col.addView(Ui.text(this, "Sur le pavé : glisser = naviguer · toucher = OK · rester appuyé à gauche ou à droite = en continu.", 12.5f, muted = true),
+            Ui.lp(this, 14))
     }
 
-    /** Ancien menu de réglages (gardé pour les appels existants) : ouvre la page du volet. */
-    private fun showSettings() { TileSheet(this).show(settingsPage()) }
+    /** Ancien menu de réglages (gardé pour les appels existants) : ouvre la page « Réglages et aide ». */
+    private fun showSettings() { TileSheet(this).show(optionsPage()) }
 
-    private fun showHelp() {
+    /** Les tuiles de dépannage, communes à « Réglages et aide » et à l'ancienne fenêtre d'aide. */
+    private fun helpTiles(close: () -> Unit): List<TileSheet.Tile> {
         val voiceFile = java.io.File(filesDir, "voix-derniere.wav")
-        val sheet = TileSheet(this)
         val tiles = mutableListOf(
-            TileSheet.Tile("🩺", "Diagnostic de connexion", "Pourquoi la TV ne répond pas", TileSheet.MINT) { sheet.dismiss(); showDiagnostic() },
-            TileSheet.Tile("📝", "Journal de diagnostic", "À envoyer en cas de problème", TileSheet.INDIGO) { sheet.dismiss(); showJournal() },
-            TileSheet.Tile("⬇️", "Mise à jour", "Rechercher une nouvelle version", TileSheet.SKY) { sheet.dismiss(); PhoneUpdate.checkAndOffer(this, force = true) })
+            TileSheet.Tile("🩺", "Diagnostic de connexion", "Pourquoi la TV ne répond pas", TileSheet.MINT) { close(); showDiagnostic() },
+            TileSheet.Tile("📝", "Journal de diagnostic", "À envoyer en cas de problème", TileSheet.INDIGO) { close(); showJournal() })
         if (voiceFile.exists()) tiles += TileSheet.Tile("🎙️", "Dernière recherche vocale", "Réécouter ce que la TV a reçu", TileSheet.VIOLET) {
             runCatching {
                 android.media.MediaPlayer().apply { setDataSource(voiceFile.path); setOnCompletionListener { it.release() }; prepare(); start() }
                 Ui.toast(this, "Lecture de ce que la TV a reçu…")
             }.onFailure { Ui.toast(this, "Lecture impossible") }
         }
-        sheet.show(TileSheet.Page("❓", "Aide et dépannage", "Glisser = naviguer · toucher = OK · rester appuyé à gauche / droite = en continu") { sh, col ->
-            sh.sections(col, TileSheet.Section(null, tiles))
-        })
+        return tiles
     }
 
     private fun showJournal() {

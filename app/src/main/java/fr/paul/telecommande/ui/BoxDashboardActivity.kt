@@ -539,21 +539,23 @@ class BoxDashboardActivity : AppCompatActivity() {
         val names = status?.optJSONObject("labels")
         val advices = fr.paul.telecommande.shared.RulesAdvisor.check(rules, { pkg -> names?.optString(pkg)?.ifBlank { null } ?: AppCatalog.name(pkg) })
             .filter { it.id !in Premium.dismissed(c, device.id) }
-        if (rules.enabled) forKid += Tile("advice", "💡", "Conseils", if (advices.isEmpty()) "Tout est cohérent" else "${advices.size} à regarder", amber) { openDetail("advice") }
-
-        val tv = mutableListOf(
-            Tile("add", "➕", "Ajouter un enfant", "${rules.profiles.count { !it.unlimited }} enfant" + if (rules.profiles.count { !it.unlimited } > 1) "s" else "", mint) { openRules(-1) },
-            Tile("all", "📋", "Toutes les règles", "Applis, programmes, horaires", indigo) { openRules(-2) },
-            Tile("wizard", "🧭", "Pas à pas", "Tout régler, une question à la fois", sky) {
-                startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
-            },
+        // Trois groupes qui ne se mélangent plus : l'enfant (activité, contrat), les règles de la maison, et la TV elle-même (technique).
+        val kidsCount = rules.profiles.count { !it.unlimited }
+        val rulesGroup = mutableListOf<Tile>()
+        if (!rules.enabled) rulesGroup += Tile("enable", "✅", "Activer les règles", "Pas à pas, en 2 minutes", mint) {
+            startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
+        }
+        if (rules.enabled) rulesGroup += Tile("advice", "💡", "Conseils", if (advices.isEmpty()) "Tout est cohérent" else "${advices.size} à regarder", amber) { openDetail("advice") }
+        rulesGroup += Tile("all", "📋", "Toutes les règles", "Applis, programmes, horaires", indigo) { openRules(-2) }
+        rulesGroup += Tile("add", "➕", "Ajouter un enfant", "$kidsCount enfant" + if (kidsCount > 1) "s" else "", mint) { openRules(-1) }
+        if (rules.enabled) rulesGroup += Tile("wizard", "🧭", "Pas à pas", "Tout régler, une question à la fois", sky) {
+            startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
+        }
+        val tv = listOf(
             Tile("health", "🩺", "Santé de la TV", "Mémoire, stockage, connexion", mint) { BoxActions.diagnostics(c, device) },
             Tile("privacy", "🔒", "Vos données", "Restent chez vous", indigo) { openDetail("privacy") },
             Tile("unpair", "⛓️", "Appairage", "Retirer cette TV", rose) { openDetail("unpair") }
         )
-        if (!rules.enabled) tv.add(0, Tile("enable", "✅", "Activer les règles", "Pas à pas, en 2 minutes", mint) {
-            startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
-        })
 
         // À la manière de « Temps d'écran » : deux résumés en widgets, puis des listes groupées
         val widgets = forKid.filter { it.id == "today" || it.id == "week" }
@@ -561,7 +563,9 @@ class BoxDashboardActivity : AppCompatActivity() {
         tileGrid(widgets)
         val rest = forKid.filter { it.id != "today" && it.id != "week" }
         if (rest.isNotEmpty()) root.addView(entryList(rest), Ui.lp(c, 14))
-        root.addView(Ui.groupTitle(c, "Toute la TV"), Ui.lp(c, 26))
+        root.addView(Ui.groupTitle(c, "Les règles de la maison"), Ui.lp(c, 26))
+        root.addView(entryList(rulesGroup), Ui.lp(c, 0))
+        root.addView(Ui.groupTitle(c, "Cette TV"), Ui.lp(c, 26))
         root.addView(entryList(tv), Ui.lp(c, 0))
     }
 

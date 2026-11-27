@@ -13,7 +13,8 @@ import fr.paul.telecommande.core.ParentalStore
 
 /**
  * Onglet « Réglages » : un vrai écran (avant, une simple liste dans une fenêtre), rangé en trois parties simples :
- * mes écrans (TV principale, ajouter, modifier), les enfants (code parent, règles), et l'appli (mise à jour, aide, version).
+ * mes écrans (TV principale, ajouter, modifier), les enfants (code parent, règles), et l'appli (mise à jour, aide, visite).
+ * Chaque ligne est une action ; les informations (version, données) sont à droite ou en note, pas mélangées aux actions.
  */
 class SettingsActivity : AppCompatActivity() {
     private lateinit var root: LinearLayout
@@ -73,16 +74,22 @@ class SettingsActivity : AppCompatActivity() {
         Ui.addRow(kids, Ui.row(c, "🛡️", "Règles et contrats des enfants", "Ouvre l'onglet Enfants") { AuroraNav.open(c, AuroraNav.Tab.KIDS) })
         body.addView(kids, Ui.lp(c, 10))
 
-        // ----- L'appli -----
+        // ----- L'appli : seulement des actions (une ligne = un geste) -----
         body.addView(Ui.groupTitle(c, "L'appli"), Ui.lp(c, 26))
         val app = Ui.group(c)
-        Ui.addRow(app, Ui.row(c, "⬇️", "Rechercher une mise à jour", "Version ${BuildConfig.VERSION_NAME}") { PhoneUpdate.checkAndOffer(c, force = true) })
-        Ui.addRow(app, Ui.row(c, "🧭", "Revoir la visite guidée", "Les 4 choses à savoir, en 30 secondes") { Tour.show(c, force = true) })
+        Ui.addRow(app, Ui.row(c, "⬇️", "Rechercher une mise à jour", null, value = BuildConfig.VERSION_NAME) { PhoneUpdate.checkAndOffer(c, force = true) })
         Ui.addRow(app, Ui.row(c, "❓", "Aide", "Les réponses aux questions courantes") { AuroraNav.open(c, AuroraNav.Tab.HELP) })
-        Ui.addRow(app, Ui.row(c, "🔒", "Vos données restent chez vous",
-            "Aucun compte, aucun serveur : tout reste sur ce téléphone et sur vos TV, échangé en chiffré."))
-        if (AdminMenu.enabled(c)) Ui.addRow(app, Ui.row(c, "🛠️", "Administrateur", "Outils avancés") { AdminMenu.open(c, main) })
+        Ui.addRow(app, Ui.row(c, "🧭", "Revoir la visite guidée", "Les 4 choses à savoir, en 30 secondes") { Tour.show(c, force = true) })
         body.addView(app, Ui.lp(c, 10))
+
+        if (AdminMenu.enabled(c)) {
+            val adm = Ui.group(c)
+            Ui.addRow(adm, Ui.row(c, "🛠️", "Administrateur", "Outils avancés") { AdminMenu.open(c, main) })
+            body.addView(adm, Ui.lp(c, 22))
+        }
+        // Une information, pas une action : en note de bas de page, comme dans les réglages d'iOS
+        body.addView(Ui.text(c, "🔒 Vos données restent chez vous : aucun compte, aucun serveur. Tout reste sur ce téléphone et sur vos TV, échangé en chiffré.",
+            12.5f, muted = true).apply { val p = Ui.dp(c, 6); setPadding(p, 0, p, 0) }, Ui.lp(c, 18))
         body.addView(AuroraNav.spacer(c))
     }
 
