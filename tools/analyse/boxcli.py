@@ -78,11 +78,17 @@ if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     if cmd == "pair": print(json.dumps(pair(sys.argv[2]), ensure_ascii=False))
     elif cmd == "nocert":
-        try: conn(False); print("ATTENTION : connexion acceptée sans certificat")
+        # En TLS 1.3, le refus du certificat absent arrive après la poignée de main : on tente donc une vraie commande.
+        try:
+            s, _ = conn(False); f = s.makefile("rwb")
+            f.write(b'{"id":"1","cmd":"status"}\n'); f.flush(); r = f.readline()
+            print("ATTENTION : connexion acceptée sans certificat :", r[:120]) if r else print("refusé (normal) : connexion fermée")
         except Exception as e: print("refusé (normal) :", e)
     elif cmd == "flood":
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 12
-        socks = [socket.create_connection((HOST, PORT)) for _ in range(n)]; time.sleep(2)
+        # FLOOD=hôte:port : les connexions muettes viennent d'une autre adresse que le vrai téléphone (autre appareil du réseau)
+        fh, fp = os.environ.get("FLOOD", "%s:%d" % (HOST, PORT)).split(":")
+        socks = [socket.create_connection((fh, int(fp))) for _ in range(n)]; time.sleep(2)
         try: print("pendant :", json.dumps(call("status"), ensure_ascii=False)[:100])
         except Exception as e: print("pendant : BLOQUÉ —", e)
         for s in socks: s.close()

@@ -66,7 +66,8 @@ vivant $TV $PKG_TV && ok "Appli Box lancée" || ko "Appli Box lancée"
 vivant $PH $PKG_PH && ok "Appli téléphone lancée" || ko "Appli téléphone lancée"
 
 # ---------- 3. Sécurité du serveur de la Box (port 7363) ----------
-adb -s $TV forward tcp:7363 tcp:7363 >/dev/null   # 127.0.0.1:7363 ici, et 10.0.2.2:7363 depuis le téléphone
+adb -s $TV forward tcp:7363 tcp:7363 >/dev/null   # 127.0.0.1:7363 ici : vu par la TV comme venant de 127.0.0.1
+adb -s $TV emu redir add tcp:7364:7363 >/dev/null  # 127.0.0.1:7364 ici : vu par la TV comme venant de 10.0.2.2 (un autre appareil)
 for i in $(seq 1 20); do timeout 5 bash -c '</dev/tcp/127.0.0.1/7363' 2>/dev/null && break; sleep 3; done
 r=$(cli nocert); [[ $r == *"refusé"* ]] && ok "Connexion sans certificat refusée" || ko "Connexion sans certificat refusée" "$r"
 r=$(cli status); [[ $r == *'"ok": false'* || $r == *"non appairé"* ]] && ok "Téléphone inconnu refusé" "${r:0:120}" || ko "Téléphone inconnu refusé" "$r"
@@ -87,7 +88,8 @@ else
   info "Appairage non testé" "code illisible sur la capture (lecture automatique), voir 02-tv-code-appairage.png"
 fi
 
-r=$(cli flood 12); [[ $r == *"BLOQUÉ"* ]] && ko "Résiste à 12 connexions muettes" "$r" || ok "Résiste à 12 connexions muettes" "${r:0:120}"
+# Un autre appareil ouvre 12 connexions muettes : le téléphone du parent doit toujours passer
+r=$(FLOOD=127.0.0.1:7364 cli flood 12); [[ $r == *"BLOQUÉ"* || $r != *'"ok"'* ]] && ko "Parent servi malgré 12 connexions muettes d'un autre appareil" "$r" || ok "Parent servi malgré 12 connexions muettes d'un autre appareil"
 cli profond 5000 >/dev/null; sleep 3
 vivant $TV $PKG_TV && ok "Message JSON très imbriqué : Box toujours en marche" || ko "Message JSON très imbriqué : la Box a planté"
 
