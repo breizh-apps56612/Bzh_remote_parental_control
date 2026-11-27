@@ -11,7 +11,9 @@
   Téléphone = emulator-5554, TV = emulator-5556. Box joignable sur 127.0.0.1:7363 (et 10.0.2.2:7363 depuis le téléphone).
 #>
 param([switch]$Demarrer, [switch]$Arreter, [int]$Api = 30)
-$ErrorActionPreference = 'Stop'
+# « Continue » : sous PowerShell 5.1, « Stop » transforme le moindre message d'adb/sdkmanager en erreur fatale.
+# Les vraies erreurs sont arrêtées explicitement par « throw ».
+$ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'   # téléchargements beaucoup plus rapides sous PowerShell 5.1
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Site = 'https://telecommande-box.netlify.app'
