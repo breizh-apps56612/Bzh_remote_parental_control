@@ -62,7 +62,17 @@ if (-not $Demarrer) {
   }
   Ecrire "Images Android $Api (téléphone + TV)…"
   (@('y') * 30) | & $SdkManager --licenses | Out-Null
-  & $SdkManager 'platform-tools' 'emulator' "system-images;android-$Api;default;x86_64" "system-images;android-$Api;android-tv;x86" | Out-Null
+  # Un paquet à la fois, 4 essais chacun : une coupure réseau (antivirus, Wi-Fi) ne fait pas tout échouer
+  foreach ($p in @('platform-tools', 'emulator', "system-images;android-$Api;default;x86_64", "system-images;android-$Api;android-tv;x86")) {
+    $verif = @{ 'platform-tools' = "$Sdk\platform-tools\adb.exe"; 'emulator' = "$Sdk\emulator\emulator.exe" }[$p]
+    if (-not $verif) { $verif = "$Sdk\system-images\" + (($p -split ';')[1..3] -join '\') + "\system.img" }
+    for ($essai = 1; $essai -le 4 -and -not (Test-Path $verif); $essai++) {
+      Ecrire "  $p (essai $essai)…"
+      & $SdkManager $p 2>&1 | Where-Object { $_ -match 'Warning|Error' } | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkYellow }
+      if (-not (Test-Path $verif)) { Start-Sleep 10 }
+    }
+    if (-not (Test-Path $verif)) { throw "Téléchargement impossible de $p après 4 essais (connexion coupée ? antivirus ?). Relancez le script : il reprend où il s'est arrêté." }
+  }
   $avds = & $Emu -list-avds
   if ($avds -notcontains $Tel) { 'no' | & $AvdManager create avd -n $Tel -k "system-images;android-$Api;default;x86_64" -d pixel | Out-Null }
   if ($avds -notcontains $Tv)  { 'no' | & $AvdManager create avd -n $Tv  -k "system-images;android-$Api;android-tv;x86" -d tv_1080p | Out-Null }
