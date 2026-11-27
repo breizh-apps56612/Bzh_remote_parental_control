@@ -337,7 +337,7 @@ class Overlays(private val ctx: Context) {
     private var who: View? = null
     val whoVisible get() = who != null
 
-    fun showWhoWatches(profiles: List<fr.paul.telecommande.shared.Profile>, lastId: String? = null, needsPin: (fr.paul.telecommande.shared.Profile) -> Boolean = { it.unlimited }, onPick: (fr.paul.telecommande.shared.Profile) -> Unit) = ui {
+    fun showWhoWatches(profiles: List<fr.paul.telecommande.shared.Profile>, lastId: String? = null, needsPin: (fr.paul.telecommande.shared.Profile) -> Boolean = { it.unlimited }, cancelable: Boolean = false, onPick: (fr.paul.telecommande.shared.Profile) -> Unit) = ui {
         if (who != null) return@ui
         // écran opaque : c'est un passage obligé, rien ne doit transparaître derrière
         val root = BoxUi.Fit(ctx).apply { background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xFF0B0912.toInt(), 0xFF050508.toInt())) }
@@ -375,7 +375,12 @@ class Overlays(private val ctx: Context) {
         col.addView(row, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
         root.addView(col)
         root.isFocusable = true
-        root.setOnKeyListener { _, code, e -> code == KeyEvent.KEYCODE_BACK }   // on doit choisir
+        // à l'allumage on doit choisir ; « Changer de profil » (un profil est déjà actif) se ferme avec Retour
+        root.setOnKeyListener { _, code, e ->
+            if (code != KeyEvent.KEYCODE_BACK) return@setOnKeyListener false
+            if (cancelable && e.action == KeyEvent.ACTION_UP) { remove(root); who = null }
+            true
+        }
         add(root, params(focusable = true, fullscreen = true))
         who = root
         first?.requestFocus()

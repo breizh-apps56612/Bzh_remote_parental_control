@@ -98,8 +98,16 @@ data class BoxRules(
     /** Film ou série sans classification lisible : "allow", "ask" (demander au parent, par défaut) ou "block". */
     var unknownPolicy: String = "ask",
     /** Titres « toujours autorisés » par le parent : pour un enfant (profile = son id) ou toute la famille (profile vide). */
-    var allowedPrograms: MutableList<AllowedProgram> = mutableListOf()
+    var allowedPrograms: MutableList<AllowedProgram> = mutableListOf(),
+    /**
+     * Au démarrage de la TV : "" = demander « Qui regarde ? » à chaque allumage (par défaut),
+     * sinon l'id du profil appliqué d'office (changeable ensuite depuis l'appli Box de la TV ou le téléphone).
+     */
+    var defaultProfile: String = ""
 ) {
+    /** Profil appliqué d'office à l'allumage, ou null s'il faut demander « Qui regarde ? ». */
+    fun startProfile(): Profile? = defaultProfile.takeIf { it.isNotBlank() }?.let { id -> profiles.firstOrNull { it.id == id } }
+
     /** Règles effectives pour un profil (parent = aucune limite). */
     fun forProfile(p: Profile?): BoxRules {
         if (p == null) return this
@@ -121,6 +129,7 @@ data class BoxRules(
             .put("maxAge", maxAge).put("blockedContents", org.json.JSONArray(blockedContents))
             .put("unknownPolicy", unknownPolicy)
             .put("allowedPrograms", org.json.JSONArray().apply { allowedPrograms.forEach { put(it.toJson()) } })
+            .put("defaultProfile", defaultProfile)
     }
 
     companion object {
@@ -140,7 +149,8 @@ data class BoxRules(
                 o.optInt("maxAge").coerceIn(0, 18),
                 o.optJSONArray("blockedContents")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it in RatingReader.CONTENTS.keys }.toMutableList() } ?: mutableListOf(),
                 o.optString("unknownPolicy", "ask").takeIf { it in setOf("allow", "ask", "block") } ?: "ask",
-                o.optJSONArray("allowedPrograms")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it)?.let(AllowedProgram::fromJson) }.take(500).toMutableList() } ?: mutableListOf()
+                o.optJSONArray("allowedPrograms")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it)?.let(AllowedProgram::fromJson) }.take(500).toMutableList() } ?: mutableListOf(),
+                o.optString("defaultProfile").take(64)
             )
         }
     }

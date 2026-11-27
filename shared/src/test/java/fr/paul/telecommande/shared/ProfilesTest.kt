@@ -41,4 +41,14 @@ class ProfilesTest {
         assertEquals(12, r.graceMin); assertFalse(r.showTimer); assertEquals(90, r.stillThereMin)
         assertEquals(10, BoxRules.fromJson(org.json.JSONObject()).graceMin)
     }
+
+    @Test fun defaultProfileAtStartup() {
+        assertNull(base.startProfile())                                   // par défaut : on demande « Qui regarde ? »
+        val r = base.copy(defaultProfile = "n")
+        assertEquals("Léo", r.startProfile()?.name)
+        val back = BoxRules.fromJson(org.json.JSONObject(r.toJson().toString()))
+        assertEquals("n", back.defaultProfile)
+        assertNull(base.copy(defaultProfile = "supprimé").startProfile()) // profil disparu : on redemande
+        assertEquals("", BoxRules.fromJson(org.json.JSONObject("{}")).defaultProfile)
+    }
 }

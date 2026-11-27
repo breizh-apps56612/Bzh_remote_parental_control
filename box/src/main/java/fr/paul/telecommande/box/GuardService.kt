@@ -496,6 +496,17 @@ class GuardService : AccessibilityService() {
         } else apply()
     }
 
+    /** « Changer de profil » depuis l'appli Box de la TV : on réaffiche « Qui regarde ? ». */
+    fun askWhoWatches() = main.post {
+        val rules = store.rules()
+        if (rules.profiles.isEmpty() || overlays.whoVisible) return@post
+        val lastId = store.activeProfile() ?: store.lastProfile()
+        val last = rules.profiles.firstOrNull { it.id == lastId }
+        overlays.showWhoWatches(rules.profiles, lastId,
+            { fr.paul.telecommande.shared.ProfileSwitch.needsPin(last, it, rules.pinHash.isNotBlank()) },
+            cancelable = store.activeProfile() != null) { pickProfile(it) }
+    }
+
     private fun stillThereCheck(rules: BoxRules, now: Long, interactive: Boolean) {
         if (!interactive || rules.stillThereMin <= 0 || overlays.stillVisible) return
         if (now - lastInteraction < rules.stillThereMin * 60_000L) return
@@ -514,7 +525,15 @@ class GuardService : AccessibilityService() {
         val interactive = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
         val pkg = if (interactive) current else null
         val allRules = store.rules()
-        val profile = activeProfile(allRules)
+        var profile = activeProfile(allRules)
+        // Profil par défaut choisi par le parent : appliqué d'office à l'allumage, sans « Qui regarde ? »
+        if (interactive && allRules.enabled && profile == null && !overlays.whoVisible) allRules.startProfile()?.let { def ->
+            store.setActiveProfile(def.id); lastBlockPkg = null; lastInteraction = now
+            overlays.showBanner("${def.emoji} ${def.name} · changer : appli Télécommande Box")
+            server.push(JSONObject().put("event", "profile").put("id", def.id).put("name", def.name).put("emoji", def.emoji))
+            addDiag("profile", "Profil par défaut appliqué à l'allumage : ${def.name}")
+            profile = def
+        }
 
         // journal (l'accueil et les Paramètres ne comptent pas comme du temps d'écran)
         val counted = pkg?.takeIf { it !in exempt && !ProtectedApps.isSettings(it) && !ProtectedApps.isInstaller(it) &&

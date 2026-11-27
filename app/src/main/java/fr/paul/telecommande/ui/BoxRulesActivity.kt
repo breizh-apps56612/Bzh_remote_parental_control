@@ -137,7 +137,7 @@ class BoxRulesActivity : AppCompatActivity() {
                 if (index >= 0) rules.profiles[index] = p else rules.profiles.add(p)
                 save()
             }.setNegativeButton("Annuler", null)
-        if (index >= 0) dlg.setNeutralButton("Supprimer") { _, _ -> rules.profiles.removeAt(index); save() }
+        if (index >= 0) dlg.setNeutralButton("Supprimer") { _, _ -> rules.profiles.removeAt(index).let { if (it.id == rules.defaultProfile) rules.defaultProfile = "" }; save() }
         dlg.show()
     }
 
@@ -189,9 +189,23 @@ class BoxRulesActivity : AppCompatActivity() {
 
         // ===== Qui regarde ? =====
         root.addView(section("Qui regarde ?"), Ui.lp(c, 26))
-        root.addView(Ui.text(c, "À chaque allumage, la TV demande qui regarde. Chaque profil a son propre temps.", 13f, muted = true).apply {
+        root.addView(Ui.text(c, "Chaque profil a son propre temps. À l'allumage, la TV demande qui regarde, ou applique un profil par défaut " +
+            "(changeable sur la TV : appli Télécommande Box > « Changer de profil »).", 13f, muted = true).apply {
             setPadding(Ui.dp(c, 6), 0, Ui.dp(c, 6), 0) }, Ui.lp(c, 4))
         val prof = Ui.group(c)
+        if (rules.profiles.isNotEmpty()) {
+            val def = rules.startProfile()
+            Ui.addRow(prof, Ui.row(c, "⏻", "À l'allumage de la TV",
+                def?.let { "Profil par défaut : ${it.emoji} ${it.name}" + if (it.unlimited) " · aucune limite !" else "" } ?: "Demander « Qui regarde ? » à chaque fois",
+                if (def == null) "Demander" else "Par défaut") {
+                val choices = listOf("" to "Demander « Qui regarde ? » à chaque allumage") +
+                    rules.profiles.map { it.id to "Toujours ${it.emoji} ${it.name}" + if (it.unlimited) " (sans limite)" else "" }
+                androidx.appcompat.app.AlertDialog.Builder(c).setTitle("À l'allumage de la TV")
+                    .setSingleChoiceItems(choices.map { it.second }.toTypedArray(), choices.indexOfFirst { it.first == (def?.id ?: "") }.coerceAtLeast(0)) { d, i ->
+                        d.dismiss(); rules.defaultProfile = choices[i].first; save() }
+                    .setNegativeButton("Annuler", null).show()
+            })
+        }
         rules.profiles.forEachIndexed { i, p ->
             Ui.addRow(prof, Ui.row(c, p.emoji, p.name, when {
                 p.unlimited -> "Parent · sans limite · code demandé"

@@ -95,6 +95,8 @@ class SetupActivity : Activity() {
             "Sur le téléphone : appli Télécommande > cette box > Contrôle parental > « Appairer l'appli Box ». Un code s'affichera ici. Adresse de la box : ${ip() ?: "inconnue"}",
             phones.isNotEmpty(), null, null)
 
+        whoWatchesCard(store)
+
         val usageOk = usageAccess()
         val usageAvailable = specialScreen(Settings.ACTION_USAGE_ACCESS_SETTINGS, USAGE_WORDS) != null
         step("+", "Historique des jours précédents (facultatif)",
@@ -141,6 +143,52 @@ class SetupActivity : Activity() {
                 if (store.encrypted) "Réglages chiffrés." else "Attention : le chiffrement matériel n'est pas disponible sur cette box.",
             13f, BoxUi.MUTED), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
         root.getChildAt(3)?.let { (it as? LinearLayout)?.getChildAt(2)?.requestFocus() }
+    }
+
+    /**
+     * « Qui regarde ? » : changer de profil tout de suite, et choisir ce qui se passe à l'allumage
+     * (demander à chaque fois, ou appliquer un profil par défaut). Le choix de démarrage demande le code parent.
+     */
+    private fun whoWatchesCard(store: BoxStore) {
+        val rules = store.rules()
+        if (rules.profiles.isEmpty()) return
+        val active = rules.profiles.firstOrNull { it.id == store.activeProfile() }
+        val def = rules.startProfile()
+        val row = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = BoxUi.cardBg(this@SetupActivity, 24f)
+            setPadding(dp(24), dp(20), dp(24), dp(20))
+        }
+        row.addView(BoxUi.badge(this, active?.emoji ?: "?", null, 48f))
+        val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(text("Qui regarde : ${active?.name ?: "personne pour l'instant"}", 20f, bold = true))
+        texts.addView(text("À l'allumage : " + (def?.let { "profil ${it.emoji} ${it.name} appliqué d'office" } ?: "la TV demande « Qui regarde ? »") +
+            if (def?.unlimited == true) ". Attention : sans aucune limite tant que personne ne change." else ".", 14.5f, BoxUi.MUTED),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
+        row.addView(texts, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(20); marginEnd = dp(16) })
+        row.addView(button("Changer de profil", true) {
+            val g = GuardService.instance
+            if (g == null) android.widget.Toast.makeText(this, "Activez d'abord la protection (étape 1).", android.widget.Toast.LENGTH_LONG).show()
+            else { g.askWhoWatches(); moveTaskToBack(true) }
+        })
+        row.addView(button("Au démarrage") { withPin { chooseStartProfile() } }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
+        root.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+    }
+
+    private fun chooseStartProfile() {
+        val store = BoxStore.get(this)
+        val rules = store.rules()
+        val choices = listOf("" to "Demander « Qui regarde ? » à chaque allumage") +
+            rules.profiles.map { it.id to "Toujours ${it.emoji} ${it.name}" + if (it.unlimited) " (sans limite)" else "" }
+        AlertDialog.Builder(this).setTitle("À l'allumage de la TV")
+            .setSingleChoiceItems(choices.map { it.second }.toTypedArray(),
+                choices.indexOfFirst { it.first == (rules.startProfile()?.id ?: "") }.coerceAtLeast(0)) { d, i ->
+                d.dismiss()
+                // version plus récente : le téléphone reprendra ce choix à sa prochaine lecture des règles
+                store.saveRules(rules.copy(defaultProfile = choices[i].first, version = System.currentTimeMillis()))
+                render()
+            }
+            .setNegativeButton("Annuler", null).show()
     }
 
     /** Le code parent (défini sur le téléphone) protège les actions sensibles. */
