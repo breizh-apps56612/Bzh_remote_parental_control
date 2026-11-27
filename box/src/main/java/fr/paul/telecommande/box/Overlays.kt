@@ -489,8 +489,52 @@ class Overlays(private val ctx: Context) {
         tickDown.run()
     }
 
+    // ---------- Pastille de profil (accueil Freebox) ----------
+
+    private var badge: View? = null
+    private var badgeKey: String? = null
+    val badgeVisible get() = badge != null
+
+    /**
+     * Pastille ronde avec l'emoji du profil, placée juste après l'avatar d'Oqee.
+     * [centerX] / [centerY] : centre voulu (pixels écran). Sélectionnée : liseré blanc, plus grande,
+     * et « Léo · changer de profil » dessous.
+     */
+    fun showProfileBadge(emoji: String, name: String, centerX: Int, centerY: Int, selected: Boolean) = ui {
+        val key = "$emoji|$name|$centerX|$centerY|$selected"
+        if (badge != null && key == badgeKey) return@ui
+        remove(badge)
+        val size = dp(if (selected) 46 else 40)
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
+        val circle = TextView(ctx).apply {
+            text = emoji; gravity = Gravity.CENTER; textSize = if (selected) 22f else 19f
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                if (selected) { setColor(accent); setStroke(dp(3), Color.WHITE) }
+                else { setColor(0xE61B1B2A.toInt()); setStroke(dp(2), accent) }
+            }
+            if (selected) elevation = dp(8).toFloat()
+        }
+        col.addView(circle, LinearLayout.LayoutParams(size, size))
+        if (selected) col.addView(TextView(ctx).apply {
+            text = "$name · OK pour changer de profil"
+            textSize = 14f; typeface = BoxUi.bold; setTextColor(Color.WHITE)
+            setPadding(dp(14), dp(7), dp(14), dp(7))
+            background = GradientDrawable().apply { cornerRadius = dp(999).toFloat(); setColor(0xF01B1B2A.toInt()); setStroke(dp(1), accent) }
+        }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
+        val screenW = ctx.resources.displayMetrics.widthPixels
+        add(col, params(focusable = false, fullscreen = false, gravity = Gravity.TOP or Gravity.END).apply {
+            x = (screenW - (centerX + size / 2)).coerceAtLeast(0)
+            y = (centerY - size / 2).coerceAtLeast(0)
+        })
+        badge = col; badgeKey = key
+    }
+
+    fun hideProfileBadge() = ui { remove(badge); badge = null; badgeKey = null }
+
     fun hideAll() = ui {
-        listOf(block, banner, code, pin, pointer, timer, who, message, still).forEach { remove(it) }
+        listOf(block, banner, code, pin, pointer, timer, who, message, still, badge).forEach { remove(it) }
         block = null; banner = null; code = null; pin = null; pointer = null; timer = null; who = null; message = null; still = null
+        badge = null; badgeKey = null
     }
 }

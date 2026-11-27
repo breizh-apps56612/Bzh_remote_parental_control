@@ -145,6 +145,7 @@ class GuardService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
         devRecord(event)
+        if (isFreebox && event.packageName?.toString() in ProfileBadge.OQEE) scheduleBadge()
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED || event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT) {
             // Classification affichée quelques secondes (« 16+ · violence » au début d'une lecture) : on la garde 30 s
             if (progWatch && event.packageName?.toString() == current) harvest(event)
@@ -202,6 +203,7 @@ class GuardService : AccessibilityService() {
         if (pkg == packageName || pkg in TRANSIENT || isIme(pkg)) return
         if (pkg == current) return
         current = pkg
+        if (isFreebox) scheduleBadge(600)
         if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg) && !progWatch) { progWatch = true; refreshEvents() }
         BoxLog.log("APPLI", "${label(pkg)} ($pkg)" + (className?.let { " · $it" } ?: ""))
         lastBlockPkg = null
@@ -394,6 +396,7 @@ class GuardService : AccessibilityService() {
      * dans une appli de films est « Lecture », la classification est vérifiée avant la première image.
      */
     override fun onKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (badgeEnd != null || swallowUpKey >= 0) badgeKey(event)?.let { return it }
         if (event.action != android.view.KeyEvent.ACTION_UP) return false
         val k = event.keyCode
         if (k != android.view.KeyEvent.KEYCODE_DPAD_CENTER && k != android.view.KeyEvent.KEYCODE_ENTER &&
@@ -486,6 +489,7 @@ class GuardService : AccessibilityService() {
         val apply = {
             store.setActiveProfile(p.id); lastBlockPkg = null; lastInteraction = System.currentTimeMillis()
             overlays.showBanner("Bonne séance, ${p.name} ${p.emoji}")
+            scheduleBadge(200)
             server.push(JSONObject().put("event", "profile").put("id", p.id).put("name", p.name).put("emoji", p.emoji))
             main.post { evaluate() }
         }
@@ -508,6 +512,99 @@ class GuardService : AccessibilityService() {
             cancelable = store.activeProfile() != null) { pickProfile(it) }
     }
 
+    // ---------- Pastille de profil sur l'accueil Freebox (Oqee) ----------
+
+    private val isFreebox = ProfileBadge.isFreebox(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
+    /** Dernier élément du bandeau Oqee (l'avatar) quand la pastille est affichée, sinon null. */
+    @Volatile private var badgeEnd: ProfileBadge.Node? = null
+    private var badgeSelected = false
+    private var swallowUpKey = -1
+    private val badgeCheck = Runnable { updateBadge() }
+    private val badgeIdle = Runnable { if (badgeSelected) { badgeSelected = false; updateBadge() } }
+
+    private fun scheduleBadge(delayMs: Long = 350) {
+        if (!isFreebox) return
+        main.removeCallbacks(badgeCheck); main.postDelayed(badgeCheck, delayMs)
+    }
+
+    /** Affiche, déplace ou retire la pastille selon ce qui est à l'écran. */
+    private fun updateBadge() {
+        val rules = store.rules()
+        val interactive = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+        if (!isFreebox || !interactive || current !in ProfileBadge.OQEE || rules.profiles.isEmpty() ||
+            overlays.blockVisible || overlays.whoVisible) { hideBadge(); return }
+        val end = runCatching { headerEnd() }.getOrNull() ?: run { hideBadge(); return }
+        badgeEnd = end
+        val p = activeProfile(rules)
+        val size = (40 * resources.displayMetrics.density).toInt()
+        val gap = (26 * resources.displayMetrics.density).toInt()
+        overlays.showProfileBadge(p?.emoji ?: "👤", p?.name ?: "Qui regarde ?", end.right + gap + size / 2, end.centerY, badgeSelected)
+    }
+
+    private fun hideBadge() {
+        if (badgeEnd == null && !overlays.badgeVisible) return
+        badgeEnd = null; badgeSelected = false
+        overlays.hideProfileBadge()
+    }
+
+    /** Éléments du haut de l'écran d'Oqee (texte + position), pour retrouver le bandeau et son avatar. */
+    private fun headerEnd(): ProfileBadge.Node? {
+        val root = rootInActiveWindow ?: return null
+        if (root.packageName?.toString() !in ProfileBadge.OQEE) return null
+        val screenH = resources.displayMetrics.heightPixels
+        val nodes = ArrayList<ProfileBadge.Node>()
+        val r = android.graphics.Rect()
+        val stack = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>().apply { add(root) }
+        var visited = 0
+        while (stack.isNotEmpty() && visited < 800) {
+            val n = stack.removeLast(); visited++
+            n.getBoundsInScreen(r)
+            if (r.top > screenH * 0.3) continue          // seul le haut de l'écran nous intéresse
+            if (n.isVisibleToUser) nodes += ProfileBadge.Node((n.text ?: n.contentDescription)?.toString().orEmpty(),
+                r.left, r.top, r.right, r.bottom, n.isFocusable || n.isClickable)
+            for (i in 0 until n.childCount) n.getChild(i)?.let { stack.add(it) }
+        }
+        return ProfileBadge.headerEnd(nodes, screenH)
+    }
+
+    /**
+     * Touches pendant que la pastille est affichée. Flèche droite sur l'avatar d'Oqee : la pastille est sélectionnée.
+     * Pastille sélectionnée : OK ouvre « Qui regarde ? », gauche / haut / bas / retour la quittent.
+     * Renvoie null pour laisser la touche à Oqee.
+     */
+    private fun badgeKey(event: android.view.KeyEvent): Boolean? {
+        val k = event.keyCode
+        if (event.action == android.view.KeyEvent.ACTION_UP) {
+            if (k == swallowUpKey) { swallowUpKey = -1; return true }
+            return null
+        }
+        if (event.action != android.view.KeyEvent.ACTION_DOWN) return null
+        val end = badgeEnd ?: return null
+        if (badgeSelected) {
+            when (k) {
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> {
+                    swallowUpKey = k; badgeSelected = false; hideBadge()
+                    BoxLog.log("PROFIL", "Pastille de l'accueil Freebox : changement de profil")
+                    askWhoWatches()
+                    return true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_LEFT, android.view.KeyEvent.KEYCODE_BACK,
+                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    swallowUpKey = k; badgeSelected = false; updateBadge(); return true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { swallowUpKey = k; return true }
+                else -> { badgeSelected = false; updateBadge(); return null }
+            }
+        }
+        if (k != android.view.KeyEvent.KEYCODE_DPAD_RIGHT) return null
+        val f = runCatching { findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull() ?: return null
+        val r = android.graphics.Rect().also { f.getBoundsInScreen(it) }
+        if (!ProfileBadge.focusAtEnd(r.left, r.top, r.right, r.bottom, end)) return null
+        swallowUpKey = k; badgeSelected = true; updateBadge()
+        main.removeCallbacks(badgeIdle); main.postDelayed(badgeIdle, 10_000)
+        return true
+    }
+
     private fun stillThereCheck(rules: BoxRules, now: Long, interactive: Boolean) {
         if (!interactive || rules.stillThereMin <= 0 || overlays.stillVisible) return
         if (now - lastInteraction < rules.stillThereMin * 60_000L) return
@@ -527,6 +624,8 @@ class GuardService : AccessibilityService() {
         val pkg = if (interactive) current else null
         val allRules = store.rules()
         var profile = activeProfile(allRules)
+        // Pastille Freebox : réapparaît après « Qui regarde ? » ou un écran de blocage
+        if (isFreebox && (current in ProfileBadge.OQEE || badgeEnd != null) && !badgeSelected) scheduleBadge(500)
         // Profil par défaut choisi par le parent : appliqué d'office à l'allumage, sans « Qui regarde ? »
         if (interactive && allRules.enabled && profile == null && !overlays.whoVisible) allRules.startProfile()?.let { def ->
             store.setActiveProfile(def.id); lastBlockPkg = null; lastInteraction = now
@@ -1129,7 +1228,7 @@ class GuardService : AccessibilityService() {
     private val screenReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
-                Intent.ACTION_SCREEN_OFF -> { store.setActiveProfile(null); overlays.hideTimer(); endGrace() }
+                Intent.ACTION_SCREEN_OFF -> { store.setActiveProfile(null); overlays.hideTimer(); endGrace(); hideBadge() }
                 Intent.ACTION_SCREEN_ON -> { lastInteraction = System.currentTimeMillis(); main.post { evaluate() } }
             }
         }

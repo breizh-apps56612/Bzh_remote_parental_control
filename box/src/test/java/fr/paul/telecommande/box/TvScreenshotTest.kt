@@ -67,6 +67,12 @@ class TvScreenshotTest {
         File(out, "$file.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    /** Pastille de profil de l'accueil Freebox, normale puis sélectionnée (coin haut droit). */
+    @Test fun profileBadge() {
+        o.showProfileBadge("🦖", "Léo", 1700, 80, selected = false); shot("tv-pastille", fullscreen = false, corner = true)
+        o.showProfileBadge("🦖", "Léo", 1700, 80, selected = true); shot("tv-pastille-selection", fullscreen = false, corner = true)
+    }
+
     @Test fun timeUp() {
         o.showBlock("C'est fini pour aujourd'hui", "Temps de TV écoulé (1 h 30 par jour).", canRequest = true, requestMinutes = 15, pending = false, onParentCode = {}) {}
         shot("tv-01-temps-ecoule")
