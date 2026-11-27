@@ -71,7 +71,7 @@ import kotlin.coroutines.resume
 class RemoteActivity : AppCompatActivity(), PairingUi {
     companion object {
         const val EXTRA_ID = "device_id"
-        const val HINT = "Glisser · naviguer    Toucher · OK\nGlisser puis rester appuyé · en continu"
+        const val HINT = "Glisser · naviguer    Toucher · OK\nRester appuyé à gauche / droite · en continu"
         /** Ouvre directement le menu Administrateur (depuis Réglages). */
         const val EXTRA_ADMIN = "admin"
     }
@@ -613,7 +613,8 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
     /**
      * Flèche maintenue sur le pavé (glisser puis rester appuyé), comme une touche tenue sur la télécommande Free :
      * dans un lecteur, gauche / droite font un retour / une avance rapide en continu.
-     * Box Android TV : vrai appui long (début / fin) ; autres TV : la touche est répétée tant que le doigt reste posé.
+     * La touche est répétée tant que le doigt reste posé, de plus en plus vite (comme une touche tenue) :
+     * un « appui long » Android TV envoyé à distance n'est pas répété par la box, le lecteur ne voyait qu'un clic.
      */
     private var holdJob: kotlinx.coroutines.Job? = null
     private var heldArrow: RemoteKey? = null
@@ -625,19 +626,21 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             else -> return
         }
         holdJob?.cancel(); holdJob = null
-        val tv = atv
         if (down) {
             if (offline) { lifecycleScope.launch { offlineNotice() }; return }
             heldArrow = key
             fr.paul.telecommande.core.DiagLog.log("TOUCHE", "Maintenue : $key")
             holdJob = lifecycleScope.launch {
-                if (tv != null && connected) runCatching { tv.hold(key, true) }.onFailure { connected = false; connectedFlow.value = false }
-                else while (isActive) { sendKey(key); delay(180) }
+                val start = android.os.SystemClock.uptimeMillis()
+                while (isActive && !offline) {
+                    sendKey(key)
+                    val held = android.os.SystemClock.uptimeMillis() - start
+                    // ~4 clics/s au début, puis ~8/s après 1,5 s, ~12/s après 4 s
+                    delay(when { held < 1_500 -> 250L; held < 4_000 -> 125L; else -> 80L })
+                }
             }
         } else {
-            val k = heldArrow ?: return
             heldArrow = null
-            if (tv != null) lifecycleScope.launch { runCatching { tv.hold(k, false) } }
         }
     }
 

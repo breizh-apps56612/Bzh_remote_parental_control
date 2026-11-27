@@ -18,7 +18,8 @@ import kotlin.math.abs
 /**
  * Pavé tactile :
  *  - glisser = flèches (un pas tous les ~48 dp, on peut enchaîner sans lever le doigt) ;
- *  - toucher = OK ; appui long = menu ;
+ *  - toucher = OK ; appui long au centre = menu ;
+ *  - rester appuyé sur le tiers gauche / droit = gauche / droite en continu (comme une touche tenue) ;
  *  - glisser puis garder le doigt posé = touche maintenue (retour / avance rapide en continu, défilement) ;
  *  - double-toucher sur le tiers gauche / droit = −10 s / +10 s ;
  *  - barre de gauche = chaînes, barre de droite = volume (toucher le haut / le bas, rester appuyé
@@ -160,7 +161,18 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private var pendingTap: Runnable? = null
 
     private val longPress = Runnable {
-        if (!moved) { longFired = true; fire(Gesture.LONG_PRESS) }
+        if (moved) return@Runnable
+        longFired = true
+        // Doigt posé sur le tiers gauche / droit : touche gauche / droite maintenue (retour / avance en continu),
+        // comme sur une vraie télécommande. Au centre : menu.
+        val l = stripZone; val w = width - 2 * stripZone
+        val side = when { downX < l + w / 3f -> Gesture.LEFT; downX > l + w * 2f / 3f -> Gesture.RIGHT; else -> null }
+        if (side != null && holdListener != null) {
+            pendingTap?.let { removeCallbacks(it) }; pendingTap = null
+            holding = side; lastSwipe = side
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            holdListener?.invoke(side, true); invalidate()
+        } else fire(Gesture.LONG_PRESS)
     }
 
     init {
