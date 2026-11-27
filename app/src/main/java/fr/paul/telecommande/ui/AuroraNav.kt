@@ -168,7 +168,7 @@ object AuroraNav {
         val kids = tab == Tab.KIDS
         sheet.show(TileSheet.Page(if (kids) "🛡️" else "📊", if (kids) "Règles des enfants" else "Activité",
             if (kids) "Temps de TV, couvre-feu et contrat" else "Ce que chacun a regardé") { sh, col ->
-            sh.label(col, (if (kids) "Les règles s'appliquent" else "L'activité se suit") + " sur une box ou une TV Android TV, comme la Freebox Player POP. " +
+            sh.note(col, (if (kids) "Les règles s'appliquent" else "L'activité se suit") + " sur une box ou une TV Android TV, comme la Freebox Player POP. " +
                 "Ajoutez-la en choisissant « Android TV » : l'appli Box s'installe ensuite sur la TV, et tout marche même téléphone éteint.")
             sh.sections(col, TileSheet.Section(null, listOf(
                 TileSheet.Tile("📺", "Ajouter ma box Android TV", "Freebox Player POP, Chromecast, Sony, TCL…", TileSheet.MINT) {

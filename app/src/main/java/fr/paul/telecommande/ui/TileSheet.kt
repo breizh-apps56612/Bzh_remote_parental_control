@@ -193,9 +193,19 @@ class TileSheet(private val a: Activity) {
 
     /** Titre de groupe dans le corps. */
     fun label(container: LinearLayout, text: String) {
+        // Une phrase n'est pas un titre de section : en minuscules, comme une note sous les listes d'iOS
+        if (text.length > 40) { note(container, text); return }
         container.addView(TextView(c).apply {
             this.text = text.uppercase(); textSize = 12f; typeface = Ui.bold; letterSpacing = 0.08f
             setTextColor(Ui.color(c, R.color.muted)); setPadding(dp(4), dp(20), 0, dp(2))
+        })
+    }
+
+    /** Texte d'explication, en minuscules et discret. */
+    fun note(container: LinearLayout, text: String) {
+        container.addView(TextView(c).apply {
+            this.text = text; textSize = 14.5f; setLineSpacing(0f, 1.15f)
+            setTextColor(Ui.color(c, R.color.muted)); setPadding(dp(4), dp(18), dp(4), dp(8))
         })
     }
 
