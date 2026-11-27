@@ -76,7 +76,7 @@ class HelpActivity : AppCompatActivity() {
         val body = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; val p = Ui.dp(c, 16); setPadding(p, 0, p, 0) }
         root.addView(body, LinearLayout.LayoutParams(-1, -2))
         topics.forEach { t ->
-            body.addView(Ui.title(c, t.title, 19f), Ui.lp(c, 24))
+            body.addView(Ui.groupTitle(c, t.title), Ui.lp(c, 24))
             val group = Ui.group(c)
             t.items.forEach { Ui.addRow(group, question(it)) }
             body.addView(group, Ui.lp(c, 10))

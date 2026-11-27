@@ -46,7 +46,7 @@ class SettingsActivity : AppCompatActivity() {
         val store = DeviceStore(c)
         val devices = store.all()
         val main = AuroraNav.primary(c)
-        body.addView(Ui.title(c, "Mes écrans", 19f), Ui.lp(c, 22))
+        body.addView(Ui.groupTitle(c, "Mes écrans"), Ui.lp(c, 22))
         body.addView(Ui.text(c, "La TV principale est celle que la touche Télécommande ouvre directement.", 13f, muted = true), Ui.lp(c, 4))
         val screens = Ui.group(c)
         devices.forEach { d ->
@@ -63,7 +63,7 @@ class SettingsActivity : AppCompatActivity() {
 
         // ----- Enfants -----
         val parental = ParentalStore(c)
-        body.addView(Ui.title(c, "Enfants", 19f), Ui.lp(c, 26))
+        body.addView(Ui.groupTitle(c, "Enfants"), Ui.lp(c, 26))
         val kids = Ui.group(c)
         Ui.addRow(kids, Ui.row(c, "🔑", if (parental.hasPin) "Changer le code parent" else "Créer le code parent",
             "Il protège les règles : un enfant ne peut pas les changer") {
@@ -74,7 +74,7 @@ class SettingsActivity : AppCompatActivity() {
         body.addView(kids, Ui.lp(c, 10))
 
         // ----- L'appli -----
-        body.addView(Ui.title(c, "L'appli", 19f), Ui.lp(c, 26))
+        body.addView(Ui.groupTitle(c, "L'appli"), Ui.lp(c, 26))
         val app = Ui.group(c)
         Ui.addRow(app, Ui.row(c, "⬇️", "Rechercher une mise à jour", "Version ${BuildConfig.VERSION_NAME}") { PhoneUpdate.checkAndOffer(c, force = true) })
         Ui.addRow(app, Ui.row(c, "🧭", "Revoir la visite guidée", "Les 4 choses à savoir, en 30 secondes") { Tour.show(c, force = true) })

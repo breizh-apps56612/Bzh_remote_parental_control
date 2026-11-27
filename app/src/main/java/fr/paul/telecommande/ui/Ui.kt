@@ -71,104 +71,119 @@ object Ui {
         Motion.pressable(this)
     }
 
-    // ---------- Tuiles (2.5.4) : toutes les listes de réglages de l'appli sont des grilles de tuiles ----------
+    // ---------- Listes groupées (2.6, à la manière des Réglages de l'iPhone) ----------
+    // Une carte arrondie par groupe ; une ligne par réglage : petite icône carrée colorée, titre, précision,
+    // valeur à droite, chevron (ou interrupteur) ; filets fins alignés sur le texte.
 
-    private const val ROW_TAG = "tile-row"
-
-    /** Grille de tuiles, deux par ligne (une tuile seule en fin de grille prend toute la largeur). */
+    /** Groupe de lignes : carte arrondie. */
     fun group(c: Context) = LinearLayout(c).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(0, 0, 0, 0)
+        background = GradientDrawable().apply { cornerRadius = dp(c, 18).toFloat(); setColor(color(c, R.color.surface)) }
+        clipToOutline = true
+        elevation = dp(c, 1).toFloat()
     }
 
     fun divider(c: Context) = View(c).apply { setBackgroundColor(color(c, R.color.line)) }
 
-    /** Place une tuile dans la grille : à côté de la précédente si sa ligne a encore de la place, sinon sur une nouvelle ligne. */
+    /** Ajoute une ligne au groupe (avec un filet aligné sur le texte s'il y en a déjà une). */
     fun addRow(g: LinearLayout, row: View) {
         val c = g.context
-        val last = g.getChildAt(g.childCount - 1) as? LinearLayout
-        val line = if (last != null && last.tag == ROW_TAG && last.childCount < 2) last
-            else LinearLayout(c).apply { tag = ROW_TAG }.also { g.addView(it, LinearLayout.LayoutParams(-1, -2).apply { if (g.childCount > 0) topMargin = dp(c, 10) }) }
-        line.addView(row, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
-            if (line.childCount > 0) marginStart = dp(c, 10)
-        })
+        if (g.childCount > 0) g.addView(divider(c), LinearLayout.LayoutParams(-1, 1).apply { marginStart = dp(c, 62) })
+        g.addView(row)
     }
 
-    /** Teintes douces des pastilles, choisies d'après le titre (chaque tuile garde toujours la même). */
+    /** Teintes des icônes, choisies d'après le titre (chaque ligne garde toujours la même). */
     private val TINTS = intArrayOf(0x337C74FF, 0x2E34F5C5, 0x33FFB020, 0x2E3B82F6, 0x33A855F7)
     fun tintFor(key: String) = TINTS[(key.hashCode() and 0x7FFFFFFF) % TINTS.size]
 
-    /** Pastille carrée arrondie et teintée contenant un emoji (icône de tuile). */
+    /** Petite icône carrée arrondie teintée (comme les icônes des Réglages de l'iPhone). */
     fun badge(c: Context, emoji: String, danger: Boolean = false, tint: Int = tintFor(emoji)) = TextView(c).apply {
-        text = emoji; textSize = 20f; gravity = Gravity.CENTER
+        text = emoji; textSize = 16f; gravity = Gravity.CENTER
         background = GradientDrawable().apply {
-            cornerRadius = dp(c, 14).toFloat()
+            cornerRadius = dp(c, 9).toFloat()
             setColor(if (danger) (color(c, R.color.danger) and 0x00FFFFFF) or 0x26000000 else tint)
         }
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
-    /** Fond de tuile : carte arrondie, filet fin, effet d'appui. */
-    fun tileBackground(c: Context): android.graphics.drawable.Drawable = android.graphics.drawable.RippleDrawable(
-        android.content.res.ColorStateList.valueOf(color(c, R.color.accent_soft)),
-        GradientDrawable().apply { cornerRadius = dp(c, 22).toFloat(); setColor(color(c, R.color.surface)); setStroke(dp(c, 1), color(c, R.color.line)) }, null)
+    /** Fond d'une ligne touchable (effet d'appui discret). */
+    fun rowBackground(c: Context): android.graphics.drawable.Drawable? {
+        val tv = android.util.TypedValue()
+        c.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+        return androidx.core.content.ContextCompat.getDrawable(c, tv.resourceId)
+    }
 
-    /**
-     * Tuile de réglage : pastille en haut (et à droite, l'interrupteur s'il y en a un), le titre, sa précision,
-     * et la valeur actuelle en couleur. Toute la tuile se touche.
-     */
+    /** Ligne : icône, titre, précision facultative, valeur à droite et chevron si elle s'ouvre. */
     fun row(c: Context, emoji: String, title: String, sub: String? = null, value: String? = null,
             danger: Boolean = false, icon: android.graphics.Bitmap? = null, action: (() -> Unit)? = null): LinearLayout =
-        tileOf(c, emoji, title, sub, value, danger, icon, null, action)
+        rowOf(c, emoji, title, sub, value, danger, icon, null, action)
 
-    private fun tileOf(c: Context, emoji: String, title: String, sub: String?, value: String?, danger: Boolean,
-                       icon: android.graphics.Bitmap?, trailing: View?, action: (() -> Unit)?) = LinearLayout(c).apply {
-        orientation = LinearLayout.VERTICAL
-        background = tileBackground(c)
-        elevation = dp(c, 1).toFloat()
-        setPadding(dp(c, 14), dp(c, 14), dp(c, 14), dp(c, 14))
-        minimumHeight = dp(c, 120)
-        val top = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
-        if (icon != null) top.addView(android.widget.ImageView(c).apply {
+    private fun rowOf(c: Context, emoji: String, title: String, sub: String?, value: String?, danger: Boolean,
+                      icon: android.graphics.Bitmap?, trailing: View?, action: (() -> Unit)?) = LinearLayout(c).apply {
+        gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(c, 54)
+        setPadding(dp(c, 16), dp(c, 10), dp(c, 14), dp(c, 10))
+        if (icon != null) addView(android.widget.ImageView(c).apply {
             setImageBitmap(icon); scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             clipToOutline = true
-            background = GradientDrawable().apply { cornerRadius = dp(c, 12).toFloat(); setColor(color(c, R.color.surface2)) }
-        }, LinearLayout.LayoutParams(dp(c, 44), dp(c, 44)))
-        else top.addView(badge(c, emoji, danger, tintFor(title)), LinearLayout.LayoutParams(dp(c, 44), dp(c, 44)))
-        top.addView(View(c), LinearLayout.LayoutParams(0, 1, 1f))
-        if (trailing != null) top.addView(trailing)
-        addView(top)
-        addView(View(c), LinearLayout.LayoutParams(1, 0, 1f))
-        addView(text(c, title, 15f).apply {
-            typeface = bold; maxLines = 3
+            background = GradientDrawable().apply { cornerRadius = dp(c, 8).toFloat(); setColor(color(c, R.color.surface2)) }
+        }, LinearLayout.LayoutParams(dp(c, 32), dp(c, 32)).apply { marginEnd = dp(c, 14) })
+        else addView(badge(c, emoji, danger, tintFor(title)), LinearLayout.LayoutParams(dp(c, 32), dp(c, 32)).apply { marginEnd = dp(c, 14) })
+        val texts = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(text(c, title, 16f).apply {
+            maxLines = 2
             if (danger) setTextColor(color(c, R.color.danger))
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(c, 12) })
-        if (!sub.isNullOrBlank()) addView(text(c, sub, 12.5f, muted = true).apply { maxLines = 4; ellipsize = android.text.TextUtils.TruncateAt.END },
-            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(c, 2) })
-        if (!value.isNullOrBlank()) addView(text(c, value, 14f).apply {
-            typeface = bold; maxLines = 2; setTextColor(color(c, if (danger) R.color.danger else R.color.accent))
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(c, 6) })
+        })
+        if (!sub.isNullOrBlank()) texts.addView(text(c, sub, 13f, muted = true).apply { maxLines = 3 }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(c, 1) })
+        addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
+        if (!value.isNullOrBlank()) addView(text(c, value, 15f, muted = true).apply {
+            maxLines = 2; gravity = Gravity.END; maxWidth = dp(c, 150); setPadding(dp(c, 10), 0, 0, 0)
+        })
+        if (trailing != null) addView(trailing, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(c, 10) })
+        else if (action != null) addView(text(c, "›", 22f, muted = true).apply {
+            setPadding(dp(c, 8), 0, 0, dp(c, 2)); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        })
         contentDescription = listOfNotNull(title, sub, value).joinToString(", ")
         if (action != null) {
             isClickable = true; isFocusable = true
+            background = rowBackground(c)
             setOnClickListener { action() }
-            Motion.pressable(this, 0.96f)
         }
     }
 
-    /** Tuile avec interrupteur : toute la tuile bascule (cible large, plus facile au doigt). */
+    /** Ligne avec interrupteur à droite : toute la ligne bascule (cible large, plus facile au doigt). */
     fun switchRow(c: Context, emoji: String, title: String, sub: String?, checked: Boolean, onChange: (Boolean) -> Unit): LinearLayout {
         val sw = androidx.appcompat.widget.SwitchCompat(c).apply {
             isChecked = checked; isClickable = false; isFocusable = false
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        return tileOf(c, emoji, title, sub, if (checked) "Activé" else "Désactivé", false, null, sw, null).apply {
+        return rowOf(c, emoji, title, sub, null, false, null, sw, null).apply {
             isClickable = true; isFocusable = true
+            background = rowBackground(c)
             contentDescription = title + if (checked) ", activé" else ", désactivé"
             setOnClickListener { sw.isChecked = !sw.isChecked; onChange(sw.isChecked) }
-            Motion.pressable(this, 0.96f)
         }
+    }
+
+    /** Ligne de choix unique : titre, précision, coche à droite quand elle est choisie (comme un choix dans les Réglages). */
+    fun checkRow(c: Context, title: String, sub: String?, checked: Boolean, onPick: () -> Unit) = LinearLayout(c).apply {
+        gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(c, 54)
+        setPadding(dp(c, 18), dp(c, 11), dp(c, 16), dp(c, 11))
+        val texts = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(text(c, title, 16f).apply { if (checked) { typeface = medium } })
+        if (!sub.isNullOrBlank()) texts.addView(text(c, sub, 13f, muted = true).apply { maxLines = 3 }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(c, 1) })
+        addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(text(c, if (checked) "✓" else "", 19f).apply { typeface = bold; setTextColor(color(c, R.color.accent)); setPadding(dp(c, 12), 0, 0, 0) },
+            LinearLayout.LayoutParams(dp(c, 34), -2))
+        isClickable = true; isFocusable = true
+        background = rowBackground(c)
+        contentDescription = title + (sub?.let { ", $it" } ?: "") + if (checked) ", choisi" else ""
+        setOnClickListener { performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); onPick() }
+    }
+
+    /** Petit titre de groupe en capitales, au-dessus d'une liste (comme dans les Réglages). */
+    fun groupTitle(c: Context, t: String) = text(c, t.uppercase(), 12.5f, muted = true).apply {
+        letterSpacing = 0.06f; setPadding(dp(c, 16), 0, 0, dp(c, 6))
     }
 
     /** Tuile d'action : emoji + libellé court sur une ligne (jamais coupé en deux). */

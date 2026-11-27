@@ -1021,7 +1021,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
 
         sheet.show(TileSheet.Page("✨", "Plus", "Outils et autres touches de ${device.name}") { sh, col ->
             sh.sections(col,
-                TileSheet.Section("Outils", tools),
+                TileSheet.Section("Outils", tools, grid = true),
                 TileSheet.Section("Touches de la TV", keysTiles),
                 TileSheet.Section("La télécommande", remote))
         })

@@ -413,10 +413,25 @@ class BoxDashboardActivity : AppCompatActivity() {
             startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
         })
 
+        // À la manière de « Temps d'écran » : deux résumés en widgets, puis des listes groupées
+        val widgets = forKid.filter { it.id == "today" || it.id == "week" }
         root.addView(heading(if (p != null) "Pour ${p.name}" else "Ce qui a été regardé"), Ui.lp(c, 22))
-        tileGrid(forKid)
-        root.addView(heading("Toute la TV"), Ui.lp(c, 26))
-        tileGrid(tv)
+        tileGrid(widgets)
+        val rest = forKid.filter { it.id != "today" && it.id != "week" }
+        if (rest.isNotEmpty()) root.addView(entryList(rest), Ui.lp(c, 14))
+        root.addView(Ui.groupTitle(c, "Toute la TV"), Ui.lp(c, 26))
+        root.addView(entryList(tv), Ui.lp(c, 0))
+    }
+
+    /** Liste groupée des entrées (icône teintée, titre, valeur du moment, chevron). */
+    private fun entryList(tiles: List<Tile>): LinearLayout {
+        val g = Ui.group(this)
+        tiles.forEach { t ->
+            Ui.addRow(g, Ui.row(this, t.emoji, t.title, null, t.value, danger = t.id == "unpair") { t.open() }.also { r ->
+                (r.getChildAt(0)?.background as? android.graphics.drawable.GradientDrawable)?.setColor(t.tint)
+            })
+        }
+        return g
     }
 
     /** Grille de tuiles, deux par ligne. */

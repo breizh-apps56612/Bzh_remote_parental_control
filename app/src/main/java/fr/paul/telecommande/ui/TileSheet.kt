@@ -41,7 +41,11 @@ class TileSheet(private val a: Activity) {
         val onTap: () -> Unit
     )
 
-    class Section(val title: String?, val tiles: List<Tile>, val columns: Int = 2)
+    /**
+     * Une partie du volet. [grid] : true = grille (touches, applis, outils rapides), false = liste groupée,
+     * null = automatique (grille pour les touches et les icônes d'applis, liste pour tout le reste, à la manière d'iOS).
+     */
+    class Section(val title: String?, val tiles: List<Tile>, val columns: Int = 2, val grid: Boolean? = null)
 
     /** Une page du volet : son en-tête, et ce qu'elle contient ([build] remplit la colonne du corps). */
     class Page(
@@ -199,6 +203,18 @@ class TileSheet(private val a: Activity) {
     fun sections(container: LinearLayout, vararg list: Section) {
         list.forEach { s ->
             s.title?.let { label(container, it) }
+            val asGrid = s.grid ?: s.tiles.all { it.key || it.icon != null }
+            if (!asGrid) {
+                // Liste groupée : une ligne par choix (icône, titre, précision, chevron)
+                val g = Ui.group(c)
+                s.tiles.forEach { t ->
+                    Ui.addRow(g, Ui.row(c, t.emoji.ifBlank { "•" }, t.title, t.sub, null, t.color != 0 && false, null) { t.onTap() }.also { r ->
+                        r.getChildAt(0)?.let { b -> if (t.tint != 0) (b.background as? GradientDrawable)?.setColor(t.tint) }
+                    })
+                }
+                container.addView(g, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+                return@forEach
+            }
             s.tiles.chunked(s.columns).forEach { chunk ->
                 val row = LinearLayout(c)
                 chunk.forEach { t -> row.addView(tileView(t), LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(dp(5), dp(5), dp(5), dp(5)) }) }

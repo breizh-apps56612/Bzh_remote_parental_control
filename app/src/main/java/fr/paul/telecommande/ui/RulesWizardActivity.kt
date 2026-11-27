@@ -201,40 +201,13 @@ class RulesWizardActivity : AppCompatActivity() {
     // ---------- Éléments ----------
 
     /** Grande carte de choix (style bouton radio). */
-    /** Un choix en tuile : coche ronde en haut, titre, précision ; cerclé d'indigo quand il est choisi. */
-    private fun choice(title: String, sub: String?, selected: Boolean, onClick: () -> Unit): View {
-        val c = this
-        return LinearLayout(c).apply {
-            tag = CHOICE
-            orientation = LinearLayout.VERTICAL
-            background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Ui.color(c, R.color.accent_soft)),
-                GradientDrawable().apply {
-                    cornerRadius = Ui.dp(c, 22).toFloat()
-                    setColor(Ui.color(c, if (selected) R.color.indigo_soft else R.color.surface))
-                    setStroke(Ui.dp(c, if (selected) 2 else 1), Ui.color(c, if (selected) R.color.accent else R.color.line))
-                }, null)
-            setPadding(Ui.dp(c, 14), Ui.dp(c, 14), Ui.dp(c, 14), Ui.dp(c, 14))
-            minimumHeight = Ui.dp(c, 104)
-            isClickable = true; isFocusable = true; setOnClickListener { onClick() }
-            contentDescription = title + (sub?.let { ", $it" } ?: "") + if (selected) ", choisi" else ""
-            addView(TextView(c).apply {
-                text = if (selected) "✓" else ""; gravity = Gravity.CENTER; textSize = 14f; typeface = Ui.bold; setTextColor(Color.WHITE)
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    if (selected) setColor(Ui.color(c, R.color.accent)) else { setColor(Color.TRANSPARENT); setStroke(Ui.dp(c, 2), Ui.color(c, R.color.line)) }
-                }
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(Ui.dp(c, 26), Ui.dp(c, 26)))
-            addView(View(c), LinearLayout.LayoutParams(1, 0, 1f))
-            addView(Ui.text(c, title, 15.5f).apply { typeface = Ui.bold; maxLines = 3 }, Ui.lp(c, 12))
-            sub?.let { addView(Ui.text(c, it, 12.5f, muted = true).apply { maxLines = 4 }, Ui.lp(c, 2)) }
-            Motion.pressable(this, 0.96f)
-        }
-    }
+    /** Un choix : ligne avec coche à droite (les choix qui se suivent forment une liste groupée, comme dans les Réglages). */
+    private fun choice(title: String, sub: String?, selected: Boolean, onClick: () -> Unit): View =
+        Ui.checkRow(this, title, sub, selected, onClick).apply { tag = CHOICE }
 
     private val CHOICE = "wizard-choice"
 
-    /** Les choix qui se suivent sont rangés en grille de tuiles (deux par ligne). */
+    /** Les choix qui se suivent sont rangés dans une même liste groupée. */
     private fun gridify(container: LinearLayout) {
         val views = (0 until container.childCount).map { container.getChildAt(it) }
         container.removeAllViews()

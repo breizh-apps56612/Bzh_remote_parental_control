@@ -209,9 +209,9 @@ class ContractActivity : AppCompatActivity() {
         card.addView(TextView(c).apply {
             text = sentence; textSize = 19f; typeface = Ui.bold; setTextColor(Ui.color(c, R.color.ink)); setLineSpacing(0f, 1.2f)
         })
-        val opts = Ui.group(c)
+        val opts = Ui.group(c).apply { elevation = 0f; background = GradientDrawable().apply { cornerRadius = Ui.dp(c, 16).toFloat(); setColor(Ui.color(c, R.color.tile)) } }
         q.options.forEachIndexed { i, o ->
-            Ui.addRow(opts, chip(o, i == chosen) {
+            Ui.addRow(opts, Ui.checkRow(c, o, null, i == chosen) {
                 answers[q.id] = i; touched += q.id; render()
                 // Une réponse choisie : la phrase suivante arrive d'elle-même (le temps de voir le choix)
                 val at = index
@@ -297,8 +297,8 @@ class ContractActivity : AppCompatActivity() {
         h.addView(Premium.heroText(c, "Montrer le contrat à ${profile.name} ?", 24f, bold = true), Ui.lp(c, 16))
         h.addView(Premium.heroText(c, "Sur la TV, ${profile.name} verra ses règles expliquées simplement et pourra appuyer sur « J'ai compris ».", 14f, soft = true), Ui.lp(c, 6))
         val yn = Ui.group(c)
-        Ui.addRow(yn, choiceSelect("📺  Oui, sur la TV", "Pour qu'il comprenne les règles. Il le verra la prochaine fois qu'il regarde.", showChild) { showChild = true; render() })
-        Ui.addRow(yn, choiceSelect("📱  Non", "Le contrat reste sur votre téléphone.", !showChild) { showChild = false; render() })
+        Ui.addRow(yn, Ui.checkRow(c, "Oui, sur la TV", "Pour qu'il comprenne les règles. Il le verra la prochaine fois qu'il regarde.", showChild) { showChild = true; render() })
+        Ui.addRow(yn, Ui.checkRow(c, "Non", "Le contrat reste sur votre téléphone.", !showChild) { showChild = false; render() })
         content.addView(yn, Ui.lp(c, 18))
         val card = Ui.card(c)
         card.addView(Ui.label(c, "Votre contrat"))
