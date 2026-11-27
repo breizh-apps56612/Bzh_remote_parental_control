@@ -45,7 +45,10 @@ class SetupActivity : Activity() {
 
     override fun onResume() {
         super.onResume(); render()
-        if (triedAccessibility && !GuardService.enabled(this)) { triedAccessibility = false; showAccessibilityPath() }
+        // Le mode d'emploi ne s'affiche que si la protection n'est vraiment pas active au retour des Paramètres
+        // (avant : il pouvait sortir alors que la protection était déjà validée).
+        if (triedAccessibility && GuardService.instance == null && !GuardService.enabled(this)) showAccessibilityPath()
+        triedAccessibility = false
     }
 
     private fun text(t: String, size: Float, color: Int = BoxUi.INK, bold: Boolean = false) = BoxUi.text(this, t, size, color, bold, center = false)
@@ -70,6 +73,7 @@ class SetupActivity : Activity() {
 
     private fun render() {
         root.removeAllViews()
+        changeProfileButton = null
         val store = BoxStore.get(this)
         val guard = GuardService.enabled(this)
         root.addView(BoxUi.label(this, "Télécommande Box"))
@@ -142,8 +146,13 @@ class SetupActivity : Activity() {
             "Confidentialité : les données restent dans votre maison (sur cette box et le téléphone appairé). Aucun compte, aucun serveur. " +
                 if (store.encrypted) "Réglages chiffrés." else "Attention : le chiffrement matériel n'est pas disponible sur cette box.",
             13f, BoxUi.MUTED), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(28) })
-        root.getChildAt(3)?.let { (it as? LinearLayout)?.getChildAt(2)?.requestFocus() }
+        // Focus de départ : « Changer de profil » quand la protection est active (le geste le plus courant),
+        // sinon le bouton de l'étape 1. Avant : toujours « Ouvrir » (Accessibilité), même protection validée.
+        val protectedNow = guard || GuardService.instance != null
+        (changeProfileButton.takeIf { protectedNow } ?: (root.getChildAt(3) as? LinearLayout)?.getChildAt(2))?.requestFocus()
     }
+
+    private var changeProfileButton: android.view.View? = null
 
     /**
      * « Qui regarde ? » : changer de profil tout de suite, et choisir ce qui se passe à l'allumage
@@ -170,7 +179,7 @@ class SetupActivity : Activity() {
             val g = GuardService.instance
             if (g == null) android.widget.Toast.makeText(this, "Activez d'abord la protection (étape 1).", android.widget.Toast.LENGTH_LONG).show()
             else { g.askWhoWatches(); moveTaskToBack(true) }
-        })
+        }.also { changeProfileButton = it })
         row.addView(button("Au démarrage") { withPin { chooseStartProfile() } }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
         root.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
     }
