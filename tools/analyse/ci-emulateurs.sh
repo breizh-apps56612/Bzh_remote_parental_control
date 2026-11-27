@@ -13,6 +13,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=${OUT:-$PWD/emu-resultats}
 API_PHONE=${API_PHONE:-30}; API_TV=${API_TV:-30}
 mkdir -p "$OUT/captures" "$OUT/journaux"
+export ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-${RUNNER_TEMP:-/tmp}/avd}; mkdir -p "$ANDROID_AVD_HOME"
 export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
 PH=emulator-5554; TV=emulator-5556
 PKG_PH=fr.paul.telecommande; PKG_TV=fr.paul.telecommande.box
@@ -34,15 +35,18 @@ vivant() { [ -n "$(timeout 20 adb -s "$1" shell pidof "$2" 2>/dev/null | tr -d '
 yes | sdkmanager --licenses >/dev/null 2>&1 || true
 sdkmanager --install "emulator" "platform-tools" \
   "system-images;android-$API_PHONE;default;x86_64" "system-images;android-$API_TV;android-tv;x86" >/dev/null || { ko "Téléchargement des images Android"; exit 1; }
-echo no | avdmanager create avd -f -n phone -k "system-images;android-$API_PHONE;default;x86_64" -d pixel >/dev/null
-echo no | avdmanager create avd -f -n tv -k "system-images;android-$API_TV;android-tv;x86" -d tv_1080p >/dev/null
+echo no | avdmanager create avd -f -n phone -k "system-images;android-$API_PHONE;default;x86_64" -d pixel
+echo no | avdmanager create avd -f -n tv -k "system-images;android-$API_TV;android-tv;x86" -d tv_1080p
+emulator -list-avds
 OPTS=(-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -netfast)
 nohup emulator -avd tv -port 5556 "${OPTS[@]}" > "$OUT/journaux/emulateur-tv.log" 2>&1 &
 nohup emulator -avd phone -port 5554 "${OPTS[@]}" > "$OUT/journaux/emulateur-telephone.log" 2>&1 &
 for i in $(seq 1 60); do
   a=$(timeout 10 adb -s $TV shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
   b=$(timeout 10 adb -s $PH shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-  [ "$a" = 1 ] && [ "$b" = 1 ] && break; sleep 10
+  [ "$a" = 1 ] && [ "$b" = 1 ] && break
+  pgrep -f "avd tv" >/dev/null && pgrep -f "avd phone" >/dev/null || { tail -5 "$OUT"/journaux/emulateur-*.log; break; }
+  sleep 10
 done
 if [ "$a" = 1 ] && [ "$b" = 1 ]; then ok "Démarrage des deux émulateurs" "$((i*10)) s"; else ko "Démarrage des émulateurs" "TV=$a téléphone=$b"; exit 1; fi
 for d in $PH $TV; do for s in window_animation_scale transition_animation_scale animator_duration_scale; do adb -s $d shell settings put global $s 0; done; done
