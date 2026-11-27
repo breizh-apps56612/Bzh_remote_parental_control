@@ -1,20 +1,21 @@
 name: Émulateurs (téléphone + TV)
 
-# Banc d'essai permanent : à chaque envoi sur main (ou à la main, onglet Actions), compile les deux applis,
+# Banc d'essai permanent : à chaque envoi sur n'importe quelle branche (ou à la main, onglet Actions), compile les deux applis,
 # démarre un émulateur téléphone et un émulateur Android TV, et vérifie fonctionnement + sécurité.
 # Script : tools/analyse/ci-emulateurs.sh — résultats : résumé du run + artefact « emulateurs-resultats ».
 #
 # Sécurité :
 #  - aucun secret utilisé : les APK testés sont signés avec une clé de debug jetable, jamais avec la clé officielle ;
 #  - droits minimaux (lecture seule du dépôt), jeton non conservé après le checkout ;
-#  - ne tourne jamais sur les pull requests (code extérieur) ni sur les copies (forks) du dépôt ;
+#  - ne tourne jamais sur le code des copies (forks) : seulement les branches et pull requests de ce dépôt ;
 #  - actions externes figées par empreinte de commit (mises à jour proposées par Dependabot) ;
 #  - paramètres manuels limités à une liste de choix et passés par variables d'environnement (pas d'injection) ;
 #  - résultats conservés 7 jours, sans clé ni donnée personnelle (émulateurs vierges, certificat de test effacé).
 on:
   push:
-    branches: [ main ]
+    branches: [ "**", "!dependabot/**" ]   # toute branche : chaque développement est testé avant d'arriver sur main
     paths-ignore: [ "site/**", "**.md" ]
+  pull_request:                  # ex. mises à jour Dependabot ; jamais les copies (forks), voir « if » plus bas
   workflow_dispatch:
     inputs:
       api_tv:
@@ -37,7 +38,9 @@ concurrency:
 
 jobs:
   emulateurs:
-    if: github.repository_owner == 'breizh-apps56612'
+    if: >-
+      github.repository_owner == 'breizh-apps56612' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
