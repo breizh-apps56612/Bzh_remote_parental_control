@@ -77,47 +77,37 @@ object BoxActions {
 
     // ---------- Vraies applis de la TV (avec icônes) ----------
 
+    /** Les applis de la TV en tuiles (avec leurs vraies icônes), dans le volet premium. */
     fun appsSheet(a: AppCompatActivity, d: Device) {
-        val grid = GridLayout(a).apply { columnCount = 3; setPadding(Ui.dp(a, 10), Ui.dp(a, 6), Ui.dp(a, 10), Ui.dp(a, 6)) }
-        val loading = LinearLayout(a).apply { gravity = Gravity.CENTER; setPadding(0, Ui.dp(a, 24), 0, Ui.dp(a, 24)); addView(ProgressBar(a)) }
-        val wrap = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL; addView(loading); addView(grid) }
-        var dialog: AlertDialog? = null
-        dialog = AlertDialog.Builder(a).setTitle("Applis de ${d.name}").setView(ScrollView(a).apply { addView(wrap) })
-            .setNegativeButton("Fermer", null).show()
+        val sheet = TileSheet(a)
+        var apps: List<Triple<String, String, android.graphics.Bitmap?>>? = null
+        var error: String? = null
+        sheet.show(TileSheet.Page("▦", "Applis", "Ouvrir une appli sur ${d.name}") { sh, col ->
+            val list = apps
+            when {
+                error != null -> col.addView(Ui.card(a).apply { addView(Ui.text(a, error ?: "", 15f)) })
+                list == null -> col.addView(LinearLayout(a).apply { gravity = Gravity.CENTER; setPadding(0, Ui.dp(a, 30), 0, Ui.dp(a, 30)); addView(ProgressBar(a)) })
+                list.isEmpty() -> col.addView(Ui.card(a).apply { addView(Ui.text(a, "Aucune appli trouvée sur la TV.", 15f)) })
+                else -> sh.sections(col, TileSheet.Section(null, list.map { (pkg, label, icon) ->
+                    TileSheet.Tile("📺", label, null, icon = icon) {
+                        sheet.dismiss()
+                        call(a, d, "launch", JSONObject().put("pkg", pkg), "Ouverture de $label…")
+                    }
+                }, 3))
+            }
+        })
         a.lifecycleScope.launch {
             val res = runCatching { BoxClient.of(a, d).call("apps", JSONObject().put("icons", true)) }.getOrElse {
-                loading.removeAllViews(); loading.addView(Ui.text(a, it.message ?: "La TV ne répond pas", 14f, muted = true)); return@launch
+                error = it.message ?: "La TV ne répond pas"; sheet.refresh(); return@launch
             }
-            wrap.removeView(loading)
-            val arr = res.optJSONArray("apps") ?: return@launch
-            for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
-                val tile = LinearLayout(a).apply {
-                    orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-                    setBackgroundResource(R.drawable.bg_tile); isClickable = true; isFocusable = true
-                    setPadding(Ui.dp(a, 6), Ui.dp(a, 10), Ui.dp(a, 6), Ui.dp(a, 8))
-                    contentDescription = "Ouvrir ${o.optString("label")}"
-                    setOnClickListener {
-                        dialog?.dismiss()
-                        call(a, d, "launch", JSONObject().put("pkg", o.optString("pkg")), "Ouverture de ${o.optString("label")}…")
-                    }
-                }
+            val arr = res.optJSONArray("apps")
+            apps = (0 until (arr?.length() ?: 0)).map { i ->
+                val o = arr!!.getJSONObject(i)
                 val icon = o.optString("icon").takeIf { it.isNotEmpty() }?.let { runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull() }
                     ?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-                tile.addView(ImageView(a).apply {
-                    if (icon != null) setImageBitmap(icon)
-                    scaleType = ImageView.ScaleType.FIT_CENTER; clipToOutline = true
-                    background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = Ui.dp(a, 10).toFloat(); setColor(0x00000000) }
-                }, LinearLayout.LayoutParams(Ui.dp(a, 80), Ui.dp(a, 46)))
-                tile.addView(TextView(a).apply {
-                    text = o.optString("label"); textSize = 12f; maxLines = 1; gravity = Gravity.CENTER
-                    ellipsize = android.text.TextUtils.TruncateAt.END; setTextColor(Ui.color(a, R.color.ink))
-                }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = Ui.dp(a, 6) })
-                grid.addView(tile, GridLayout.LayoutParams().apply {
-                    width = 0; height = Ui.dp(a, 92); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                    setMargins(Ui.dp(a, 4), Ui.dp(a, 4), Ui.dp(a, 4), Ui.dp(a, 4))
-                })
+                Triple(o.optString("pkg"), o.optString("label"), icon)
             }
+            sheet.refresh()
         }
     }
 

@@ -176,5 +176,17 @@ class RemoteTest {
         }
         o.put("density", ctx.resources.displayMetrics.density.toDouble())
         File(out, "00-telecommande.json").writeText(o.toString(1))
+        // Volet « Plus » en tuiles (2.5.3), puis une page de touches
+        RemoteActivity::class.java.getDeclaredMethod("showMoreKeys").apply { isAccessible = true }.invoke(a)
+        idle(); Thread.sleep(600); idle()
+        fun sheetShot(file: String) {
+            val d = org.robolectric.shadows.ShadowDialog.getLatestDialog()?.window?.decorView ?: return
+            d.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2400, View.MeasureSpec.EXACTLY))
+            d.layout(0, 0, 1080, 2400)
+            val b2 = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888)
+            val cv = Canvas(b2); root.draw(cv); d.draw(cv)
+            File(out, "$file.png").outputStream().use { b2.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        sheetShot("00b-telecommande-plus")
     }
 }

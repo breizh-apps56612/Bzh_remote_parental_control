@@ -63,12 +63,6 @@ class BoxDashboardActivity : AppCompatActivity() {
         setContentView(AuroraNav.wrap(this, ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(page) },
             AuroraNav.Tab.KIDS))
         Premium.darkStatusBar(this)
-        // Retour du téléphone : d'abord revenir aux tuiles, puis quitter l'onglet
-        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (detail != null) closeDetail() else { isEnabled = false; onBackPressedDispatcher.onBackPressed(); isEnabled = true }
-            }
-        })
         render()
         lifecycleScope.launch { while (isActive) { load(); delay(30_000) } }
     }
@@ -263,20 +257,78 @@ class BoxDashboardActivity : AppCompatActivity() {
 
     // ---------- Tuiles : chaque écran de l'onglet Enfants en un coup d'œil ----------
 
-    /** Écran ouvert depuis une tuile (null = la grille de tuiles). */
-    private var detail: String? = null
+    /** Volet premium ouvert depuis une tuile (et son écran), ou null. */
+    private var sheet: TileSheet? = null
+    private var sheetId: String? = null
 
     private class Tile(val id: String, val emoji: String, val title: String, val value: String, val tint: Int, val open: () -> Unit)
 
-    /** Corps de l'onglet « Enfants » : la grille de tuiles, ou l'écran de la tuile ouverte. */
+    /** Corps de l'onglet « Enfants » : la grille de tuiles (chaque tuile ouvre son volet). */
     private fun renderFamily(rules: fr.paul.telecommande.shared.BoxRules) {
-        val d = detail
-        if (d == null) renderTiles(rules) else renderDetail(rules, d)
+        renderTiles(rules)
+        // Le volet ouvert suit les nouvelles données (bonus accordé, pause, rafraîchissement)
+        sheet?.takeIf { it.isShowing }?.refresh()
     }
 
-    private fun openDetail(id: String) { detail = id; render(); scrollTop() }
-    private fun closeDetail() { detail = null; render(); scrollTop() }
-    private fun scrollTop() { (page.parent as? android.widget.ScrollView)?.post { (page.parent as? android.widget.ScrollView)?.smoothScrollTo(0, 0) } }
+    /** Construit des vues dans [v] avec les mêmes briques que l'écran (qui ajoutent dans [root]). */
+    private inline fun into(v: LinearLayout, f: () -> Unit) { val saved = root; root = v; try { f() } finally { root = saved } }
+
+    private fun openDetail(id: String) {
+        val s = TileSheet(this)
+        sheet = s; sheetId = id
+        s.onDismiss = { if (sheet === s) { sheet = null; sheetId = null } }
+        s.show(detailPage(id))
+    }
+
+    /** En-tête et contenu du volet d'une tuile (relu à chaque rafraîchissement). */
+    private fun detailPage(id: String): TileSheet.Page {
+        val rules = ParentalStore(this).boxRules(device.id)
+        val p = activityProfile(rules)
+        val name = p?.name
+        val now = System.currentTimeMillis()
+        val (used, _) = profileTime(rules, p)
+        val build: (TileSheet, LinearLayout) -> Unit = { _, col -> into(col) { renderDetail(ParentalStore(this).boxRules(device.id), id) } }
+        return when (id) {
+            "rules" -> {
+                val k = p?.contract
+                val limit = limitOf(rules, p)
+                TileSheet.Page(if (k != null) "📜" else "⏱️",
+                    when { p == null -> "Règles"; p.unlimited -> "Profil ${p.name}"; k != null -> "Le contrat de ${p.name}"; else -> "Les règles de ${p.name}" },
+                    when { p?.unlimited == true -> "Aucune limite, protégé par le code parent"; k?.paused == true -> "En pause : aucune limite pour l'instant"
+                        k != null -> "Actif depuis ${((now - k.since) / fr.paul.telecommande.shared.ContractWizard.DAY_MS).coerceAtLeast(0)} jours"; else -> "Mode simple : une limite par jour" },
+                    big = if (limit > 0) Usage.format(limit * 60_000L) else null, bigUnit = "par jour aujourd'hui", build = build)
+            }
+            "bonus" -> {
+                val n = p?.contract?.bonuses?.count { it.at > now - 30 * fr.paul.telecommande.shared.ContractWizard.DAY_MS } ?: 0
+                TileSheet.Page("⭐", if (name != null) "Les bonus de $name" else "Bonus", "Accordés avec un motif, gardés pour vos bilans",
+                    big = if (p?.contract != null) "$n" else null, bigUnit = if (n > 1) "bonus ce mois-ci" else "bonus ce mois-ci", build = build)
+            }
+            "today" -> TileSheet.Page("📺", "Aujourd'hui", if (name != null) "Ce que $name a regardé" else "Toute la TV",
+                big = Usage.format(used), bigUnit = "regardées", build = build)
+            "week" -> {
+                val v = week?.optJSONArray("daily")?.let { a -> (0 until a.length()).map { a.optLong(it) } }
+                val avg = v?.let { it.sum() / it.count { x -> x > 0 }.coerceAtLeast(1) }
+                TileSheet.Page("📅", if (name != null) "La semaine de $name" else "La semaine", "Les 7 derniers jours",
+                    big = avg?.let { Usage.format(it) }, bigUnit = "par jour regardé", build = build)
+            }
+            "hours" -> {
+                val h = week?.optJSONArray("hourly")
+                val peak = h?.let { (0 until 24).maxByOrNull { i -> it.optLong(i) }?.takeIf { i -> it.optLong(i) > 0 } }
+                TileSheet.Page("🕗", if (name != null) "Les horaires de $name" else "Les horaires", "À quelles heures la TV est regardée",
+                    big = peak?.let { "$it h" }, bigUnit = "le plus souvent", build = build)
+            }
+            "advice" -> {
+                val names = status?.optJSONObject("labels")
+                val n = fr.paul.telecommande.shared.RulesAdvisor.check(rules, { pkg -> names?.optString(pkg)?.ifBlank { null } ?: AppCatalog.name(pkg) })
+                    .count { it.id !in Premium.dismissed(this, device.id) }
+                TileSheet.Page("💡", "Conseils de l'assistant", "Des règles qui se contredisent ou ne servent à rien, corrigées d'un geste",
+                    big = "$n", bigUnit = if (n > 1) "conseils" else "conseil", build = build)
+            }
+            "privacy" -> TileSheet.Page("🔒", "Vos données", "Restent chez vous", build = build)
+            "unpair" -> TileSheet.Page("⛓️", "Appairage", device.name, build = build)
+            else -> TileSheet.Page("✨", "Enfants", null, build = build)
+        }
+    }
 
     private fun renderTiles(rules: fr.paul.telecommande.shared.BoxRules) {
         val c = this
@@ -373,24 +425,13 @@ class BoxDashboardActivity : AppCompatActivity() {
         Motion.pressable(this, 0.96f)
     }
 
-    /** En-tête d'un écran ouvert depuis une tuile : retour aux tuiles, et son titre. */
-    private fun detailHeader(title: String) {
-        val c = this
-        val head = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
-        head.addView(AuroraNav.roundButton(c, R.drawable.ic_back, "Revenir aux tuiles") { closeDetail() })
-        head.addView(Ui.title(c, title, 21f).apply { setPadding(Ui.dp(c, 14), 0, 0, 0); maxLines = 2 }, LinearLayout.LayoutParams(0, -2, 1f))
-        root.addView(head, Ui.lp(c, 20))
-    }
-
     /** L'écran d'une tuile. */
     private fun renderDetail(rules: fr.paul.telecommande.shared.BoxRules, id: String) {
         val c = this
         val p = activityProfile(rules)
-        val name = p?.name
         when (id) {
             "rules" -> {
-                if (p == null) { detail = null; renderTiles(rules); return }
-                detailHeader(if (p.unlimited) "Profil ${p.name}" else if (p.contract != null) "Le contrat de ${p.name}" else "Les règles de ${p.name}")
+                if (p == null) { root.addView(Ui.card(c).apply { addView(Ui.text(c, "Choisissez d'abord un enfant, en haut de l'onglet Enfants.", 15f)) }, Ui.lp(c, 12)); return }
                 when {
                     p.unlimited -> {
                         val card = Ui.card(c)
@@ -403,8 +444,7 @@ class BoxDashboardActivity : AppCompatActivity() {
                 }
             }
             "bonus" -> {
-                if (p == null) { detail = null; renderTiles(rules); return }
-                detailHeader("Les bonus de ${p.name}")
+                if (p == null) { root.addView(Ui.card(c).apply { addView(Ui.text(c, "Choisissez d'abord un enfant, en haut de l'onglet Enfants.", 15f)) }, Ui.lp(c, 12)); return }
                 val k = p.contract
                 if (k != null && !k.paused) {
                     root.addView(bonusCard(p), Ui.lp(c, 12))
@@ -425,17 +465,11 @@ class BoxDashboardActivity : AppCompatActivity() {
                 }
             }
             "today", "week", "hours" -> {
-                detailHeader(when (id) {
-                    "today" -> if (name != null) "Ce que $name a regardé aujourd'hui" else "Aujourd'hui sur la TV"
-                    "week" -> if (name != null) "La semaine de $name" else "La semaine de la TV"
-                    else -> if (name != null) "Les horaires de $name" else "Les horaires de la TV"
-                })
                 val card = Ui.card(c)
                 when (id) { "today" -> todayTab(card, rules); "week" -> weekTab(card, rules); else -> hoursTab(card) }
                 root.addView(card, Ui.lp(c, 12))
             }
             "advice" -> {
-                detailHeader("Conseils de l'assistant")
                 val names = status?.optJSONObject("labels")
                 val advices = fr.paul.telecommande.shared.RulesAdvisor.check(rules, { pkg -> names?.optString(pkg)?.ifBlank { null } ?: AppCatalog.name(pkg) })
                     .filter { it.id !in Premium.dismissed(c, device.id) }
@@ -445,7 +479,6 @@ class BoxDashboardActivity : AppCompatActivity() {
                 }
             }
             "privacy" -> {
-                detailHeader("Vos données restent chez vous")
                 val since = week?.optLong("since")?.takeIf { it > 0 }
                 val card = Ui.card(c)
                 card.addView(Ui.text(c, "Tout reste sur la box et sur ce téléphone, échangé en chiffré sur votre Wi-Fi. Aucun compte, aucun serveur, aucune publicité." +
@@ -453,7 +486,6 @@ class BoxDashboardActivity : AppCompatActivity() {
                 root.addView(card, Ui.lp(c, 12))
             }
             "unpair" -> {
-                detailHeader("Appairage de ${device.name}")
                 val card = Ui.card(c)
                 card.addView(Ui.text(c, "Retirer l'appairage : cette TV n'appliquera plus vos règles à jour, et ce téléphone ne la verra plus. Vous pourrez la réappairer plus tard.", 15f).apply { setLineSpacing(0f, 1.2f) })
                 card.addView(Ui.button(c, "Retirer l'appairage") {
@@ -466,7 +498,7 @@ class BoxDashboardActivity : AppCompatActivity() {
                 }.apply { setTextColor(Ui.color(c, R.color.danger)) }, Ui.lp(c, 14))
                 root.addView(card, Ui.lp(c, 12))
             }
-            else -> { detail = null; renderTiles(rules) }
+            else -> {}
         }
     }
 

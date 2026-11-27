@@ -164,6 +164,18 @@ class ScreenshotTest {
         set(b, "status", status(withRequest = false)); set(b, "week", week()); set(b, "error", null)
         set(b, "tab", 1); call(b, "render"); shot(b, "03-semaine")
         set(b, "tab", 2); call(b, "render"); shot(b, "04-horaires")
+        // Volet premium d'une tuile (2.5.3) : « Aujourd'hui » de l'enfant
+        b.javaClass.getDeclaredMethod("openDetail", String::class.java).apply { isAccessible = true }.invoke(b, "today")
+        repeat(8) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(80) }
+        ShadowDialog.getLatestDialog()?.window?.decorView?.let { d ->
+            val root = b.window.decorView
+            d.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2400, View.MeasureSpec.EXACTLY))
+            d.layout(0, 0, 1080, 2400)
+            val bmp = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888)
+            val cv = Canvas(bmp); root.draw(cv); d.draw(cv)
+            File(out, "11-volet-tuile.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        ShadowDialog.getLatestDialog()?.dismiss()
     }
 
     /** Accueil : carte « en direct » de la TV principale, tuiles, demande en attente, écrans. */

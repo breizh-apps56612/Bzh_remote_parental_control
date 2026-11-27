@@ -942,70 +942,54 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         k.open()
     }
 
-    /** Bouton « ⋯ » : outils de la télécommande en haut, puis toutes les touches secondaires. */
+    /**
+     * Bouton « ⋯ » : un volet de tuiles. Outils (clavier, souris, applis…) et, rangées par usage, les autres touches
+     * de la TV : chaque groupe s'ouvre en page de grosses touches (le volet reste ouvert pour enchaîner).
+     */
     private fun showMoreKeys() {
-        val box0 = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(4), dp(12), dp(8)) }
-        var dialog: AlertDialog? = null
-
-        // Outils : clavier, souris, reprise — une seule ligne de grosses tuiles
-        val tools = GridLayout(this).apply { columnCount = 2 }
-        fun tool(label: String, action: () -> Unit) {
-            val v = TextView(this).apply {
-                text = label; gravity = Gravity.CENTER; textSize = 14f; setTextColor(color(R.color.ink))
-                setBackgroundResource(R.drawable.bg_tile); isClickable = true; isFocusable = true; contentDescription = label
-                setOnClickListener { dialog?.dismiss(); action() }
-                Motion.pressable(this, 0.95f)
-            }
-            tools.addView(v, GridLayout.LayoutParams().apply {
-                width = 0; height = dp(56); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(4), dp(4), dp(4), dp(4))
-            })
+        val sheet = TileSheet(this)
+        val T = TileSheet
+        fun key(label: String, k: RemoteKey, color: Int = 0) = TileSheet.Tile("", label, key = true, color = color) { press(k) }
+        fun keysPage(emoji: String, title: String, sub: String, cols: Int, keys: List<TileSheet.Tile>) = TileSheet.Page(emoji, title, sub) { sh, col ->
+            sh.sections(col, TileSheet.Section(null, keys, cols))
         }
-        if (atv != null || box != null) tool("⌨️  Clavier") { showKeyboard() }
-        tool(if (touchpad.mouseMode) "🖱️  Souris : arrêter" else "🖱️  Mode souris") { setMouse(!touchpad.mouseMode) }
-        tool("🔵  Souris Bluetooth") { startActivity(Intent(this, BtMouseActivity::class.java)) }
-        if (device.hasBoxApp) tool("⏯️  Reprendre") { showContinue() }
-        tool("⚙️  Réglages de la télécommande") { showSettings() }
-        if (AdminMenu.enabled(this)) tool("🛠️  Administrateur") { showAdmin() }
-        tool("❓  Aide de la télécommande") { showHelp() }
-        box0.addView(TextView(this).apply {
-            text = "OUTILS"; textSize = 12.5f; typeface = Ui.bold; setTextColor(color(R.color.muted)); setPadding(dp(6), dp(8), 0, dp(2))
+        val digits = keysPage("🔢", "Chiffres et chaînes", "Pour taper un numéro de chaîne", 3,
+            (1..9).map { key("$it", RemoteKey.digit(it)) } + listOf(key("CH −", RemoteKey.CH_DOWN), key("0", RemoteKey.D0), key("CH +", RemoteKey.CH_UP)))
+        val playback = keysPage("⏯️", "Lecture", "Avancer, reculer, arrêter", 3, listOf(
+            key("⏪", RemoteKey.REWIND), key("⏯", RemoteKey.PLAY_PAUSE), key("⏩", RemoteKey.FAST_FORWARD),
+            key("⏹", RemoteKey.STOP), key("Muet", RemoteKey.MUTE), key("Infos", RemoteKey.INFO)))
+        val colors = keysPage("🎨", "Touches de couleur", "Rouge, vert, jaune, bleu : comme sur la télécommande d'origine", 2, listOf(
+            key("Rouge", RemoteKey.RED, 0xFFBE123C.toInt()), key("Vert", RemoteKey.GREEN, 0xFF15803D.toInt()),
+            key("Jaune", RemoteKey.YELLOW, 0xFFA16207.toInt()), key("Bleu", RemoteKey.BLUE, 0xFF1D4ED8.toInt())))
+        val others = keysPage("🧩", "Autres touches", "Source, menu, guide…", 3, listOf(
+            key("Source", RemoteKey.INPUT), key("Menu", RemoteKey.MENU), key("Guide", RemoteKey.GUIDE),
+            key("Infos", RemoteKey.INFO), key("Quitter", RemoteKey.EXIT),
+            TileSheet.Tile("", "Allumer", key = true) { atv?.allowPowerOnce(); powerOn() }))
+
+        val tools = mutableListOf<TileSheet.Tile>()
+        if (atv != null || box != null) tools += TileSheet.Tile("⌨️", "Clavier", "Écrire sur la TV", T.INDIGO) { sheet.dismiss(); showKeyboard() }
+        tools += TileSheet.Tile("🖱️", if (touchpad.mouseMode) "Souris : arrêter" else "Mode souris", "Le pavé déplace une flèche", T.SKY) { sheet.dismiss(); setMouse(!touchpad.mouseMode) }
+        if (device.isSmartBox) tools += TileSheet.Tile("▦", "Applis de la TV", "Ouvrir Netflix, YouTube…", T.VIOLET) { sheet.dismiss(); showAppsSheet() }
+        if (device.hasBoxApp) tools += TileSheet.Tile("⏮️", "Reprendre", "Ce qui a été regardé récemment", T.MINT) { sheet.dismiss(); showContinue() }
+        tools += TileSheet.Tile("🔵", "Souris Bluetooth", "Une vraie flèche sur la TV", T.SKY) { sheet.dismiss(); startActivity(Intent(this, BtMouseActivity::class.java)) }
+
+        val keysTiles = listOf(
+            TileSheet.Tile("🔢", "Chiffres et chaînes", "0 à 9, CH + / −", T.INDIGO) { sheet.push(digits) },
+            TileSheet.Tile("⏯️", "Lecture", "Avance, retour, stop", T.MINT) { sheet.push(playback) },
+            TileSheet.Tile("🎨", "Touches de couleur", "Rouge, vert, jaune, bleu", T.ROSE) { sheet.push(colors) },
+            TileSheet.Tile("🧩", "Autres touches", "Source, menu, guide…", T.AMBER) { sheet.push(others) })
+
+        val remote = mutableListOf(
+            TileSheet.Tile("⚙️", "Réglages", "De cette télécommande", T.INDIGO) { sheet.push(settingsPage()) },
+            TileSheet.Tile("❓", "Aide", "Les gestes du pavé", T.MINT) { sheet.dismiss(); showHelp() })
+        if (AdminMenu.enabled(this)) remote += TileSheet.Tile("🛠️", "Administrateur", "Outils avancés", T.AMBER) { sheet.dismiss(); showAdmin() }
+
+        sheet.show(TileSheet.Page("✨", "Plus", "Outils et autres touches de ${device.name}") { sh, col ->
+            sh.sections(col,
+                TileSheet.Section("Outils", tools),
+                TileSheet.Section("Touches de la TV", keysTiles),
+                TileSheet.Section("La télécommande", remote))
         })
-        box0.addView(tools)
-
-        // Touches de la TV, rangées par usage (un titre au-dessus de chaque groupe)
-        fun section(title: String): GridLayout {
-            box0.addView(TextView(this).apply {
-                text = title; textSize = 12.5f; typeface = Ui.bold; setTextColor(color(R.color.muted)); setPadding(dp(6), dp(16), 0, dp(2))
-            })
-            return GridLayout(this).apply { columnCount = 4 }.also { box0.addView(it) }
-        }
-        var grid = section("CHIFFRES ET CHAÎNES")
-        fun add(label: String, key: RemoteKey?, bg: Int = 0, action: (() -> Unit)? = null) {
-            val v = TextView(this).apply {
-                text = label; gravity = Gravity.CENTER; textSize = 15f; setTextColor(if (bg != 0) Color.WHITE else color(R.color.ink))
-                setBackgroundResource(R.drawable.bg_key)
-                if (bg != 0) background = GradientDrawable().apply { setColor(bg); cornerRadius = 18 * d }
-                isClickable = true; isFocusable = true; contentDescription = label.ifBlank { key?.name }
-                setOnClickListener { it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); if (action != null) { dialog?.dismiss(); action() } else key?.let { k -> press(k) } }
-                Motion.pressable(this, 0.9f)
-            }
-            grid.addView(v, GridLayout.LayoutParams().apply {
-                width = 0; height = dp(52); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(4), dp(4), dp(4), dp(4))
-            })
-        }
-        (1..9).forEach { add("$it", RemoteKey.digit(it)) }
-        add("0", RemoteKey.D0); add("CH +", RemoteKey.CH_UP); add("CH −", RemoteKey.CH_DOWN)
-        grid = section("LECTURE")
-        add("◀◀", RemoteKey.REWIND); add("■", RemoteKey.STOP); add("▶▶", RemoteKey.FAST_FORWARD); add("Muet", RemoteKey.MUTE)
-        grid = section("TOUCHES DE COULEUR")
-        add("Rouge", RemoteKey.RED, 0xFF9F1239.toInt()); add("Vert", RemoteKey.GREEN, 0xFF166534.toInt())
-        add("Jaune", RemoteKey.YELLOW, 0xFF854D0E.toInt()); add("Bleu", RemoteKey.BLUE, 0xFF1E40AF.toInt())
-        grid = section("AUTRES TOUCHES DE LA TV")
-        add("Source", RemoteKey.INPUT); add("Infos", RemoteKey.INFO); add("Menu", RemoteKey.MENU); add("Guide", RemoteKey.GUIDE)
-        add("Quitter", RemoteKey.EXIT)
-        add("Allumer", null) { atv?.allowPowerOnce(); powerOn() }
-        val scroll = android.widget.ScrollView(this).apply { addView(box0) }
-        dialog = AlertDialog.Builder(this).setTitle("Plus de touches et d'outils").setView(scroll).setNegativeButton("Fermer", null).show()
     }
 
     // ---------- Navigation, menu, touches répétées ----------
@@ -1033,22 +1017,14 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
 
     private fun showAppsSheet() {
         if (box != null) { BoxActions.appsSheet(this, device); return }
-        val grid = GridLayout(this).apply { columnCount = 2; setPadding(dp(12), dp(8), dp(12), dp(8)) }
-        var dialog: AlertDialog? = null
-        AppCatalog.SHORTCUTS.forEach { sc ->
-            val tile = LinearLayout(this).apply {
-                gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0)
-                setBackgroundResource(R.drawable.bg_tile); isClickable = true; isFocusable = true
-                contentDescription = "Ouvrir ${sc.label}"
-                setOnClickListener { dialog?.dismiss(); launchApp(sc.link, sc.label) }
-            }
-            tile.addView(letterTile(sc.letter, AppCatalog.shortcutBrand(sc.label), Color.WHITE, 36))
-            tile.addView(TextView(this).apply { text = sc.label; textSize = 15f; setTextColor(color(R.color.ink)); setPadding(dp(10), 0, 0, 0) })
-            grid.addView(tile, GridLayout.LayoutParams().apply {
-                width = 0; height = dp(64); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(4), dp(4), dp(4), dp(4))
-            })
-        }
-        dialog = AlertDialog.Builder(this).setTitle("Ouvrir une appli sur la TV").setView(grid).setNegativeButton("Fermer", null).show()
+        val sheet = TileSheet(this)
+        sheet.show(TileSheet.Page("▦", "Applis", "Ouvrir une appli sur ${device.name}") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, AppCatalog.SHORTCUTS.map { sc ->
+                TileSheet.Tile(sc.letter, sc.label, "Ouvrir sur la TV", AppCatalog.shortcutBrand(sc.label) and 0x00FFFFFF or 0x40000000) {
+                    sheet.dismiss(); launchApp(sc.link, sc.label)
+                }
+            }, 3))
+        })
     }
 
     /** Menu ⋮ : seulement deux entrées. Le contrôle parental est dans l'onglet du bas, les touches et la souris dans « ⋯ ». */
@@ -1081,34 +1057,35 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         ))
     }
 
-    private fun showSettings() {
+    /** Réglages de la télécommande, en tuiles qui basculent d'un geste (page du volet « Plus »). */
+    private fun settingsPage(): TileSheet.Page = TileSheet.Page("⚙️", "Réglages", "De la télécommande de ${device.name}") { sh, col ->
         val prefs = getSharedPreferences("ui", MODE_PRIVATE)
         val voicePhone = prefs.getBoolean("voice_phone", false)
         val quick = fr.paul.telecommande.service.ControlNotification.enabled(this)
-        val items = arrayOf(
-            "Recherche vocale : " + if (voicePhone) "par le téléphone" else "par la TV",
-            "Télécommande dans les réglages rapides : " + if (quick) "oui" else "non",
-            "Modifier l'adresse de l'appareil"
-        )
-        AlertDialog.Builder(this).setTitle("Réglages").setItems(items) { _, i ->
-            when (i) {
-                0 -> {
-                    prefs.edit().putBoolean("voice_phone", !voicePhone).apply()
-                    Ui.toast(this, if (!voicePhone) "Le téléphone reconnaît la voix et tape la recherche sur la TV" else "La voix est envoyée à l'Assistant de la TV")
-                }
-                1 -> if (quick) {
+        sh.sections(col, TileSheet.Section(null, listOf(
+            TileSheet.Tile("🎙️", "Recherche vocale", if (voicePhone) "Le téléphone écoute" else "La TV écoute", TileSheet.VIOLET) {
+                prefs.edit().putBoolean("voice_phone", !voicePhone).apply()
+                Ui.toast(this, if (!voicePhone) "Le téléphone reconnaît la voix et tape la recherche sur la TV" else "La voix est envoyée à l'Assistant de la TV")
+                sh.refresh()
+            },
+            TileSheet.Tile("⚡", "Réglages rapides", if (quick) "Télécommande présente" else "Absente", TileSheet.AMBER) {
+                if (quick) {
                     fr.paul.telecommande.service.ControlNotification.setEnabled(this, false); Ui.toast(this, "Retirée des réglages rapides")
                 } else {
                     fr.paul.telecommande.service.ControlNotification.setEnabled(this, true)
                     if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                         androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 12)
-                    if (::device.isInitialized) fr.paul.telecommande.service.ControlNotification.show(this, device.id)
+                    fr.paul.telecommande.service.ControlNotification.show(this, device.id)
                     Ui.toast(this, "Télécommande ajoutée au lecteur des réglages rapides")
                 }
-                2 -> editHost()
-            }
-        }.setNegativeButton("Fermer", null).show()
+                sh.refresh()
+            },
+            TileSheet.Tile("🌐", "Adresse de l'appareil", "Si la TV n'est pas trouvée", TileSheet.SKY) { sh.dismiss(); editHost() }
+        )))
     }
+
+    /** Ancien menu de réglages (gardé pour les appels existants) : ouvre la page du volet. */
+    private fun showSettings() { TileSheet(this).show(settingsPage()) }
 
     private fun showHelp() {
         val voiceFile = java.io.File(filesDir, "voix-derniere.wav")
@@ -1137,17 +1114,19 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
     }
 
     /** Changer d'appareil sans repasser par la liste. */
+    /** Pilule du nom de la TV : changer d'écran, en tuiles. */
     private fun showDeviceSwitcher() {
         val all = store.all()
-        val labels = (all.map { (if (it.id == device.id) "✓ " else "") + it.name } + "Tous les appareils…").toTypedArray()
-        AlertDialog.Builder(this).setTitle("Appareil").setItems(labels) { _, i ->
-            if (i == all.size) { finish(); return@setItems }
-            val target = all[i]
-            if (target.id != device.id) {
-                startActivity(Intent(this, RemoteActivity::class.java).putExtra(EXTRA_ID, target.id))
-                finish()
-            }
-        }.show()
+        val sheet = TileSheet(this)
+        sheet.show(TileSheet.Page("📺", "Quel écran ?", "Touchez l'écran à piloter") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, all.map { d ->
+                TileSheet.Tile("📺", d.name, if (d.id == device.id) "Utilisé maintenant" else d.type.label.substringBefore(" ("),
+                    if (d.id == device.id) TileSheet.MINT else TileSheet.INDIGO) {
+                    sheet.dismiss()
+                    if (d.id != device.id) { startActivity(Intent(this, RemoteActivity::class.java).putExtra(EXTRA_ID, d.id)); finish() }
+                }
+            } + TileSheet.Tile("🏠", "Revenir à l'appli", "Fermer la télécommande", TileSheet.AMBER) { sheet.dismiss(); closeRemote() }))
+        })
     }
 
     // ---------- Recherche vocale ----------

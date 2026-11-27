@@ -27,7 +27,9 @@ object Motion {
     const val HERO_TAG = "motion:hero"
 
     fun enabled(c: Context): Boolean =
-        if (Build.VERSION.SDK_INT >= 26) ValueAnimator.areAnimatorsEnabled()
+        // Tests visuels (Robolectric) : écrans figés, sans animation, pour des captures nettes
+        if (Build.FINGERPRINT == "robolectric") false
+        else if (Build.VERSION.SDK_INT >= 26) ValueAnimator.areAnimatorsEnabled()
         else runCatching { Settings.Global.getFloat(c.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) }.getOrDefault(1f) > 0f
 
     private val ease = DecelerateInterpolator(2.2f)
