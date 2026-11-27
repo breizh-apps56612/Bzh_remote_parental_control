@@ -25,6 +25,25 @@ class Server(private val guard: GuardService) {
     private val untrusted = AtomicInteger(0)
     /** Connexions ouvertes par adresse : un seul appareil du Wi-Fi ne peut pas occuper toutes les places. */
     private val perIp = java.util.concurrent.ConcurrentHashMap<String, AtomicInteger>()
+
+    /** Connexions acceptées dont la poignée de main TLS n'est pas finie (une connexion muette y reste). */
+    private class Pending(val socket: SSLSocket, val ip: String, val since: Long)
+    private val handshaking = java.util.concurrent.ConcurrentLinkedQueue<Pending>()
+
+    /**
+     * Toutes les places sont prises : on ferme la plus ancienne connexion encore muette (poignée de main
+     * commencée depuis plus de [STALE_HANDSHAKE_MS]) pour faire de la place. Un téléphone qui se connecte
+     * vraiment finit sa poignée de main en une fraction de seconde : il n'est jamais visé.
+     * Avant : 40 connexions muettes (stress test du 27/11) suffisaient à refuser le téléphone du parent.
+     */
+    private fun evictStale(ip: String?): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        val victim = handshaking.filter { (ip == null || it.ip == ip) && now - it.since > STALE_HANDSHAKE_MS }
+            .minByOrNull { it.since } ?: return false
+        if (!handshaking.remove(victim)) return false
+        runCatching { victim.socket.close() }
+        return true
+    }
     private var socket: SSLServerSocket? = null
     @Volatile private var running = false
 
@@ -69,10 +88,17 @@ class Server(private val guard: GuardService) {
                         val c = ss.accept() as SSLSocket
                         val ip = c.inetAddress?.hostAddress ?: "?"
                         val n = perIp.getOrPut(ip) { AtomicInteger(0) }
-                        if (active.get() >= MAX_ACTIVE || n.incrementAndGet() > MAX_PER_IP) {
-                            n.decrementAndGet(); runCatching { c.close() }; continue
+                        val ipFull = n.get() >= MAX_PER_IP
+                        if ((ipFull || active.get() >= MAX_ACTIVE) && !evictStale(if (ipFull) ip else null)) {
+                            runCatching { c.close() }; continue
                         }
-                        pool.execute { try { handle(c) } finally { if (n.decrementAndGet() <= 0) perIp.remove(ip, n) } }
+                        n.incrementAndGet()
+                        val pending = Pending(c, ip, SystemClock.elapsedRealtime())
+                        handshaking.add(pending)
+                        pool.execute {
+                            try { handle(c) { handshaking.remove(pending) } }
+                            finally { handshaking.remove(pending); if (n.decrementAndGet() <= 0) perIp.remove(ip, n) }
+                        }
                     }
                 } catch (e: Throwable) {
                     if (running) SystemClock.sleep(3000)   // port occupé, réseau pas prêt… on réessaie
@@ -109,7 +135,7 @@ class Server(private val guard: GuardService) {
         subscribers.removeAll(dead.toSet())
     }
 
-    private fun handle(c: SSLSocket) {
+    private fun handle(c: SSLSocket, handshakeDone: () -> Unit = {}) {
         active.incrementAndGet()
         var subscribed: OutputStream? = null
         var countedUntrusted = false
@@ -117,6 +143,7 @@ class Server(private val guard: GuardService) {
             // Poignée de main TLS courte : une connexion muette est fermée vite et ne bloque pas le parent.
             c.soTimeout = HANDSHAKE_TIMEOUT_MS
             c.startHandshake()
+            handshakeDone()
             c.soTimeout = 30_000
             val peer = c.session.peerCertificates.firstOrNull() as? X509Certificate ?: return
             val clientFp = BoxProtocol.fingerprint(peer)
@@ -182,6 +209,7 @@ class Server(private val guard: GuardService) {
         const val MAX_ACTIVE = 24
         const val MAX_PER_IP = 6
         const val HANDSHAKE_TIMEOUT_MS = 8_000
+        const val STALE_HANDSHAKE_MS = 1_500L
         val PAIR_CMDS = setOf("pair_start", "pair_spake", "pair_spake_confirm", "pair_confirm")
     }
 
