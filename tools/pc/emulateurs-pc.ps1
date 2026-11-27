@@ -46,7 +46,13 @@ $SdkManager = "$Sdk\cmdline-tools\latest\bin\sdkmanager.bat"
 $AvdManager = "$Sdk\cmdline-tools\latest\bin\avdmanager.bat"
 $Adb = "$Sdk\platform-tools\adb.exe"; $Emu = "$Sdk\emulator\emulator.exe"
 
-function Adb { param([Parameter(ValueFromRemainingArguments)]$a) & $Adb @a 2>$null }
+# adb écrit des messages d'information sur le flux d'erreur (« daemon not running; starting now ») :
+# on passe par cmd.exe qui les jette (2>nul), pour que PowerShell 5.1 ne les prenne jamais pour des erreurs.
+function Adb {
+  param([Parameter(ValueFromRemainingArguments)]$a)
+  $args2 = ($a | ForEach-Object { if ("$_" -match '\s') { '"' + $_ + '"' } else { "$_" } }) -join ' '
+  & cmd.exe /d /c "`"$Adb`" $args2 2>nul"
+}
 
 if ($Arreter) {
   Adb -s emulator-5554 emu kill | Out-Null; Adb -s emulator-5556 emu kill | Out-Null
