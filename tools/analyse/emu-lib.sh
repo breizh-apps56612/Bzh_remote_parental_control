@@ -16,9 +16,15 @@ emu_demarrer() { # emu_demarrer <dossier des journaux>
   echo no | avdmanager create avd -f -n phone -k "system-images;android-$API_PHONE;default;x86_64" -d pixel
   echo no | avdmanager create avd -f -n tv -k "system-images;android-$API_TV;android-tv;x86" -d tv_1080p
   adb start-server >/dev/null 2>&1   # crée la clé adb AVANT les émulateurs (sinon « device unauthorized »)
-  local opts=(-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -netfast)
-  nohup emulator -avd tv -port 5556 "${opts[@]}" > "$log/emulateur-tv.log" 2>&1 &
-  nohup emulator -avd phone -port 5554 "${opts[@]}" > "$log/emulateur-telephone.log" 2>&1 &
+  local opts=(-no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -netfast)
+  # EMU_FENETRE=1 : émulateurs avec fenêtre (écran virtuel DISPLAY_TV / DISPLAY_PH), pour les regarder en direct
+  if [ "${EMU_FENETRE:-0}" = 1 ]; then
+    DISPLAY=${DISPLAY_TV:-:2} nohup emulator -avd tv -port 5556 "${opts[@]}" > "$log/emulateur-tv.log" 2>&1 &
+    DISPLAY=${DISPLAY_PH:-:1} nohup emulator -avd phone -port 5554 "${opts[@]}" > "$log/emulateur-telephone.log" 2>&1 &
+  else
+    nohup emulator -avd tv -port 5556 -no-window "${opts[@]}" > "$log/emulateur-tv.log" 2>&1 &
+    nohup emulator -avd phone -port 5554 -no-window "${opts[@]}" > "$log/emulateur-telephone.log" 2>&1 &
+  fi
   local a b i
   for i in $(seq 1 60); do
     a=$(timeout 10 adb -s $TV shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
@@ -48,3 +54,27 @@ emu_installer() { # emu_installer <apk téléphone> <apk box> ; protection Box a
 }
 
 emu_arreter() { timeout 20 adb -s $PH emu kill >/dev/null 2>&1; timeout 20 adb -s $TV emu kill >/dev/null 2>&1; }
+
+# Vidéo de ce qui se passe sur un émulateur, par tranches de 170 s (limite d'Android) :
+#   video_debut <dossier> ; … ; video_fin   → <dossier>/telephone-N.mp4, tv-N.mp4
+video_boucle() { # video_boucle <appareil> <nom> <taille>
+  local i=0
+  while [ -f "$VIDEO_DIR/.en-cours" ]; do
+    i=$((i+1))
+    timeout 200 adb -s "$1" shell screenrecord --time-limit 170 --size "$3" --bit-rate 2000000 "/sdcard/video-$i.mp4" >/dev/null 2>&1
+    timeout 60 adb -s "$1" pull "/sdcard/video-$i.mp4" "$VIDEO_DIR/$2-$i.mp4" >/dev/null 2>&1
+    timeout 20 adb -s "$1" shell rm -f "/sdcard/video-$i.mp4"
+  done
+}
+video_debut() {
+  VIDEO_DIR=$1; mkdir -p "$VIDEO_DIR"; touch "$VIDEO_DIR/.en-cours"
+  video_boucle $PH telephone 720x1280 & VIDEO_PID1=$!
+  video_boucle $TV tv 1280x720 & VIDEO_PID2=$!
+}
+video_fin() {
+  [ -n "${VIDEO_DIR:-}" ] || return 0
+  rm -f "$VIDEO_DIR/.en-cours"
+  # SIGINT : screenrecord termine proprement le fichier en cours
+  timeout 20 adb -s $PH shell pkill -INT screenrecord >/dev/null 2>&1; timeout 20 adb -s $TV shell pkill -INT screenrecord >/dev/null 2>&1
+  wait "$VIDEO_PID1" "$VIDEO_PID2" 2>/dev/null || true   # borné : chaque commande adb de la boucle a un délai
+}

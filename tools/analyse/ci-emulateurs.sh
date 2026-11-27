@@ -32,26 +32,11 @@ vivant() { [ -n "$(timeout 20 adb -s "$1" shell pidof "$2" 2>/dev/null | tr -d '
   echo "| | Vérification | Détail |"; echo "|---|---|---|"; } > "$RESUME"
 
 # ---------- 1. Émulateurs ----------
-yes | sdkmanager --licenses >/dev/null 2>&1 || true
-sdkmanager --install "emulator" "platform-tools" \
-  "system-images;android-$API_PHONE;default;x86_64" "system-images;android-$API_TV;android-tv;x86" >/dev/null || { ko "Téléchargement des images Android"; exit 1; }
-echo no | avdmanager create avd -f -n phone -k "system-images;android-$API_PHONE;default;x86_64" -d pixel
-echo no | avdmanager create avd -f -n tv -k "system-images;android-$API_TV;android-tv;x86" -d tv_1080p
-emulator -list-avds
-OPTS=(-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -netfast)
-adb start-server >/dev/null 2>&1   # crée la clé adb AVANT les émulateurs (sinon « device unauthorized »)
-nohup emulator -avd tv -port 5556 "${OPTS[@]}" > "$OUT/journaux/emulateur-tv.log" 2>&1 &
-nohup emulator -avd phone -port 5554 "${OPTS[@]}" > "$OUT/journaux/emulateur-telephone.log" 2>&1 &
-for i in $(seq 1 60); do
-  a=$(timeout 10 adb -s $TV shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-  b=$(timeout 10 adb -s $PH shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-  [ "$a" = 1 ] && [ "$b" = 1 ] && break
-  if [ "$i" = 12 ] && timeout 10 adb devices | grep -q unauthorized; then adb kill-server; adb start-server >/dev/null 2>&1; fi
-  pgrep -f "avd tv" >/dev/null && pgrep -f "avd phone" >/dev/null || { tail -5 "$OUT"/journaux/emulateur-*.log; break; }
-  sleep 10
-done
-if [ "$a" = 1 ] && [ "$b" = 1 ]; then ok "Démarrage des deux émulateurs" "$((i*10)) s"; else ko "Démarrage des émulateurs" "TV=$a téléphone=$b"; exit 1; fi
-for d in $PH $TV; do for s in window_animation_scale transition_animation_scale animator_duration_scale; do timeout 20 adb -s $d shell settings put global $s 0; done; done
+# EMU_DEJA_LA=1 : émulateurs déjà démarrés (session en direct) ; sinon on les démarre ici
+source "$HERE/emu-lib.sh"
+if [ "${EMU_DEJA_LA:-0}" = 1 ]; then ok "Émulateurs déjà démarrés (session en direct)"
+elif emu_demarrer "$OUT/journaux"; then ok "Démarrage des deux émulateurs" "$EMU_SECONDES s"
+else ko "Démarrage des émulateurs"; exit 1; fi
 
 # ---------- 2. Installation ----------
 timeout 180 adb -s $PH install -r -g "$APK_PHONE" >/dev/null 2>&1 && ok "Installation appli téléphone" || ko "Installation appli téléphone"
@@ -63,6 +48,7 @@ timeout 20 adb -s $TV shell appops set $PKG_TV GET_USAGE_STATS allow
 timeout 20 adb -s $TV logcat -c; timeout 20 adb -s $PH logcat -c
 timeout 60 adb -s $TV shell monkey -p $PKG_TV -c android.intent.category.LEANBACK_LAUNCHER 1 >/dev/null 2>&1
 timeout 60 adb -s $PH shell monkey -p $PKG_PH -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+[ "${VIDEO:-1}" = 1 ] && video_debut "$OUT/videos"   # vidéo de tout le passage, téléphone et TV
 sleep 8; cap $TV 01-tv-demarrage; cap $PH 01-telephone-accueil
 vivant $TV $PKG_TV && ok "Appli Box lancée" || ko "Appli Box lancée"
 vivant $PH $PKG_PH && ok "Appli téléphone lancée" || ko "Appli téléphone lancée"
@@ -137,6 +123,9 @@ for k in DPAD_DOWN DPAD_DOWN DPAD_RIGHT DPAD_CENTER BACK HOME; do timeout 20 adb
 cap $TV 04-tv-apres-navigation
 vivant $TV $PKG_TV && ok "Navigation télécommande sur la TV" || ko "Navigation télécommande sur la TV" "appli Box arrêtée"
 
+video_fin
+n=$(ls "$OUT/videos"/*.mp4 2>/dev/null | wc -l); [ "$n" -gt 0 ] && info "Vidéos du passage" "$n fichier(s) dans videos/" || info "Vidéos du passage" "aucune vidéo enregistrée"
+
 # ---------- 6. Plantages ----------
 for d in $PH $TV; do
   n=$([ $d = $PH ] && echo telephone || echo tv)
@@ -148,5 +137,5 @@ done
 
 rm -rf "$ID"   # la clé du téléphone de test ne quitte jamais le runner
 echo >> "$RESUME"; [ $ECHECS = 0 ] && echo "**Tout est vert.**" >> "$RESUME" || echo "**$ECHECS vérification(s) en échec.**" >> "$RESUME"
-timeout 20 adb -s $PH emu kill >/dev/null 2>&1; timeout 20 adb -s $TV emu kill >/dev/null 2>&1
+[ "${KEEP:-0}" = 1 ] || emu_arreter   # KEEP=1 : on garde les émulateurs (session en direct)
 [ $ECHECS = 0 ]
