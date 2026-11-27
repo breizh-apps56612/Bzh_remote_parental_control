@@ -150,6 +150,8 @@ class ContractActivity : AppCompatActivity() {
             is Step.Child -> child(h)
         }
         if (s !is Step.Intro) {
+            // Le premier écran cache la barre du bas : on la remontre ensuite
+            nav.visibility = View.VISIBLE
             nav.addView(Ui.button(c, "Retour") { back() }, LinearLayout.LayoutParams(0, Ui.dp(c, 52), 1f).apply { marginEnd = Ui.dp(c, 6) })
             nav.addView(Ui.button(c, if (index == steps.lastIndex) (if (saving) "Envoi…" else "Valider le contrat") else "Continuer", primary = true) { if (!saving) next() },
                 LinearLayout.LayoutParams(0, Ui.dp(c, 52), 1.6f).apply { marginStart = Ui.dp(c, 6) })
@@ -206,7 +208,12 @@ class ContractActivity : AppCompatActivity() {
         })
         val opts = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         q.options.forEachIndexed { i, o ->
-            opts.addView(chip(o, i == chosen) { answers[q.id] = i; touched += q.id; render() }, Ui.lp(c, 8))
+            opts.addView(chip(o, i == chosen) {
+                answers[q.id] = i; touched += q.id; render()
+                // Une réponse choisie : la phrase suivante arrive d'elle-même (le temps de voir le choix)
+                val at = index
+                content.postDelayed({ if (!isFinishing && index == at) next() }, 350)
+            }, Ui.lp(c, 8))
         }
         card.addView(opts, Ui.lp(c, 10))
         content.addView(card, Ui.lp(c, 18))
