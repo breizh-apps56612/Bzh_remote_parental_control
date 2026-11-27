@@ -39,7 +39,7 @@ jobs:
   emulateurs:
     if: github.repository_owner == 'breizh-apps56612'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -67,6 +67,7 @@ jobs:
           sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tesseract-ocr >/dev/null
 
       - name: Banc d'essai
+        timeout-minutes: 25
         env:
           APK_PHONE: app/build/outputs/apk/release/app-release.apk
           APK_BOX: box/build/outputs/apk/release/box-release.apk
