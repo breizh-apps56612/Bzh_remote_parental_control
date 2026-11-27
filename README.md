@@ -95,6 +95,14 @@ Fonctions : mesure du temps par appli (même téléphone éteint), limites et ho
 bonus de temps à distance, protection des Paramètres de la TV par le code parent, tableau de bord (aujourd'hui, 7 jours, plages horaires, top applis),
 titre en cours (facultatif). Options facultatives selon la box : historique des jours précédents, titre en cours, anti-désinstallation.
 
+**Assistant des règles** (calculé sur le téléphone, sans IA en ligne ni serveur) :
+- **réglages pré-remplis selon l'âge** de l'enfant (temps par jour, couvre-feu du plus jeune), toujours modifiables ;
+- **détection des règles incohérentes**, avec une correction en un geste : couvre-feu qui coupe avant la fin des horaires,
+  limite par jour qui ne peut jamais être atteinte, aucun jour coché, programmes au-dessus de l'âge, limite d'appli plus longue que le temps total,
+  YouTube sans classement par âge pour les moins de 13 ans, couvre-feu commun à des enfants d'âges éloignés.
+
+Les âges conseillés sont des propositions de départ, pas une recommandation officielle.
+
 Sécurité : TLS mutuel (clé RSA par appareil), appairage par code TV + preuve HMAC liée aux deux certificats (anti-interception), empreinte de la box épinglée,
 code parent jamais transmis (empreinte uniquement), réglages chiffrés sur la box (EncryptedSharedPreferences), aucune donnée hors du domicile.
 

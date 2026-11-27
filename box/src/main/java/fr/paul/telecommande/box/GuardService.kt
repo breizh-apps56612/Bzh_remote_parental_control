@@ -504,6 +504,7 @@ class GuardService : AccessibilityService() {
         val last = rules.profiles.firstOrNull { it.id == lastId }
         overlays.showWhoWatches(rules.profiles, lastId,
             { fr.paul.telecommande.shared.ProfileSwitch.needsPin(last, it, rules.pinHash.isNotBlank()) },
+            info = { p -> whoInfo(rules, p, System.currentTimeMillis()) },
             cancelable = store.activeProfile() != null) { pickProfile(it) }
     }
 
@@ -552,7 +553,9 @@ class GuardService : AccessibilityService() {
                 val lastId = store.lastProfile()
                 val last = allRules.profiles.firstOrNull { it.id == lastId }
                 overlays.showWhoWatches(allRules.profiles, lastId,
-                    { fr.paul.telecommande.shared.ProfileSwitch.needsPin(last, it, allRules.pinHash.isNotBlank()) }) { pickProfile(it) }
+                    { fr.paul.telecommande.shared.ProfileSwitch.needsPin(last, it, allRules.pinHash.isNotBlank()) },
+                    info = { p -> whoInfo(allRules, p, now) },
+                    footer = if (allRules.bedtimeEnabled && allRules.bedtimeStart != allRules.bedtimeEnd) "Extinction à ${RulesEngine.hhmm(allRules.bedtimeStart)}" else null) { pickProfile(it) }
             } else if (audioPlaying()) pauseMedia()   // pas de vidéo qui tourne derrière « Qui regarde ? »
             return
         }
@@ -1459,6 +1462,36 @@ class GuardService : AccessibilityService() {
             .put("perms", JSONObject().put("media", Media.allowed(this)).put("encrypted", store.encrypted))
             .put("rulesVersion", store.rules().version)
             .put("profile", activeProfile(store.rules())?.toJson() ?: JSONObject.NULL)
+            .put("profileUsage", profileUsage(now))
+    }
+
+    /** Temps restant d'un profil aujourd'hui (ms), ou null s'il n'a pas de limite. */
+    private fun leftFor(all: BoxRules, p: fr.paul.telecommande.shared.Profile?, now: Long): Long? {
+        if (!all.enabled) return null
+        val r = all.forProfile(p)
+        if (!r.enabled) return null
+        return RulesEngine.remaining(r, null, usage("", now, all, p))
+    }
+
+    /** Temps du jour et temps restant de chaque profil (« * » : toute la TV), pour le tableau de bord du téléphone. */
+    private fun profileUsage(now: Long): JSONObject {
+        val all = store.rules()
+        val day = Stats.startOfDay(now)
+        val o = JSONObject()
+        val tv = log.totals(day, now).filterKeys { it !in exempt }.values.sum()
+        o.put("*", JSONObject().put("ms", tv).put("left", if (all.profiles.isEmpty()) leftFor(all, null, now) ?: -1L else -1L))
+        all.profiles.forEach { p ->
+            val ms = log.totals(day, now, p.id).filterKeys { it !in exempt }.values.sum()
+            o.put(p.id, JSONObject().put("ms", ms).put("left", leftFor(all, p, now) ?: -1L))
+        }
+        return o
+    }
+
+    /** Sous-titre d'une carte « Qui regarde ? » : temps restant (et s'il est presque écoulé). */
+    private fun whoInfo(all: BoxRules, p: fr.paul.telecommande.shared.Profile, now: Long): Pair<String, Boolean>? {
+        if (p.unlimited) return null
+        val left = runCatching { leftFor(all, p, now) }.getOrNull() ?: return null
+        return (if (left <= 0) "Temps écoulé" else "Encore ${RulesEngine.fmt(left)}") to (left < 10 * 60_000L)
     }
 
     private fun usage(from: Long, to: Long): JSONObject {

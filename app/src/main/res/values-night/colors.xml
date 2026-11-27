@@ -37,4 +37,16 @@
     <color name="k_green">#22C55E</color>
     <color name="k_yellow">#EAB308</color>
     <color name="k_blue">#3B82F6</color>
+    <color name="hero_bg">#05061A</color>
+    <color name="hero_glow_a">#B35B54FF</color>
+    <color name="hero_glow_b">#6134F5C5</color>
+    <color name="hero_ink">#FFFFFF</color>
+    <color name="hero_soft">#C7C8EE</color>
+    <color name="mint">#34F5C5</color>
+    <color name="amber">#FFB020</color>
+    <color name="amber_soft">#3A2C17</color>
+    <color name="amber_ink">#F3D9AE</color>
+    <color name="indigo_soft">#23224A</color>
+    <color name="indigo_ink">#DCDBFF</color>
+    <color name="tile">#15172B</color>
 </resources>

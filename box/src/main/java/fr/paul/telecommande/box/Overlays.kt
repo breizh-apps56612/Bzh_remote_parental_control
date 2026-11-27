@@ -337,42 +337,81 @@ class Overlays(private val ctx: Context) {
     private var who: View? = null
     val whoVisible get() = who != null
 
-    fun showWhoWatches(profiles: List<fr.paul.telecommande.shared.Profile>, lastId: String? = null, needsPin: (fr.paul.telecommande.shared.Profile) -> Boolean = { it.unlimited }, cancelable: Boolean = false, onPick: (fr.paul.telecommande.shared.Profile) -> Unit) = ui {
+    /**
+     * « Qui regarde ? » (style A Premium) : nuit à reflets aurore, grandes cartes ; celle qui a le focus devient blanche.
+     * [info] : temps restant du profil (« Encore 20 min »), [warn] : ce temps est presque écoulé ; [footer] : « Extinction à 20:30 ».
+     */
+    fun showWhoWatches(profiles: List<fr.paul.telecommande.shared.Profile>, lastId: String? = null,
+                       needsPin: (fr.paul.telecommande.shared.Profile) -> Boolean = { it.unlimited },
+                       info: (fr.paul.telecommande.shared.Profile) -> Pair<String, Boolean>? = { null }, footer: String? = null,
+                       cancelable: Boolean = false,
+                       onPick: (fr.paul.telecommande.shared.Profile) -> Unit) = ui {
         if (who != null) return@ui
+        val night = 0xFF05061A.toInt()
         // écran opaque : c'est un passage obligé, rien ne doit transparaître derrière
-        val root = BoxUi.Fit(ctx).apply { background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xFF0B0912.toInt(), 0xFF050508.toInt())) }
-        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-        col.addView(BoxUi.label(ctx, "Télécommande Box").apply { gravity = Gravity.CENTER })
-        col.addView(text("Qui regarde ?", 44f, bold = true), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
-        val row = LinearLayout(ctx).apply { gravity = Gravity.CENTER; setPadding(dp(12), dp(20), dp(12), dp(20)) }
+        val root = BoxUi.Fit(ctx).apply {
+            fun glow(color: Int, x: Float, y: Float, r: Int) = android.graphics.drawable.GradientDrawable().apply {
+                gradientType = android.graphics.drawable.GradientDrawable.RADIAL_GRADIENT; gradientRadius = dp(r).toFloat()
+                setGradientCenter(x, y); colors = intArrayOf(color, color and 0x00FFFFFF)
+            }
+            background = android.graphics.drawable.LayerDrawable(arrayOf(
+                android.graphics.drawable.GradientDrawable().apply { setColor(night) },
+                glow(0x8C5B54FF.toInt(), 0.95f, 0f, 520), glow(0x4034F5C5, 0.05f, 1.05f, 480)))
+        }
+        val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        val head = LinearLayout(ctx).apply { gravity = Gravity.BOTTOM }
+        val titles = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        titles.addView(text(java.text.SimpleDateFormat("EEEE · HH:mm", java.util.Locale.FRANCE).format(java.util.Date()).replaceFirstChar { it.uppercase() }, 18f, 0xFFC7C8EE.toInt()).apply { gravity = Gravity.START })
+        titles.addView(text("Qui regarde ?", 56f, Color.WHITE, bold = true).apply { gravity = Gravity.START }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
+        head.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
+        if (!footer.isNullOrBlank()) head.addView(text(footer, 16f, Color.WHITE, bold = true).apply {
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(99).toFloat(); setStroke(dp(1), 0x33FFFFFF) }
+            setPadding(dp(18), dp(9), dp(18), dp(9))
+        }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(24); bottomMargin = dp(8) })
+        col.addView(head, LinearLayout.LayoutParams(-1, -2))
+
+        val row = LinearLayout(ctx).apply { gravity = Gravity.START; setPadding(0, dp(34), 0, dp(26)) }
         var first: View? = null
-        profiles.forEach { p ->
+        val focusedState = intArrayOf(android.R.attr.state_focused)
+        fun states(focused: Int, normal: Int) = android.content.res.ColorStateList(arrayOf(focusedState, intArrayOf()), intArrayOf(focused, normal))
+        profiles.forEachIndexed { i, p ->
+            val lock = needsPin(p)
+            val (sub, warn) = info(p) ?: (when {
+                p.unlimited -> if (lock) "Code parent" else "Sans limite"
+                lastId == p.id -> "Continuer"
+                lock -> "Changer : code parent"
+                p.dailyTotalMin > 0 -> "${fr.paul.telecommande.shared.RulesEngine.fmt(p.dailyTotalMin * 60_000L)} par jour"
+                else -> "Règles de la maison"
+            } to false)
             val tile = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+                orientation = LinearLayout.VERTICAL
                 isFocusable = true; isFocusableInTouchMode = true; isClickable = true
-                val normal = BoxUi.cardBg(ctx, 32f)
-                val focused = BoxUi.cardBg(ctx, 32f).apply { setStroke(dp(4), Color.WHITE) }
-                background = android.graphics.drawable.StateListDrawable().apply {
-                    addState(intArrayOf(android.R.attr.state_focused), focused); addState(intArrayOf(), normal)
-                }
-                setPadding(dp(24), dp(28), dp(24), dp(24))
-                addView(text(p.emoji, 64f))
-                addView(text(p.name, 22f, bold = true), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) })
-                val lock = needsPin(p)
-                addView(text(when {
-                    p.unlimited -> if (lock) "🔒 Code parent" else "Sans limite"
-                    lastId == p.id -> "Continuer"
-                    lock -> "🔒 Changer : code parent"
-                    p.dailyTotalMin > 0 -> "${p.dailyTotalMin} min par jour"
-                    else -> "Règles de la maison"
-                }, 14f, BoxUi.MUTED))
-                setOnFocusChangeListener { v, has -> v.animate().scaleX(if (has) 1.08f else 1f).scaleY(if (has) 1.08f else 1f).setDuration(140).start() }
+                val normal = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(32).toFloat(); setColor(0x12FFFFFF); setStroke(dp(1), 0x29FFFFFF) }
+                val focused = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(32).toFloat(); setColor(Color.WHITE); setStroke(dp(6), 0x737C74FF) }
+                background = android.graphics.drawable.StateListDrawable().apply { addState(focusedState, focused); addState(intArrayOf(), normal) }
+                setPadding(dp(24), dp(24), dp(24), dp(22))
+                addView(text(p.emoji, 40f).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = dp(24).toFloat(); setColor(0x1F8C89FF) }
+                    isDuplicateParentStateEnabled = true
+                }, LinearLayout.LayoutParams(dp(76), dp(76)))
+                addView(View(ctx), LinearLayout.LayoutParams(1, 0, 1f))
+                addView(text(p.name, 30f, Color.WHITE, bold = true).apply {
+                    gravity = Gravity.START; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                    setTextColor(states(night, Color.WHITE)); isDuplicateParentStateEnabled = true
+                })
+                addView(text((if (lock) "🔒 " else "") + sub, 17f, bold = true).apply {
+                    gravity = Gravity.START; maxLines = 1
+                    setTextColor(if (warn) states(0xFF8A5A00.toInt(), 0xFFFFC857.toInt()) else if (p.unlimited || lock) states(0xFF3D3F5C.toInt(), 0xFFC7C8EE.toInt()) else states(0xFF0A6E5C.toInt(), 0xFF34F5C5.toInt()))
+                    isDuplicateParentStateEnabled = true
+                }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(6) })
+                setOnFocusChangeListener { v, has -> v.animate().scaleX(if (has) 1.06f else 1f).scaleY(if (has) 1.06f else 1f).setDuration(140).start() }
                 setOnClickListener { remove(root); who = null; onPick(p) }
             }
-            row.addView(tile, LinearLayout.LayoutParams(dp(210), dp(230)).apply { setMargins(dp(14), 0, dp(14), 0) })
+            row.addView(tile, LinearLayout.LayoutParams(dp(236), dp(228)).apply { if (i > 0) marginStart = dp(24) })
             if (first == null || p.id == lastId) first = tile
         }
-        col.addView(row, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
+        col.addView(row)
+        col.addView(text("Flèches pour choisir · OK pour valider", 15f, 0xFFC7C8EE.toInt()).apply { gravity = Gravity.START })
         root.addView(col)
         root.isFocusable = true
         // à l'allumage on doit choisir ; « Changer de profil » (un profil est déjà actif) se ferme avec Retour

@@ -26,6 +26,19 @@ class BarChartView(context: Context) : View(context) {
     var showValues = true
     var highlight = -1   // index mis en avant (-1 = dernier)
     var heightDp = 150
+    private var dark = false
+    private val overPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ContextCompat.getColor(context, R.color.amber) }
+
+    /** Version pour le bandeau nuit : barres en verre, limite en pointillés blancs, dépassements en ambre. */
+    fun onDark() {
+        dark = true
+        bar.color = 0x3DFFFFFF
+        limitPaint.color = 0x99FFFFFF.toInt()
+        label.color = ContextCompat.getColor(context, R.color.hero_soft)
+        value.color = 0xFFFFFFFF.toInt()
+        chip.color = ContextCompat.getColor(context, R.color.hero_bg)
+        invalidate()
+    }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), (heightDp * d).toInt())
@@ -50,9 +63,11 @@ class BarChartView(context: Context) : View(context) {
             r.set(cx - bw / 2, bottom - maxOf(h, 2 * d), cx + bw / 2, bottom)
             tops[i] = r.top
             val hot = i == (if (highlight >= 0) highlight else valuesMin.lastIndex)
-            if (hot) barToday.shader = android.graphics.LinearGradient(0f, r.top, 0f, r.bottom,
+            if (hot) barToday.shader = if (dark) null else android.graphics.LinearGradient(0f, r.top, 0f, r.bottom,
                 ContextCompat.getColor(context, R.color.accent2), ContextCompat.getColor(context, R.color.accent), android.graphics.Shader.TileMode.CLAMP)
-            canvas.drawRoundRect(r, minOf(8 * d, bw / 2.5f), minOf(8 * d, bw / 2.5f), if (hot) barToday else bar)
+            if (hot && dark) barToday.color = ContextCompat.getColor(context, R.color.mint)
+            val over = dark && limitMin > 0 && v > limitMin
+            canvas.drawRoundRect(r, minOf(8 * d, bw / 2.5f), minOf(8 * d, bw / 2.5f), if (over) overPaint else if (hot) barToday else bar)
             canvas.drawText(labels.getOrElse(i) { "" }, cx, height - 4 * d, label)
         }
         // 3) les valeurs par-dessus, sur une pastille de la couleur de la carte (lisibles même sur la ligne)

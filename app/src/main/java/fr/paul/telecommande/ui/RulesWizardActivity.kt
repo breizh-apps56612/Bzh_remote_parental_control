@@ -24,6 +24,7 @@ import fr.paul.telecommande.core.Usage
 import fr.paul.telecommande.shared.AppRule
 import fr.paul.telecommande.shared.BoxRules
 import fr.paul.telecommande.shared.Profile
+import fr.paul.telecommande.shared.RulesAdvisor
 import fr.paul.telecommande.shared.RulesEngine
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -33,7 +34,11 @@ import org.json.JSONObject
  * Fonctionne avec l'appli Box (règles appliquées par la TV) ou sans (règles appliquées par le téléphone).
  */
 class RulesWizardActivity : AppCompatActivity() {
-    companion object { const val EXTRA_ID = "device_id" }
+    companion object {
+        const val EXTRA_ID = "device_id"
+        /** Ouvrir directement la vérification (conseils de l'assistant). */
+        const val EXTRA_CHECK = "check"
+    }
 
     private enum class Step(val title: String, val intro: String) {
         PROFILES("Qui regarde la TV ?", "Créez un profil par enfant. À l'allumage, la TV demandera qui regarde, et chacun aura son propre temps."),
@@ -42,7 +47,7 @@ class RulesWizardActivity : AppCompatActivity() {
         BEDTIME("Couvre-feu", "Pendant le couvre-feu, la TV est interdite. Il s'applique même pendant le temps libre."),
         APPS("Les applis", "Fixez une limite pour une appli précise, ou bloquez-la. Facultatif."),
         COMFORT("Confort", "Des petites attentions pour que l'arrêt se passe bien."),
-        SUMMARY("C'est prêt", "Vérifiez les règles avant de les activer.")
+        SUMMARY("Tout est prêt ?", "L'assistant a relu vos règles. Corrigez en un geste ce qui ne tient pas, puis activez.")
     }
 
     private lateinit var device: Device
@@ -53,8 +58,11 @@ class RulesWizardActivity : AppCompatActivity() {
     private var index = 0
     private var apps: List<Pair<String, String>> = emptyList()
 
+    private lateinit var heroBox: LinearLayout
     private lateinit var content: LinearLayout
     private lateinit var nav: LinearLayout
+    /** Conseils marqués « Compris » pendant cet assistant. */
+    private val seen = mutableSetOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,9 +74,11 @@ class RulesWizardActivity : AppCompatActivity() {
             apps = store.boxRules(device.id).apps.mapValues { it.value.copy() }.toMutableMap())
         else fromPhone(store.rules(device.id))
         steps = Step.values().filter { withBox || (it != Step.PROFILES && it != Step.APPS && it != Step.COMFORT) }
+        if (intent.getBooleanExtra(EXTRA_CHECK, false)) index = steps.lastIndex
 
         val c = this
-        content = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; val p = Ui.dp(c, 18); setPadding(p, p * 2, p, p) }
+        heroBox = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        content = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; val p = Ui.dp(c, 18); setPadding(p, Ui.dp(c, 4), p, p) }
         nav = LinearLayout(c).apply {
             setPadding(Ui.dp(c, 16), Ui.dp(c, 12), Ui.dp(c, 16), Ui.dp(c, 16))
             setBackgroundResource(R.drawable.bg_bar)
@@ -76,9 +86,12 @@ class RulesWizardActivity : AppCompatActivity() {
         setContentView(LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.bg_screen)
-            addView(ScrollView(c).apply { addView(content) }, LinearLayout.LayoutParams(-1, 0, 1f))
+            addView(ScrollView(c).apply {
+                addView(LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; addView(heroBox, LinearLayout.LayoutParams(-1, -2)); addView(content, LinearLayout.LayoutParams(-1, -2)) })
+            }, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(nav, LinearLayout.LayoutParams(-1, -2))
         })
+        Premium.darkStatusBar(this)
         content.visibility = View.INVISIBLE
         Ui.createPinIfNeeded(this) {
             Ui.requirePin(this, "Code parent pour configurer les règles.") { content.visibility = View.VISIBLE; render() }
@@ -113,19 +126,31 @@ class RulesWizardActivity : AppCompatActivity() {
         val c = this
         val step = steps[index]
         content.removeAllViews()
-        content.addView(Ui.label(c, "Contrôle parental · ${device.name}"))
-        content.addView(Ui.text(c, "Étape ${index + 1} sur ${steps.size}", 13f, muted = true), Ui.lp(c, 6))
-        // barre segmentée : une pastille par étape
-        content.addView(LinearLayout(c).apply {
-            steps.indices.forEach { i ->
-                addView(View(c).apply {
-                    background = if (i <= index) GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Ui.color(c, R.color.accent), Ui.color(c, R.color.accent2))).apply { cornerRadius = 99f }
-                    else GradientDrawable().apply { setColor(Ui.color(c, R.color.track)); cornerRadius = 99f }
-                }, LinearLayout.LayoutParams(0, Ui.dp(c, 5), 1f).apply { if (i > 0) marginStart = Ui.dp(c, 4) })
-            }
-        }, Ui.lp(c, 8))
-        content.addView(Ui.title(c, step.title, 28f), Ui.lp(c, 22))
-        content.addView(Ui.text(c, step.intro, 15f, muted = true), Ui.lp(c, 8))
+        heroBox.removeAllViews()
+        // ===== Bandeau nuit : retour, progression, titre de l'étape en grand =====
+        val h = Premium.hero(c)
+        val top = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
+        top.addView(Premium.heroRound(c, R.drawable.ic_back, if (index > 0) "Étape précédente" else "Fermer") { if (index > 0) { index--; render() } else finish() },
+            LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)).apply { marginEnd = Ui.dp(c, 12) })
+        val bar = LinearLayout(c)
+        steps.indices.forEach { i ->
+            bar.addView(View(c).apply { background = GradientDrawable().apply { setColor(if (i <= index) Color.WHITE else 0x38FFFFFF); cornerRadius = 99f } },
+                LinearLayout.LayoutParams(0, Ui.dp(c, 4), 1f).apply { if (i > 0) marginStart = Ui.dp(c, 5) })
+        }
+        top.addView(bar, LinearLayout.LayoutParams(0, -2, 1f))
+        top.addView(Premium.heroText(c, "${index + 1}/${steps.size}", 13f, bold = true).apply { setPadding(Ui.dp(c, 12), 0, 0, 0) })
+        h.addView(top)
+        heroChip()?.let { chip ->
+            h.addView(TextView(c).apply {
+                text = chip; textSize = 12.5f; typeface = Ui.bold; setTextColor(Ui.color(c, R.color.hero_bg))
+                background = GradientDrawable().apply { setColor(Ui.color(c, R.color.mint)); cornerRadius = 99f }
+                setPadding(Ui.dp(c, 12), Ui.dp(c, 5), Ui.dp(c, 12), Ui.dp(c, 5))
+            }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = Ui.dp(c, 22) })
+        }
+        h.addView(Premium.heroText(c, step.title, 34f, bold = true).apply { letterSpacing = -0.02f }, Ui.lp(c, 14))
+        h.addView(Premium.heroText(c, step.intro, 14.5f, soft = true), Ui.lp(c, 8))
+        h.addView(Premium.heroText(c, "Contrôle parental · ${device.name}", 12f, soft = true), Ui.lp(c, 14))
+        heroBox.addView(h, LinearLayout.LayoutParams(-1, -2))
         when (step) {
             Step.PROFILES -> profiles()
             Step.WHEN -> whenStep()
@@ -135,8 +160,32 @@ class RulesWizardActivity : AppCompatActivity() {
             Step.COMFORT -> comfort()
             Step.SUMMARY -> summary()
         }
+        if (step != Step.SUMMARY && step != Step.PROFILES) liveAdvice()
         renderNav()
     }
+
+    /** Pastille du bandeau : « Pré-rempli pour 8 ans » quand l'étape suit l'âge d'un enfant. */
+    private fun heroChip(): String? {
+        val age = RulesAdvisor.youngestAge(rules) ?: return if (steps[index] == Step.SUMMARY) "Vérifié par l'assistant" else null
+        return when (steps[index]) {
+            Step.PROFILES -> "Réglages pré-remplis selon l'âge"
+            Step.DAILY, Step.BEDTIME -> "Conseillé pour ${age} ans"
+            Step.SUMMARY -> "Vérifié par l'assistant"
+            else -> null
+        }
+    }
+
+    private fun advices() = RulesAdvisor.check(rules, { pkg -> apps.firstOrNull { it.first == pkg }?.second ?: fr.paul.telecommande.core.AppCatalog.name(pkg) },
+        if (withBox && apps.isNotEmpty()) apps.map { it.first } else null).filter { it.id !in seen }
+
+    /** Pendant les étapes : les règles qui se contredisent, tout de suite, avec leur correction. */
+    private fun liveAdvice() {
+        advices().filter { it.level != RulesAdvisor.Level.INFO }.forEach { a -> content.addView(adviceView(a), gap(16)) }
+    }
+
+    private fun adviceView(a: RulesAdvisor.Advice) = Premium.adviceCard(this, a,
+        onFix = { f -> f.applyTo(rules); seen += a.id; Ui.toast(this, "Corrigé : ${f.label}"); render() },
+        onDismiss = if (a.level == RulesAdvisor.Level.CONFLICT) null else ({ seen += a.id; render() }))
 
     private fun renderNav() {
         val c = this
@@ -200,7 +249,8 @@ class RulesWizardActivity : AppCompatActivity() {
         rules.profiles.forEachIndexed { i, p ->
             content.addView(choice("${p.emoji}  ${p.name}", when {
                 p.unlimited -> "Parent · sans limite · demande le code"
-                p.dailyTotalMin > 0 -> "${Ui.ageLabel(p)} · ${Usage.format(p.dailyTotalMin * 60_000L)} par jour"
+                p.dailyTotalMin > 0 -> "${Ui.ageLabel(p)} · ${Usage.format(p.dailyTotalMin * 60_000L)} par jour" +
+                    (p.age()?.let { if (RulesAdvisor.presetFor(it).dailyMin == p.dailyTotalMin) " · conseillé" else "" } ?: "")
                 else -> "${Ui.ageLabel(p)} · temps de la maison (étape suivante)"
             }, true) { editProfile(i) }, gap(if (i == 0) 18 else 10))
         }
@@ -215,7 +265,9 @@ class RulesWizardActivity : AppCompatActivity() {
         val c = this
         // Nouvel enfant : l'âge d'abord (il fixe d'office la classification des programmes)
         if (i < 0 && preset == null) {
-            Ui.askAge(c, "", null) { age -> editProfile(-1, Profile(java.util.UUID.randomUUID().toString().take(8), "", EMOJIS.first(), birthYear = Ui.birthYearFor(age))) }
+            // l'assistant pré-remplit le temps par jour selon l'âge (modifiable juste après)
+            Ui.askAge(c, "", null) { age -> editProfile(-1, Profile(java.util.UUID.randomUUID().toString().take(8), "", EMOJIS.first(),
+                dailyTotalMin = RulesAdvisor.presetFor(age).dailyMin, birthYear = Ui.birthYearFor(age))) }
             return
         }
         val p = preset ?: rules.profiles[i]
@@ -229,28 +281,39 @@ class RulesWizardActivity : AppCompatActivity() {
                 setOnClickListener { emoji = e; views.forEach { v -> v.alpha = if (v.text == e) 1f else 0.35f } }
             }.also { views += it })
         }
-        val limits = listOf(0, 30, 45, 60, 90, 120, 180)
+        val limits = listOf(0, 30, 45, 60, 90, 120, 150, 180)
         var limit = p.dailyTotalMin
         val box = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL; setPadding(Ui.dp(c, 22), 0, Ui.dp(c, 22), 0)
             addView(name); addView(HorizontalScrollView(c).apply { addView(emojiRow) }, Ui.lp(c, 8))
         }
         if (!p.unlimited) {
-            val ageBtn = Ui.button(c, "Âge : " + Ui.ageLabel(p)) {}
-            ageBtn.setOnClickListener { Ui.askAge(c, name.text.toString().trim(), p.age()) { a -> p.birthYear = Ui.birthYearFor(a); ageBtn.text = "Âge : $a ans" } }
-            box.addView(ageBtn, Ui.lp(c, 12))
-            box.addView(Ui.text(c, "Temps par jour pour ce profil", 13f, muted = true), Ui.lp(c, 12))
             val holder = LinearLayout(c)
+            val hint = Ui.text(c, "", 13f).apply { setTextColor(Ui.color(c, R.color.accent)); typeface = Ui.medium }
             fun draw() {
                 holder.removeAllViews()
                 holder.addView(chipRow(limits.map { (if (it == 0) "Comme la maison" else Usage.format(it * 60_000L)) to (it == limit) }) { k -> limit = limits[k]; draw() })
+                hint.text = p.age()?.let { a -> RulesAdvisor.presetFor(a).let { pr -> "Conseillé pour $a ans : ${Usage.format(pr.dailyMin * 60_000L)} par jour" + if (limit == pr.dailyMin) " ✓" else "" } } ?: ""
             }
+            val ageBtn = Ui.button(c, "Âge : " + Ui.ageLabel(p)) {}
+            ageBtn.setOnClickListener {
+                Ui.askAge(c, name.text.toString().trim(), p.age()) { a ->
+                    p.birthYear = Ui.birthYearFor(a); ageBtn.text = "Âge : $a ans"
+                    limit = RulesAdvisor.presetFor(a).dailyMin; draw()
+                }
+            }
+            box.addView(ageBtn, Ui.lp(c, 12))
+            box.addView(Ui.text(c, "Temps par jour pour ce profil", 13f, muted = true), Ui.lp(c, 12))
             draw(); box.addView(holder, Ui.lp(c, 6))
+            box.addView(hint, Ui.lp(c, 8))
         }
         val dlg = AlertDialog.Builder(c).setTitle(if (i >= 0) "Profil" else "Nouvel enfant").setView(box)
             .setPositiveButton("OK") { _, _ ->
                 p.name = name.text.toString().trim().ifBlank { "Enfant" }; p.emoji = emoji; p.dailyTotalMin = limit
-                if (i < 0) rules.profiles.add(p)
+                if (i < 0) {
+                    if (RulesAdvisor.bedtimeIfNone(rules, p)) Ui.toast(c, "Couvre-feu conseillé ajouté : ${RulesEngine.hhmm(rules.bedtimeStart)}")
+                    rules.profiles.add(p)
+                }
                 render()
             }.setNegativeButton("Annuler", null)
         if (i >= 0) dlg.setNeutralButton("Supprimer") { _, _ -> rules.profiles.removeAt(i); render() }
@@ -289,10 +352,12 @@ class RulesWizardActivity : AppCompatActivity() {
     }
 
     private fun daily() {
-        val opts = listOf(0, 30, 45, 60, 90, 120, 180, 240)
+        val opts = listOf(0, 30, 45, 60, 90, 120, 150, 180, 240)
+        val young = RulesAdvisor.youngestAge(rules)
+        val advised = young?.let { RulesAdvisor.presetFor(it).dailyMin }
         opts.forEachIndexed { i, m ->
             content.addView(choice(if (m == 0) "Pas de limite" else Usage.format(m * 60_000L) + " par jour",
-                if (m == 0) "Seuls les horaires, le couvre-feu et les applis comptent." else null, rules.dailyTotalMin == m) {
+                if (m == 0) "Seuls les horaires, le couvre-feu et les applis comptent." else if (m == advised) "Conseillé pour $young ans" else null, rules.dailyTotalMin == m) {
                 rules.dailyTotalMin = m; render()
             }, gap(if (i == 0) 18 else 8))
         }
@@ -303,7 +368,11 @@ class RulesWizardActivity : AppCompatActivity() {
     private fun bedtime() {
         val c = this
         content.addView(choice("Pas de couvre-feu", null, !rules.bedtimeEnabled) { rules.bedtimeEnabled = false; render() }, gap(18))
-        content.addView(choice("Couvre-feu", "La TV est interdite pendant ces heures.", rules.bedtimeEnabled) { rules.bedtimeEnabled = true; render() }, gap(10))
+        val sug = RulesAdvisor.suggestedBedtime(rules)
+        content.addView(choice("Couvre-feu", "La TV est interdite pendant ces heures." + (sug?.let { " Conseillé : ${RulesEngine.hhmm(it)} (âge du plus jeune)." } ?: ""), rules.bedtimeEnabled) {
+            if (!rules.bedtimeEnabled && sug != null) { rules.bedtimeStart = sug; rules.bedtimeEnd = RulesAdvisor.BEDTIME_END }
+            rules.bedtimeEnabled = true; render()
+        }, gap(10))
         if (rules.bedtimeEnabled) {
             val times = LinearLayout(c)
             times.addView(timeButton("De", rules.bedtimeStart) { rules.bedtimeStart = it; render() }, LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1f).apply { marginEnd = Ui.dp(c, 8) })
@@ -400,6 +469,11 @@ class RulesWizardActivity : AppCompatActivity() {
 
     private fun summary() {
         val c = this
+        val adv = advices()
+        if (adv.isEmpty()) content.addView(Premium.adviceCard(c, RulesAdvisor.Advice("ok", RulesAdvisor.Level.INFO, "Aucune contradiction",
+            "Vos règles tiennent ensemble. Vous pourrez les changer à tout moment."), onFix = {}), gap(18))
+        else adv.forEachIndexed { i, a -> content.addView(adviceView(a), gap(if (i == 0) 18 else 10)) }
+        content.addView(Ui.title(c, "En résumé", 18f), gap(26))
         val lines = mutableListOf<String>()
         if (withBox) lines += if (rules.profiles.isEmpty()) "👥  Mêmes règles pour tout le monde" else "👥  Profils : " + rules.profiles.joinToString(", ") { "${it.emoji} ${it.name}" }
         lines += "🕘  " + RulesEngine.activeLabel(rules) + if (rules.activeFrom != rules.activeTo || rules.activeDays and AppRule.ALL_DAYS != AppRule.ALL_DAYS) " · temps libre en dehors" else ""

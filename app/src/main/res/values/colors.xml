@@ -11,19 +11,19 @@
     <color name="pad">#FFFFFF</color>
     <color name="pad_dot">#D5D6EC</color>
     <color name="rocker">#FFFFFF</color>
-    <color name="rocker_ink">#12142B</color>
+    <color name="rocker_ink">#05061A</color>
     <color name="line">#E3E4F0</color>
     <color name="track">#E6E7F3</color>
     <color name="bar">#D5D7EA</color>
-    <color name="ink">#12142B</color>
-    <color name="muted">#5A5D7A</color>
-    <color name="accent">#4B48E0</color>
+    <color name="ink">#05061A</color>
+    <color name="muted">#3D3F5C</color>
+    <color name="accent">#4F46E5</color>
     <color name="accent2">#0B8783</color>
     <color name="accent_soft">#244B48E0</color>
     <!-- Remplissage des boutons principaux (texte blanc dessus) -->
-    <color name="primary">#12142B</color>
+    <color name="primary">#05061A</color>
     <!-- Grande carte foncée « Ma maison » -->
-    <color name="hero">#12142B</color>
+    <color name="hero">#05061A</color>
     <!-- Dégradé signature indigo → sarcelle (micro, ajout, pastilles) : identique en clair et en sombre -->
     <color name="brand_a">#4B48E0</color>
     <color name="brand_b">#0B8783</color>
@@ -42,4 +42,17 @@
     <color name="k_green">#16A34A</color>
     <color name="k_yellow">#CA8A04</color>
     <color name="k_blue">#2563EB</color>
+    <!-- Contrôle parental « A Premium » : bandeau nuit à reflets aurore, encarts conseils -->
+    <color name="hero_bg">#05061A</color>
+    <color name="hero_glow_a">#B35B54FF</color>
+    <color name="hero_glow_b">#6134F5C5</color>
+    <color name="hero_ink">#FFFFFF</color>
+    <color name="hero_soft">#C7C8EE</color>
+    <color name="mint">#34F5C5</color>
+    <color name="amber">#FFB020</color>
+    <color name="amber_soft">#FFF1D6</color>
+    <color name="amber_ink">#3A2600</color>
+    <color name="indigo_soft">#EEEDFF</color>
+    <color name="indigo_ink">#1B1860</color>
+    <color name="tile">#F2F3F8</color>
 </resources>
