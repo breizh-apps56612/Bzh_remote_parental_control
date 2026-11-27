@@ -63,6 +63,12 @@ class BoxDashboardActivity : AppCompatActivity() {
         setContentView(AuroraNav.wrap(this, ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(page) },
             AuroraNav.Tab.KIDS))
         Premium.darkStatusBar(this)
+        // Retour du téléphone : d'abord revenir aux tuiles, puis quitter l'onglet
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (detail != null) closeDetail() else { isEnabled = false; onBackPressedDispatcher.onBackPressed(); isEnabled = true }
+            }
+        })
         render()
         lifecycleScope.launch { while (isActive) { load(); delay(30_000) } }
     }
@@ -255,79 +261,213 @@ class BoxDashboardActivity : AppCompatActivity() {
     /** Titre de partie, en phrase simple. */
     private fun heading(text: String) = Ui.title(this, text, 19f)
 
-    /** Corps de l'onglet « Enfants » : ses règles, ses bonus, ce qu'il a regardé, un conseil, puis « Plus ». */
+    // ---------- Tuiles : chaque écran de l'onglet Enfants en un coup d'œil ----------
+
+    /** Écran ouvert depuis une tuile (null = la grille de tuiles). */
+    private var detail: String? = null
+
+    private class Tile(val id: String, val emoji: String, val title: String, val value: String, val tint: Int, val open: () -> Unit)
+
+    /** Corps de l'onglet « Enfants » : la grille de tuiles, ou l'écran de la tuile ouverte. */
     private fun renderFamily(rules: fr.paul.telecommande.shared.BoxRules) {
+        val d = detail
+        if (d == null) renderTiles(rules) else renderDetail(rules, d)
+    }
+
+    private fun openDetail(id: String) { detail = id; render(); scrollTop() }
+    private fun closeDetail() { detail = null; render(); scrollTop() }
+    private fun scrollTop() { (page.parent as? android.widget.ScrollView)?.post { (page.parent as? android.widget.ScrollView)?.smoothScrollTo(0, 0) } }
+
+    private fun renderTiles(rules: fr.paul.telecommande.shared.BoxRules) {
         val c = this
         val p = activityProfile(rules)
-        val profiles = rules.profiles
-
-        // ----- 1. Les règles de l'enfant -----
+        val now = System.currentTimeMillis()
+        val indigo = Ui.color(c, R.color.indigo_soft)
+        val mint = 0x2634F5C5; val amber = Ui.color(c, R.color.amber_soft); val rose = 0x22E11D48; val sky = 0x222563EB
+        val forKid = mutableListOf<Tile>()
         if (p != null) {
-            root.addView(heading(if (p.unlimited) "Profil ${p.name}" else "Les règles de ${p.name}"), Ui.lp(c, 22))
-            when {
-                p.unlimited -> {
-                    val card = Ui.card(c)
-                    card.addView(Ui.text(c, "Aucune limite pour ce profil. Il est protégé par le code parent : un enfant ne peut pas le choisir sur la TV.", 15f).apply { setLineSpacing(0f, 1.2f) })
-                    card.addView(Ui.button(c, "Modifier le profil") { openRules(profiles.indexOf(p)) }, Ui.lp(c, 14))
-                    root.addView(card, Ui.lp(c, 10))
-                }
-                p.contract != null -> contractCards(rules, p).forEach { root.addView(it, Ui.lp(c, 10)) }
-                else -> root.addView(simpleRulesCard(rules, p), Ui.lp(c, 10))
-            }
-            if (p.contract?.paused == false && rules.enabled) root.addView(bonusCard(p), Ui.lp(c, 12))
-        } else if (!rules.enabled) {
-            val card = Ui.card(c)
-            card.addView(Ui.text(c, "", 15.5f).apply { text = sentence(rules, null); setLineSpacing(0f, 1.2f) })
-            card.addView(Ui.button(c, "Activer pas à pas", primary = true) {
-                startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
-            }, Ui.lp(c, 14))
-            root.addView(card, Ui.lp(c, 18))
+            val k = p.contract
+            val limit = limitOf(rules, p)
+            forKid += Tile("rules", if (k != null) "📜" else "⏱️", if (k != null) "Son contrat" else "Ses règles", when {
+                p.unlimited -> "Profil parent · aucune limite"
+                k?.paused == true -> "En pause"
+                k != null -> "Actif · " + Usage.format(p.dailyTotalMin * 60_000L) + " / jour"
+                limit > 0 -> Usage.format(limit * 60_000L) + " par jour"
+                else -> "Sans limite de temps"
+            }, indigo) { openDetail("rules") }
+            if (!p.unlimited) forKid += Tile("bonus", "⭐", "Bonus", when {
+                k == null -> "Avec un contrat"
+                k.paused -> "Contrat en pause"
+                else -> k.bonuses.count { it.at > now - 30 * fr.paul.telecommande.shared.ContractWizard.DAY_MS }.let { n ->
+                    if (n == 0) "Aucun ce mois-ci" else "$n ce mois-ci" }
+            }, amber) { openDetail("bonus") }
         }
-
-        // ----- 2. Ce qui a été regardé -----
-        root.addView(heading(if (p != null) "Ce que ${p.name} a regardé" else "Ce qui a été regardé"), Ui.lp(c, 26))
-        val act = Ui.card(c)
-        act.addView(Ui.tabs(c, listOf("Aujourd'hui", "Semaine", "Horaires"), tab) { tab = it; render() })
-        when (tab) {
-            0 -> todayTab(act, rules)
-            1 -> weekTab(act, rules)
-            else -> hoursTab(act)
-        }
-        root.addView(act, Ui.lp(c, 10))
-
-        // ----- 3. Un conseil de l'assistant (le plus important seulement) -----
+        val (used, _) = profileTime(rules, p)
+        forKid += Tile("today", "📺", "Aujourd'hui", Usage.format(used) + " regardées", mint) { openDetail("today") }
+        val week = this.week
+        val weekVal = week?.optJSONArray("daily")?.let { a -> (0 until a.length()).map { a.optLong(it) } }?.let { v ->
+            val act = v.count { it > 0 }.coerceAtLeast(1); "≈ " + Usage.format(v.sum() / act) + " par jour" } ?: "Chargement…"
+        forKid += Tile("week", "📅", "Sa semaine", weekVal, sky) { openDetail("week") }
+        val peak = week?.optJSONArray("hourly")?.let { h -> (0 until 24).maxByOrNull { h.optLong(it) }?.takeIf { h.optLong(it) > 0 } }
+        forKid += Tile("hours", "🕗", "Ses horaires", peak?.let { "Surtout vers ${it} h" } ?: "Pas encore de données", indigo) { openDetail("hours") }
         val names = status?.optJSONObject("labels")
-        val advice = fr.paul.telecommande.shared.RulesAdvisor.check(rules, { pkg -> names?.optString(pkg)?.ifBlank { null } ?: AppCatalog.name(pkg) })
+        val advices = fr.paul.telecommande.shared.RulesAdvisor.check(rules, { pkg -> names?.optString(pkg)?.ifBlank { null } ?: AppCatalog.name(pkg) })
             .filter { it.id !in Premium.dismissed(c, device.id) }
-        if (rules.enabled && advice.isNotEmpty()) {
-            root.addView(heading("Un conseil"), Ui.lp(c, 26))
-            root.addView(Premium.adviceCard(c, advice.first(), onFix = { f -> applyFix(f) }, onDismiss = { Premium.dismiss(c, device.id, advice.first().id); render() }), Ui.lp(c, 10))
-        }
+        if (rules.enabled) forKid += Tile("advice", "💡", "Conseils", if (advices.isEmpty()) "Tout est cohérent" else "${advices.size} à regarder", amber) { openDetail("advice") }
 
-        // ----- 4. Plus : tout le reste, rangé dans une seule liste -----
-        root.addView(heading("Plus"), Ui.lp(c, 26))
-        val more = Ui.group(c)
-        Ui.addRow(more, Ui.row(c, "➕", "Ajouter un enfant", "Un profil par enfant, avec son âge") { openRules(-1) })
-        Ui.addRow(more, Ui.row(c, "📋", "Toutes les règles de la TV", "Applis, horaires, programmes, couvre-feu") { openRules(-2) })
-        Ui.addRow(more, Ui.row(c, "🧭", "Tout régler pas à pas", "Une question par écran") {
+        val tv = mutableListOf(
+            Tile("add", "➕", "Ajouter un enfant", "${rules.profiles.count { !it.unlimited }} enfant" + if (rules.profiles.count { !it.unlimited } > 1) "s" else "", mint) { openRules(-1) },
+            Tile("all", "📋", "Toutes les règles", "Applis, programmes, horaires", indigo) { openRules(-2) },
+            Tile("wizard", "🧭", "Pas à pas", "Tout régler, une question à la fois", sky) {
+                startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
+            },
+            Tile("health", "🩺", "Santé de la TV", "Mémoire, stockage, connexion", mint) { BoxActions.diagnostics(c, device) },
+            Tile("privacy", "🔒", "Vos données", "Restent chez vous", indigo) { openDetail("privacy") },
+            Tile("unpair", "⛓️", "Appairage", "Retirer cette TV", rose) { openDetail("unpair") }
+        )
+        if (!rules.enabled) tv.add(0, Tile("enable", "✅", "Activer les règles", "Pas à pas, en 2 minutes", mint) {
             startActivity(Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
         })
-        Ui.addRow(more, Ui.row(c, "🩺", "Santé de la TV", "Mémoire, stockage, connexion") { BoxActions.diagnostics(c, device) })
-        val since = week?.optLong("since")?.takeIf { it > 0 }
-        Ui.addRow(more, Ui.row(c, "🔒", "Vos données restent chez vous",
-            "Sur la box et ce téléphone uniquement, échangées en chiffré. Aucun compte, aucun serveur." +
-                (if (since != null) "\nMesuré depuis le " + DateFormat.getDateInstance(DateFormat.LONG, Locale.FRANCE).format(Date(since)) + "." else "")).apply {
-            (getChildAt(1) as? LinearLayout)?.getChildAt(1)?.let { (it as? android.widget.TextView)?.maxLines = 4 }
-        })
-        Ui.addRow(more, Ui.row(c, "⛓️", "Retirer l'appairage", "La TV n'appliquera plus vos règles à jour", danger = true) {
-            Ui.requirePin(c, "Retirer l'appairage ? La TV n'appliquera plus vos règles à jour.") {
-                lifecycleScope.launch {
-                    runCatching { BoxClient.of(c, device).call("unpair") }
-                    device.boxFp = ""; DeviceStore(c).save(device); BoxLink.sync(c); finish()
+
+        root.addView(heading(if (p != null) "Pour ${p.name}" else "Ce qui a été regardé"), Ui.lp(c, 22))
+        tileGrid(forKid)
+        root.addView(heading("Toute la TV"), Ui.lp(c, 26))
+        tileGrid(tv)
+    }
+
+    /** Grille de tuiles, deux par ligne. */
+    private fun tileGrid(tiles: List<Tile>) {
+        val c = this
+        tiles.chunked(2).forEach { pair ->
+            val row = LinearLayout(c)
+            pair.forEachIndexed { i, t ->
+                row.addView(tileView(t), LinearLayout.LayoutParams(0, -1, 1f).apply { if (i == 0) marginEnd = Ui.dp(c, 6) else marginStart = Ui.dp(c, 6) })
+            }
+            if (pair.size == 1) row.addView(android.view.View(c), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = Ui.dp(c, 6) })
+            root.addView(row, Ui.lp(c, 12))
+        }
+    }
+
+    /** Une tuile : pastille colorée avec son icône, le nom de l'écran, et sa valeur du moment. */
+    private fun tileView(t: Tile) = LinearLayout(this).apply {
+        val c = this@BoxDashboardActivity
+        orientation = LinearLayout.VERTICAL
+        background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Ui.color(c, R.color.accent_soft)),
+            android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = Ui.dp(c, 24).toFloat(); setColor(Ui.color(c, R.color.surface)); setStroke(Ui.dp(c, 1), Ui.color(c, R.color.line))
+            }, null)
+        elevation = Ui.dp(c, 1).toFloat()
+        setPadding(Ui.dp(c, 16), Ui.dp(c, 16), Ui.dp(c, 16), Ui.dp(c, 16))
+        minimumHeight = Ui.dp(c, 132)
+        addView(android.widget.TextView(c).apply {
+            text = t.emoji; textSize = 22f; gravity = Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = Ui.dp(c, 14).toFloat(); setColor(t.tint) }
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(Ui.dp(c, 46), Ui.dp(c, 46)))
+        addView(android.view.View(c), LinearLayout.LayoutParams(1, 0, 1f))
+        addView(Ui.text(c, t.title, 16f).apply { typeface = Ui.bold; maxLines = 2 }, Ui.lp(c, 14))
+        addView(Ui.text(c, t.value, 13f, muted = true).apply { maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }, Ui.lp(c, 3))
+        isClickable = true; isFocusable = true
+        contentDescription = "${t.title} : ${t.value}"
+        setOnClickListener { t.open() }
+        Motion.pressable(this, 0.96f)
+    }
+
+    /** En-tête d'un écran ouvert depuis une tuile : retour aux tuiles, et son titre. */
+    private fun detailHeader(title: String) {
+        val c = this
+        val head = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
+        head.addView(AuroraNav.roundButton(c, R.drawable.ic_back, "Revenir aux tuiles") { closeDetail() })
+        head.addView(Ui.title(c, title, 21f).apply { setPadding(Ui.dp(c, 14), 0, 0, 0); maxLines = 2 }, LinearLayout.LayoutParams(0, -2, 1f))
+        root.addView(head, Ui.lp(c, 20))
+    }
+
+    /** L'écran d'une tuile. */
+    private fun renderDetail(rules: fr.paul.telecommande.shared.BoxRules, id: String) {
+        val c = this
+        val p = activityProfile(rules)
+        val name = p?.name
+        when (id) {
+            "rules" -> {
+                if (p == null) { detail = null; renderTiles(rules); return }
+                detailHeader(if (p.unlimited) "Profil ${p.name}" else if (p.contract != null) "Le contrat de ${p.name}" else "Les règles de ${p.name}")
+                when {
+                    p.unlimited -> {
+                        val card = Ui.card(c)
+                        card.addView(Ui.text(c, "Aucune limite pour ce profil. Il est protégé par le code parent : un enfant ne peut pas le choisir sur la TV.", 15f).apply { setLineSpacing(0f, 1.2f) })
+                        card.addView(Ui.button(c, "Modifier le profil") { openRules(rules.profiles.indexOf(p)) }, Ui.lp(c, 14))
+                        root.addView(card, Ui.lp(c, 12))
+                    }
+                    p.contract != null -> contractCards(rules, p).forEach { root.addView(it, Ui.lp(c, 12)) }
+                    else -> root.addView(simpleRulesCard(rules, p), Ui.lp(c, 12))
                 }
             }
-        })
-        root.addView(more, Ui.lp(c, 10))
+            "bonus" -> {
+                if (p == null) { detail = null; renderTiles(rules); return }
+                detailHeader("Les bonus de ${p.name}")
+                val k = p.contract
+                if (k != null && !k.paused) {
+                    root.addView(bonusCard(p), Ui.lp(c, 12))
+                    val recent = k.bonuses.takeLast(8).reversed()
+                    if (recent.isNotEmpty()) {
+                        val list = Ui.group(c)
+                        val fmt = SimpleDateFormat("EEEE d MMMM", Locale.FRANCE)
+                        recent.forEach { b -> Ui.addRow(list, Ui.row(c, "⭐", b.reason, fmt.format(Date(b.at)).replaceFirstChar { it.uppercase() }, value = "+${b.minutes} min")) }
+                        root.addView(section("Derniers bonus"), Ui.lp(c, 20))
+                        root.addView(list, Ui.lp(c, 8))
+                    }
+                } else {
+                    val card = Ui.card(c)
+                    card.addView(Ui.text(c, if (k?.paused == true) "Le contrat de ${p.name} est en pause : pas de bonus pour l'instant."
+                        else "Les bonus avec un motif (« Devoirs faits »…) font partie du contrat. En attendant, « + 15 min » en haut ajoute du temps tout de suite.", 15f).apply { setLineSpacing(0f, 1.2f) })
+                    if (k == null) card.addView(Ui.button(c, "Créer son contrat", primary = true) { openContract(p, false) }, Ui.lp(c, 14))
+                    root.addView(card, Ui.lp(c, 12))
+                }
+            }
+            "today", "week", "hours" -> {
+                detailHeader(when (id) {
+                    "today" -> if (name != null) "Ce que $name a regardé aujourd'hui" else "Aujourd'hui sur la TV"
+                    "week" -> if (name != null) "La semaine de $name" else "La semaine de la TV"
+                    else -> if (name != null) "Les horaires de $name" else "Les horaires de la TV"
+                })
+                val card = Ui.card(c)
+                when (id) { "today" -> todayTab(card, rules); "week" -> weekTab(card, rules); else -> hoursTab(card) }
+                root.addView(card, Ui.lp(c, 12))
+            }
+            "advice" -> {
+                detailHeader("Conseils de l'assistant")
+                val names = status?.optJSONObject("labels")
+                val advices = fr.paul.telecommande.shared.RulesAdvisor.check(rules, { pkg -> names?.optString(pkg)?.ifBlank { null } ?: AppCatalog.name(pkg) })
+                    .filter { it.id !in Premium.dismissed(c, device.id) }
+                if (advices.isEmpty()) root.addView(Ui.card(c).apply { addView(Ui.text(c, "Rien à signaler : vos règles sont cohérentes.", 15f)) }, Ui.lp(c, 12))
+                advices.forEach { adv ->
+                    root.addView(Premium.adviceCard(c, adv, onFix = { f -> applyFix(f) }, onDismiss = { Premium.dismiss(c, device.id, adv.id); render() }), Ui.lp(c, 12))
+                }
+            }
+            "privacy" -> {
+                detailHeader("Vos données restent chez vous")
+                val since = week?.optLong("since")?.takeIf { it > 0 }
+                val card = Ui.card(c)
+                card.addView(Ui.text(c, "Tout reste sur la box et sur ce téléphone, échangé en chiffré sur votre Wi-Fi. Aucun compte, aucun serveur, aucune publicité." +
+                    (if (since != null) "\n\nMesuré depuis le " + DateFormat.getDateInstance(DateFormat.LONG, Locale.FRANCE).format(Date(since)) + "." else ""), 15f).apply { setLineSpacing(0f, 1.25f) })
+                root.addView(card, Ui.lp(c, 12))
+            }
+            "unpair" -> {
+                detailHeader("Appairage de ${device.name}")
+                val card = Ui.card(c)
+                card.addView(Ui.text(c, "Retirer l'appairage : cette TV n'appliquera plus vos règles à jour, et ce téléphone ne la verra plus. Vous pourrez la réappairer plus tard.", 15f).apply { setLineSpacing(0f, 1.2f) })
+                card.addView(Ui.button(c, "Retirer l'appairage") {
+                    Ui.requirePin(c, "Retirer l'appairage ? La TV n'appliquera plus vos règles à jour.") {
+                        lifecycleScope.launch {
+                            runCatching { BoxClient.of(c, device).call("unpair") }
+                            device.boxFp = ""; DeviceStore(c).save(device); BoxLink.sync(c); finish()
+                        }
+                    }
+                }.apply { setTextColor(Ui.color(c, R.color.danger)) }, Ui.lp(c, 14))
+                root.addView(card, Ui.lp(c, 12))
+            }
+            else -> { detail = null; renderTiles(rules) }
+        }
     }
 
     /** Enfant sans contrat : sa règle en une phrase, le temps par jour réglable d'un geste, et l'invitation au contrat. */

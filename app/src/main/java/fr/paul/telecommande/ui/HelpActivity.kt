@@ -34,8 +34,10 @@ class HelpActivity : AppCompatActivity() {
                 "Vérifiez que la TV est allumée et que le téléphone est sur le même Wi-Fi que la TV. L'appli réessaie toute seule.")
         )),
         Topic("Les enfants", listOf(
+            Q("Comment s'organise l'onglet Enfants ?",
+                "En haut, choisissez l'enfant : son temps restant s'affiche en grand. Dessous, des tuiles ouvrent chaque écran : son contrat, ses bonus, aujourd'hui, sa semaine, ses horaires, les conseils, puis tout ce qui concerne la TV. La flèche ou le retour du téléphone ramène aux tuiles."),
             Q("Comment ajouter un enfant ?",
-                "Onglet Enfants, puis « Plus » tout en bas, et « Ajouter un enfant ». Indiquez son prénom et son âge : l'appli propose des réglages adaptés."),
+                "Onglet Enfants, puis la tuile « Ajouter un enfant ». Indiquez son prénom et son âge : l'appli propose des réglages adaptés."),
             Q("Le contrat, c'est quoi ?",
                 "Vos règles de TV pour un enfant, réglées en 5 phrases à compléter : temps en semaine et le week-end, heure d'extinction le soir, bonus. Vous pouvez ensuite tout ajuster d'un geste, le mettre en pause ou l'arrêter."),
             Q("Donner du temps en plus",

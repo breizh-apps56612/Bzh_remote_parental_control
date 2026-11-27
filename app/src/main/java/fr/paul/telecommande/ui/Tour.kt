@@ -30,7 +30,7 @@ object Tour {
         Step(R.drawable.ic_remote, "La télécommande",
             "Le carré sombre au milieu, en bas, ouvre la télécommande. Elle est sombre, comme une vraie : ses touches « Retour TV » et « Accueil TV » agissent sur la TV. Pour revenir à l'appli, la flèche vers le bas, en haut à gauche."),
         Step(R.drawable.ic_shield, "Enfants",
-            "Le temps de TV de chaque enfant, ses règles (son contrat), les bonus et ce qu'il a regardé. Tout est protégé par le code parent."),
+            "Choisissez un enfant : son temps restant s'affiche en grand, et des tuiles ouvrent ses règles (son contrat), ses bonus et ce qu'il a regardé. Tout est protégé par le code parent."),
         Step(R.drawable.ic_help, "Aide et Réglages",
             "Une question ? L'onglet Aide répond simplement. Vos écrans, la TV principale et le code parent sont dans Réglages.")
     )
