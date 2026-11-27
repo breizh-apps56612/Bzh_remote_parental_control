@@ -140,10 +140,10 @@ object AuroraNav {
             Tab.HELP -> Intent(a, HelpActivity::class.java)
             Tab.SETTINGS -> Intent(a, SettingsActivity::class.java)
             Tab.KIDS, Tab.ACTIVITY -> {
-                if (d == null) { Ui.toast(a, "Ajoutez d'abord votre TV (onglet Maison)"); return }
+                if (d == null) { kidsIntro(a, tab); return }
                 if (!d.isSmartBox) {
                     val box = DeviceStore(a).all().firstOrNull { it.isSmartBox }
-                    if (box == null) { Ui.toast(a, if (tab == Tab.KIDS) "Les règles des enfants fonctionnent avec une box ou une TV Android TV." else "L'activité se suit avec une box ou une TV Android TV."); return }
+                    if (box == null) { kidsIntro(a, tab); return }
                     setPrimary(a, box); open(a, tab); return
                 }
                 when {
@@ -157,6 +157,28 @@ object AuroraNav {
         a.startActivity(i)
         if (a !is MainActivity) a.finish()
         a.overridePendingTransition(R.anim.tab_in, R.anim.tab_out)
+    }
+
+    /**
+     * Onglet Enfants sans box Android TV : au lieu d'un message qui disparaît, un volet explique quoi faire
+     * et mène directement à l'ajout de la box.
+     */
+    private fun kidsIntro(a: Activity, tab: Tab) {
+        val sheet = TileSheet(a)
+        val kids = tab == Tab.KIDS
+        sheet.show(TileSheet.Page(if (kids) "🛡️" else "📊", if (kids) "Règles des enfants" else "Activité",
+            if (kids) "Temps de TV, couvre-feu et contrat" else "Ce que chacun a regardé") { sh, col ->
+            sh.label(col, (if (kids) "Les règles s'appliquent" else "L'activité se suit") + " sur une box ou une TV Android TV, comme la Freebox Player POP. " +
+                "Ajoutez-la en choisissant « Android TV » : l'appli Box s'installe ensuite sur la TV, et tout marche même téléphone éteint.")
+            sh.sections(col, TileSheet.Section(null, listOf(
+                TileSheet.Tile("📺", "Ajouter ma box Android TV", "Freebox Player POP, Chromecast, Sony, TCL…", TileSheet.MINT) {
+                    sheet.dismiss(); a.startActivity(Intent(a, MainActivity::class.java).putExtra(MainActivity.EXTRA_ADD, true).top())
+                },
+                TileSheet.Tile("❓", "Comment ça marche", "Les questions fréquentes", TileSheet.SKY) {
+                    sheet.dismiss(); a.startActivity(Intent(a, HelpActivity::class.java))
+                }
+            )))
+        })
     }
 
     /** Réglages : l'écran Réglages de l'appli (gardé pour les anciens appels). */

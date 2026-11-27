@@ -17,8 +17,8 @@ android {
         minSdk = 23          // Android TV 6.0+ (Freebox Pop, mini 4K, Shield, Chromecast, Sony, Philips, TCL…)
         targetSdk = 34
         // Numéro de version fixé ici (et non par GitHub) : on l'augmente à chaque publication.
-        versionCode = 163
-        versionName = "1.4.52"
+        versionCode = 164
+        versionName = "1.4.53"
     }
 
     val ksFile = System.getenv("ANDROID_KEYSTORE_PATH")

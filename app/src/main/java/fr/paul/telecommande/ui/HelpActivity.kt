@@ -35,9 +35,9 @@ class HelpActivity : AppCompatActivity() {
         )),
         Topic("Les enfants", listOf(
             Q("Comment s'organise l'onglet Enfants ?",
-                "En haut, choisissez l'enfant : son temps restant s'affiche en grand. Dessous, des tuiles ouvrent chaque écran : son contrat, ses bonus, aujourd'hui, sa semaine, ses horaires, les conseils, puis tout ce qui concerne la TV. La flèche ou le retour du téléphone ramène aux tuiles.", "🧩"),
+                "En haut, choisissez l'enfant : son temps restant s'affiche en grand. Dessous : aujourd'hui et sa semaine en un coup d'œil, puis une liste simple : son contrat, ses bonus, ses horaires, les conseils et tout ce qui concerne la TV. La flèche ou le retour du téléphone ramène à la liste.", "🧩"),
             Q("Comment ajouter un enfant ?",
-                "Onglet Enfants, puis la tuile « Ajouter un enfant ». Indiquez son prénom et son âge : l'appli propose des réglages adaptés.", "➕"),
+                "Onglet Enfants, puis « Ajouter un enfant » dans la liste. Indiquez son prénom et son âge : l'appli propose des réglages adaptés.", "➕"),
             Q("Le contrat, c'est quoi ?",
                 "Vos règles de TV pour un enfant, réglées en 5 phrases à compléter : temps en semaine et le week-end, heure d'extinction le soir, bonus. Vous pouvez ensuite tout ajuster d'un geste, le mettre en pause ou l'arrêter.", "📜"),
             Q("Donner du temps en plus",
@@ -70,7 +70,7 @@ class HelpActivity : AppCompatActivity() {
         val c = this
         val h = Premium.hero(c)
         h.addView(Premium.heroText(c, "Aide", 28f, bold = true), Ui.lp(c, 8))
-        h.addView(Premium.heroText(c, "Les réponses aux questions les plus courantes. Touchez une tuile pour voir la réponse.", 14.5f, soft = true), Ui.lp(c, 6))
+        h.addView(Premium.heroText(c, "Les réponses aux questions les plus courantes. Touchez une question pour lire la réponse.", 14.5f, soft = true), Ui.lp(c, 6))
         h.addView(Premium.heroButton(c, "Revoir la visite guidée", true) { Tour.show(c, force = true) }, LinearLayout.LayoutParams(-1, Ui.dp(c, 52)).apply { topMargin = Ui.dp(c, 18) })
         root.addView(h, LinearLayout.LayoutParams(-1, -2))
         val body = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; val p = Ui.dp(c, 16); setPadding(p, 0, p, 0) }
@@ -84,8 +84,8 @@ class HelpActivity : AppCompatActivity() {
         body.addView(AuroraNav.spacer(c))
     }
 
-    /** Une question en tuile : touchée, sa réponse s'ouvre dans un volet. */
-    private fun question(item: Q): View = Ui.row(this, item.emoji, item.q, "Voir la réponse") {
+    /** Une question, en ligne de liste : touchée, sa réponse s'ouvre dans un volet. */
+    private fun question(item: Q): View = Ui.row(this, item.emoji, item.q) {
         TileSheet(this).show(TileSheet.Page(item.emoji, item.q, null) { _, col ->
             col.addView(Ui.card(this).apply {
                 addView(Ui.text(this@HelpActivity, item.a, 16f).apply { setLineSpacing(0f, 1.3f) })

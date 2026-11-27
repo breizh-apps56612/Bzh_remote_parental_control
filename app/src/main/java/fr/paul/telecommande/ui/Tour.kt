@@ -28,11 +28,11 @@ object Tour {
         Step(R.drawable.ic_house, "Bienvenue",
             "Cette appli fait deux choses : elle remplace la télécommande de votre TV, et elle vous aide à fixer les règles de TV de vos enfants."),
         Step(R.drawable.ic_remote, "La télécommande",
-            "Le carré sombre au milieu, en bas, ouvre la télécommande. Elle est sombre, comme une vraie : ses touches « Retour TV » et « Accueil TV » agissent sur la TV. Pour revenir à l'appli, la flèche vers le bas, en haut à gauche."),
+            "Le carré sombre au milieu, en bas, ouvre la télécommande. Ses touches « Retour TV » et « Accueil TV » agissent sur la TV, pas sur l'appli. Pour revenir à l'appli, la flèche vers le bas, en haut à gauche."),
         Step(R.drawable.ic_shield, "Enfants",
-            "Choisissez un enfant : son temps restant s'affiche en grand, et des tuiles ouvrent ses règles (son contrat), ses bonus et ce qu'il a regardé. Tout est protégé par le code parent."),
-        Step(R.drawable.ic_help, "Aide et Réglages",
-            "Une question ? L'onglet Aide répond simplement. Vos écrans, la TV principale et le code parent sont dans Réglages.")
+            "Choisissez un enfant : son temps restant s'affiche en grand, et une liste simple ouvre ses règles (son contrat) et ses bonus. Ce qu'il a regardé est dans l'onglet Activité. Tout est protégé par le code parent."),
+        Step(R.drawable.ic_help, "Réglages et Aide",
+            "Vos écrans, la TV principale et le code parent sont dans Réglages. Une question ? L'Aide, dans Réglages, répond simplement.")
     )
 
     fun show(a: Activity, force: Boolean = false) {

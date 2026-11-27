@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import fr.paul.telecommande.R
 import fr.paul.telecommande.core.AppCatalog
 import fr.paul.telecommande.core.Device
@@ -75,7 +76,21 @@ class ParentalActivity : AppCompatActivity() {
         root.removeAllViews()
         root.addView(Ui.text(c, device.name, 13f, muted = true))
         root.addView(Ui.title(c, "Contrôle parental"))
-        // Tout en tuiles : l'essentiel d'abord, puis chaque appli
+        // L'appli Box d'abord : c'est elle qui rend les règles solides (téléphone éteint, écran « Temps écoulé »)
+        if (device.isSmartBox) {
+            root.addView(Ui.label(c, "Appli Box sur la TV"), Ui.lp(c, 18))
+            val boxGroup = Ui.group(c)
+            Ui.addRow(boxGroup, Ui.row(c, "📲", "Installer l'appli Box", "Les règles marchent même téléphone éteint") {
+                startActivity(android.content.Intent(c, InstallBoxActivity::class.java).putExtra(InstallBoxActivity.EXTRA_ID, device.id))
+            })
+            Ui.addRow(boxGroup, Ui.row(c, "🔗", "Déjà installée : appairer", "Un code s'affiche sur la TV") {
+                BoxPairing.start(c, lifecycleScope, device) {
+                    startActivity(android.content.Intent(c, BoxDashboardActivity::class.java).putExtra(BoxDashboardActivity.EXTRA_ID, device.id)); finish()
+                }
+            })
+            root.addView(boxGroup, Ui.lp(c, 8))
+        }
+        // L'essentiel d'abord, puis chaque appli, en listes groupées
         val top = Ui.group(c)
         Ui.addRow(top, Ui.row(c, "✨", "Pas à pas", "Tout régler, une question à la fois") {
             startActivity(android.content.Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))

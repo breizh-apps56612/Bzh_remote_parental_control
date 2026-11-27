@@ -96,7 +96,7 @@ class SetupActivity : Activity() {
 
         val phones = store.phones()
         step("2", "Appairer le téléphone du parent",
-            "Sur le téléphone : appli Télécommande > cette box > Contrôle parental > « Appairer l'appli Box ». Un code s'affichera ici. Adresse de la box : ${ip() ?: "inconnue"}",
+            "Sur le téléphone : appli Télécommande > onglet Enfants > « Déjà installée : appairer ». Un code s'affichera ici. Adresse de la box : ${ip() ?: "inconnue"}",
             phones.isNotEmpty(), null, null)
 
         whoWatchesCard(store)
