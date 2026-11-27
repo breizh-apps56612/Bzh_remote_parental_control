@@ -19,6 +19,20 @@
 
     <style name="Theme.Telecommande.Remote" parent="Theme.Telecommande" />
 
+    <!--
+      Télécommande : un volet toujours sombre (comme une vraie télécommande) qui monte du bas et redescend,
+      pour ne jamais la confondre avec les écrans de l'appli, qui restent clairs.
+    -->
+    <style name="Theme.Telecommande.RemoteSheet" parent="Theme.Telecommande">
+        <item name="android:windowAnimationStyle">@style/RemoteSheetAnimation</item>
+    </style>
+    <style name="RemoteSheetAnimation" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/sheet_up</item>
+        <item name="android:activityOpenExitAnimation">@anim/sheet_behind_out</item>
+        <item name="android:activityCloseEnterAnimation">@anim/sheet_behind_in</item>
+        <item name="android:activityCloseExitAnimation">@anim/sheet_down</item>
+    </style>
+
     <!-- Boîtes de dialogue : coins arrondis, fond de carte, boutons violets -->
     <style name="Telecommande.Dialog" parent="ThemeOverlay.MaterialComponents.Dialog.Alert">
         <item name="android:windowBackground">@drawable/bg_dialog</item>
@@ -66,7 +80,9 @@
         <item name="android:gravity">center</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
-        <item name="android:background">?android:attr/selectableItemBackgroundBorderless</item>
+        <item name="android:background">@drawable/bg_dock_key</item>
+        <item name="android:layout_marginStart">3dp</item>
+        <item name="android:layout_marginEnd">3dp</item>
     </style>
     <style name="DockIcon">
         <item name="android:layout_width">24dp</item>
@@ -80,7 +96,7 @@
         <item name="android:layout_marginTop">4dp</item>
         <item name="android:importantForAccessibility">no</item>
         <item name="android:textColor">@color/muted</item>
-        <item name="android:textSize">11.5sp</item>
+        <item name="android:textSize">11sp</item>
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:maxLines">1</item>
     </style>

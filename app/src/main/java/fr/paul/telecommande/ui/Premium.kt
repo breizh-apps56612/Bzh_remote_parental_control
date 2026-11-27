@@ -43,6 +43,8 @@ object Premium {
         orientation = LinearLayout.VERTICAL
         background = heroBackground(c); clipToOutline = true
         setPadding(dp(c, 20), dp(c, 22), dp(c, 20), dp(c, 24))
+        // Défilement : le bandeau passe en profondeur sous le contenu (voir Motion)
+        tag = Motion.HERO_TAG
     }
 
     fun heroText(c: Context, text: CharSequence, size: Float, soft: Boolean = false, bold: Boolean = false) = TextView(c).apply {
@@ -95,6 +97,7 @@ object Premium {
         }
         minHeight = dp(c, 52); setPadding(dp(c, 8), 0, dp(c, 8), 0)
         isClickable = true; isFocusable = true; setOnClickListener { action() }
+        Motion.pressable(this)
     }
 
     /** Bouton rond du bandeau (retour, cadenas…). */
@@ -124,6 +127,7 @@ object Premium {
         }
         minHeight = dp(c, 46); setPadding(dp(c, 12), 0, dp(c, 12), 0)
         isClickable = true; isFocusable = true; setOnClickListener { action() }
+        Motion.pressable(this)
     }
 
     /**

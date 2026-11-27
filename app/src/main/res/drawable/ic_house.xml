@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Onglet « Maison » de l'appli : une maison avec un cœur (ne ressemble pas à la touche Accueil de la TV) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M3.5,10.5L12,3.8l8.5,6.7V19a1.5,1.5 0,0 1,-1.5 1.5H5A1.5,1.5 0,0 1,3.5 19z" android:strokeColor="#FFFFFF" android:strokeWidth="1.8" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M12,16.6c-2.4,-1.6 -3.3,-2.6 -3.3,-3.7a1.7,1.7 0,0 1,3.3 -0.6a1.7,1.7 0,0 1,3.3 0.6c0,1.1 -0.9,2.1 -3.3,3.7z" android:strokeColor="#FFFFFF" android:strokeWidth="1.6" android:strokeLineJoin="round" android:fillColor="#00000000" />
+</vector>

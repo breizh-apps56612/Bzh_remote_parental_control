@@ -123,9 +123,29 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         }
     }
 
+    /** Dernier appui sur le retour du téléphone (le second, juste après, ferme la télécommande). */
+    private var backAt = 0L
+
+    /** La télécommande est toujours sombre, comme une vraie : on ne la confond pas avec les écrans (clairs) de l'appli. */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        delegate.localNightMode = androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
+        super.attachBaseContext(newBase)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_remote)
+        // Retour du téléphone : on prévient d'abord (c'est souvent la touche Retour de la TV qu'on voulait),
+        // un second appui dans les 2,5 s ferme la télécommande
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - backAt < 2_500) { closeRemote(); return }
+                backAt = now
+                window.decorView.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                Toast.makeText(this@RemoteActivity, "Pour la TV : touche « Retour TV » en bas.\nEncore une fois pour fermer la télécommande.", Toast.LENGTH_SHORT).show()
+            }
+        })
         store = DeviceStore(this)
         val dev = intent.getStringExtra(EXTRA_ID)?.let { store.get(it) }
         if (dev == null) { finish(); return }
@@ -148,10 +168,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             setOnLongClickListener { atv?.allowPowerOnce(); powerOn(); true }
         }
         findViewById<View>(R.id.btnMenu).setOnClickListener { showMoreKeys() }
-        findViewById<View>(R.id.btnClose).setOnClickListener {
-            if (isTaskRoot) startActivity(Intent(this, MainActivity::class.java))
-            finish()
-        }
+        findViewById<View>(R.id.btnClose).setOnClickListener { closeRemote() }
         AuroraNav.setPrimary(this, device)
         if (intent.getBooleanExtra(EXTRA_ADMIN, false)) window.decorView.post { showAdmin() }
         findViewById<View>(R.id.btnApps).apply {
@@ -204,6 +221,12 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             }
         }
         observe()
+    }
+
+    /** Referme le volet de la télécommande et revient à l'appli. */
+    private fun closeRemote() {
+        if (isTaskRoot) startActivity(Intent(this, MainActivity::class.java))
+        finish()
     }
 
     // ---------- État et panneau contextuel ----------

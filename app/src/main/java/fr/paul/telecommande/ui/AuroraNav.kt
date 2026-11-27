@@ -18,9 +18,11 @@ import fr.paul.telecommande.core.Device
 import fr.paul.telecommande.core.DeviceStore
 
 /**
- * Navigation « Aurora » partagée par les écrans principaux :
- * une barre flottante en pilule (Maison · Parental · Activité · Réglages) et, au centre,
- * un gros bouton rond en dégradé qui ouvre la télécommande de la TV principale.
+ * Navigation de l'appli (2.5) partagée par les écrans principaux :
+ * une barre flottante en pilule (Maison · Parental · Activité · Réglages), l'onglet en cours sur une pastille indigo,
+ * et au centre la touche « Télécommande » : un carré nuit (comme la télécommande, toujours sombre) avec son nom
+ * écrit dessous. Volontairement, rien ici ne ressemble aux touches de la TV (Retour TV, Accueil TV, micro rond).
+ * La barre se range quand on fait défiler vers le bas et revient dès qu'on remonte.
  */
 object AuroraNav {
     enum class Tab { HOME, PARENTAL, ACTIVITY, SETTINGS }
@@ -29,7 +31,7 @@ object AuroraNav {
     private const val KEY_PRIMARY = "primary_device"
 
     /** Hauteur réservée en bas du contenu pour ne pas passer sous la barre. */
-    fun bottomSpace(c: Context) = Ui.dp(c, 120)
+    fun bottomSpace(c: Context) = Ui.dp(c, 128)
 
     /** TV « principale » : la dernière dont on a ouvert la télécommande, sinon la première box équipée, sinon le premier appareil. */
     fun primary(c: Context): Device? {
@@ -50,7 +52,9 @@ object AuroraNav {
     fun wrap(a: Activity, content: View, selected: Tab): FrameLayout {
         val root = FrameLayout(a).apply { setBackgroundResource(R.drawable.bg_screen) }
         root.addView(content, FrameLayout.LayoutParams(-1, -1))
-        root.addView(bar(a, selected), FrameLayout.LayoutParams(-1, Ui.dp(a, 104), Gravity.BOTTOM))
+        val bar = bar(a, selected)
+        root.addView(bar, FrameLayout.LayoutParams(-1, Ui.dp(a, 112), Gravity.BOTTOM))
+        (content as? android.widget.ScrollView)?.let { Motion.attach(it, bar) }
         return root
     }
 
@@ -59,19 +63,27 @@ object AuroraNav {
         val frame = FrameLayout(c).apply { clipChildren = false; clipToPadding = false }
         val pill = LinearLayout(c).apply {
             setBackgroundResource(R.drawable.bg_nav)
-            elevation = Ui.dp(c, 10).toFloat()
+            elevation = Ui.dp(c, 12).toFloat()
             gravity = Gravity.CENTER_VERTICAL
         }
         fun item(tab: Tab, icon: Int, label: String) = LinearLayout(c).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
             val on = tab == selected
-            val col = Ui.color(c, if (on) R.color.accent else R.color.muted)
-            addView(ImageView(c).apply {
-                setImageResource(icon); imageTintList = ColorStateList.valueOf(col)
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22)))
+            val col = Ui.color(c, if (on) R.color.indigo_ink else R.color.muted)
+            // L'onglet en cours : son icône sur une pastille indigo (qui apparaît avec un petit rebond)
+            val chip = FrameLayout(c).apply {
+                if (on) background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = Ui.dp(c, 16).toFloat(); setColor(Ui.color(c, R.color.indigo_soft))
+                }
+                addView(ImageView(c).apply {
+                    setImageResource(icon); imageTintList = ColorStateList.valueOf(Ui.color(c, if (on) R.color.accent else R.color.muted))
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }, FrameLayout.LayoutParams(Ui.dp(c, 22), Ui.dp(c, 22), Gravity.CENTER))
+            }
+            addView(chip, LinearLayout.LayoutParams(Ui.dp(c, 54), Ui.dp(c, 32)))
+            if (on) Motion.pop(chip, 60)
             addView(TextView(c).apply {
-                text = label; textSize = 10.5f; setTextColor(col); maxLines = 1
+                text = label; textSize = 11f; setTextColor(col); maxLines = 1
                 typeface = if (on) Ui.bold else Ui.medium
             }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = Ui.dp(c, 3) })
             isClickable = true; isFocusable = true
@@ -81,21 +93,33 @@ object AuroraNav {
             setBackgroundResource(tv.resourceId)
             setOnClickListener { if (!on) open(a, tab) }
         }
-        pill.addView(item(Tab.HOME, R.drawable.ic_home, "Maison"), LinearLayout.LayoutParams(0, -1, 1f))
+        pill.addView(item(Tab.HOME, R.drawable.ic_house, "Maison"), LinearLayout.LayoutParams(0, -1, 1f))
         pill.addView(item(Tab.PARENTAL, R.drawable.ic_shield, "Parental"), LinearLayout.LayoutParams(0, -1, 1f))
-        pill.addView(View(c), LinearLayout.LayoutParams(Ui.dp(c, 84), 1))
+        // Emplacement central : le nom de la touche Télécommande, écrit sous elle
+        pill.addView(TextView(c).apply {
+            text = "Télécommande"; textSize = 10.5f; typeface = Ui.bold; maxLines = 1
+            setTextColor(Ui.color(c, R.color.ink)); gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+            setPadding(0, 0, 0, Ui.dp(c, 11))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(Ui.dp(c, 92), -1))
         pill.addView(item(Tab.ACTIVITY, R.drawable.ic_activity, "Activité"), LinearLayout.LayoutParams(0, -1, 1f))
         pill.addView(item(Tab.SETTINGS, R.drawable.ic_settings, "Réglages"), LinearLayout.LayoutParams(0, -1, 1f))
-        frame.addView(pill, FrameLayout.LayoutParams(-1, Ui.dp(c, 66), Gravity.BOTTOM).apply {
-            setMargins(Ui.dp(c, 16), 0, Ui.dp(c, 16), Ui.dp(c, 16))
+        frame.addView(pill, FrameLayout.LayoutParams(-1, Ui.dp(c, 72), Gravity.BOTTOM).apply {
+            setMargins(Ui.dp(c, 14), 0, Ui.dp(c, 14), Ui.dp(c, 14))
         })
+        // Touche Télécommande : carré nuit à liseré menthe, icône de télécommande (le micro rond, lui, n'existe que sur la télécommande)
         frame.addView(ImageButton(c).apply {
-            setBackgroundResource(R.drawable.bg_fab)
-            setImageResource(R.drawable.ic_remote); imageTintList = ColorStateList.valueOf(0xFFFFFFFF.toInt())
-            elevation = Ui.dp(c, 14).toFloat()
-            contentDescription = "Télécommande"
+            background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(0x5534F5C5),
+                android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = Ui.dp(c, 22).toFloat(); setColor(Ui.color(c, R.color.hero_bg))
+                    setStroke(Ui.dp(c, 2), 0x6634F5C5)
+                }, null)
+            setImageResource(R.drawable.ic_remote); imageTintList = ColorStateList.valueOf(Ui.color(c, R.color.mint))
+            elevation = Ui.dp(c, 16).toFloat()
+            contentDescription = "Télécommande : ouvrir la télécommande de la TV"
             setOnClickListener { openRemote(a) }
-        }, FrameLayout.LayoutParams(Ui.dp(c, 70), Ui.dp(c, 70), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+            Motion.pressable(this, 0.92f)
+        }, FrameLayout.LayoutParams(Ui.dp(c, 64), Ui.dp(c, 64), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = Ui.dp(c, 2) })
         return frame
     }
 
@@ -111,7 +135,10 @@ object AuroraNav {
     fun open(a: Activity, tab: Tab) {
         val d = primary(a)
         when (tab) {
-            Tab.HOME -> { a.startActivity(Intent(a, MainActivity::class.java).top()); if (a !is MainActivity) a.finish() }
+            Tab.HOME -> {
+                a.startActivity(Intent(a, MainActivity::class.java).top()); if (a !is MainActivity) a.finish()
+                a.overridePendingTransition(R.anim.tab_in, R.anim.tab_out)
+            }
             Tab.SETTINGS -> settings(a)
             Tab.PARENTAL, Tab.ACTIVITY -> {
                 if (d == null) { Ui.toast(a, "Ajoutez d'abord votre TV"); return }
@@ -128,7 +155,7 @@ object AuroraNav {
                 }
                 a.startActivity(i)
                 if (a !is MainActivity) a.finish()
-                a.overridePendingTransition(0, 0)
+                a.overridePendingTransition(R.anim.tab_in, R.anim.tab_out)
             }
         }
     }

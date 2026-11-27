@@ -155,6 +155,7 @@ class MainActivity : AppCompatActivity() {
             android.graphics.drawable.GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(99).toFloat() }, null)
         isClickable = true; isFocusable = true
         setOnClickListener { action() }
+        Motion.pressable(this)
     }
 
     /** Bouton rond translucide posé sur la carte foncée. */
@@ -164,6 +165,7 @@ class MainActivity : AppCompatActivity() {
             android.graphics.drawable.GradientDrawable().apply { shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(0x26FFFFFF); setStroke(dp(1), 0x40FFFFFF) }, null)
         contentDescription = desc
         setOnClickListener { action() }
+        Motion.pressable(this, 0.9f)
     }
 
     /**
@@ -240,6 +242,7 @@ class MainActivity : AppCompatActivity() {
         }
         card.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
         card.isClickable = true; card.setOnClickListener { openRemote(d) }
+        Motion.pressable(card, 0.98f)
         return card
     }
 

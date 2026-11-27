@@ -59,7 +59,7 @@
             android:name=".ui.RemoteActivity"
             android:exported="false"
             android:parentActivityName=".ui.MainActivity"
-            android:theme="@style/Theme.Telecommande.Remote"
+            android:theme="@style/Theme.Telecommande.RemoteSheet"
             android:windowSoftInputMode="adjustResize" />
 
         <service

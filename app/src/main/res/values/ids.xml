@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Motion : bloc déjà apparu à l'écran (ne pas rejouer son animation) -->
+    <item name="motion_shown" type="id" />
+</resources>

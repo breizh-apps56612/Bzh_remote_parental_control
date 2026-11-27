@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Télécommande — maquette « Aurora » (C-Remote).
-  Haut : retour, TV (pilule), plus, veille. Puis la carte « En cours » et le grand pavé tactile.
+  Télécommande 2.5 — un volet toujours sombre, posé par-dessus l'appli (qui reste claire).
+  Haut : poignée du volet ; fermer (flèche vers le bas), TV (pilule), plus, veille. Puis « En cours » et le grand pavé.
   Le pavé porte deux barres : chaînes à gauche, volume à droite (milieu = muet).
-  Zone du pouce : le dock Retour · Accueil · MICRO · Lecture · Applis.
+  Zone du pouce : les touches physiques Retour TV · Accueil TV · MICRO · Lecture · Applis.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -13,10 +13,19 @@
     android:clipChildren="false"
     android:orientation="vertical">
 
+    <!-- Poignée : on comprend tout de suite que c'est un volet qui se referme vers le bas -->
+    <View
+        android:layout_width="44dp"
+        android:layout_height="5dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_handle"
+        android:importantForAccessibility="no" />
+
     <!-- En-tête -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="70dp"
+        android:layout_height="64dp"
         android:gravity="center_vertical"
         android:paddingStart="16dp"
         android:paddingEnd="16dp">
@@ -26,9 +35,9 @@
             android:layout_width="46dp"
             android:layout_height="46dp"
             android:background="@drawable/bg_round"
-            android:contentDescription="Revenir à l'accueil de l'appli"
+            android:contentDescription="Fermer la télécommande et revenir à l'appli"
             android:elevation="2dp"
-            android:src="@drawable/ic_back"
+            android:src="@drawable/ic_chevron_down"
             app:tint="@color/ink" />
 
         <LinearLayout
@@ -126,7 +135,7 @@
         android:layout_weight="1"
         android:minHeight="160dp" />
 
-    <!-- Dock : Retour · Accueil · MICRO · Lecture · Applis (chaînes et volume sont les barres du pavé) -->
+    <!-- Dock : touches de la TV Retour TV · Accueil TV · MICRO · Lecture · Applis (chaînes et volume sont les barres du pavé) -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="100dp"
@@ -138,14 +147,14 @@
         android:paddingEnd="8dp"
         android:paddingBottom="10dp">
 
-        <LinearLayout android:id="@+id/btnBack" style="@style/DockKey" android:contentDescription="Retour (touche de la TV)">
+        <LinearLayout android:id="@+id/btnBack" style="@style/DockKey" android:contentDescription="Retour, touche de la TV">
             <ImageView style="@style/DockIcon" android:src="@drawable/ic_return" />
-            <TextView style="@style/DockLabel" android:text="Retour" />
+            <TextView style="@style/DockLabel" android:text="Retour TV" />
         </LinearLayout>
 
-        <LinearLayout android:id="@+id/btnHome" style="@style/DockKey" android:contentDescription="Accueil (touche de la TV)">
-            <ImageView style="@style/DockIcon" android:src="@drawable/ic_home" />
-            <TextView style="@style/DockLabel" android:text="Accueil" />
+        <LinearLayout android:id="@+id/btnHome" style="@style/DockKey" android:contentDescription="Accueil de la TV, touche de la TV">
+            <ImageView style="@style/DockIcon" android:src="@drawable/ic_tv_home" />
+            <TextView style="@style/DockLabel" android:text="Accueil TV" />
         </LinearLayout>
 
         <FrameLayout

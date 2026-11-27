@@ -97,6 +97,7 @@ class ContractActivity : AppCompatActivity() {
             setBackgroundResource(R.drawable.bg_screen)
             addView(ScrollView(c).apply {
                 isVerticalScrollBarEnabled = false
+                post { Motion.attach(this, null) }
                 addView(LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; addView(heroBox, LinearLayout.LayoutParams(-1, -2)); addView(content, LinearLayout.LayoutParams(-1, -2)) })
             }, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(nav, LinearLayout.LayoutParams(-1, -2))

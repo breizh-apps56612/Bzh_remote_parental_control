@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Touche « Accueil TV » : un écran avec une petite maison (différente de « Maison » de l'appli) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M4,4h16a1.5,1.5 0,0 1,1.5 1.5v10a1.5,1.5 0,0 1,-1.5 1.5H4a1.5,1.5 0,0 1,-1.5 -1.5v-10A1.5,1.5 0,0 1,4 4z" android:strokeColor="#FFFFFF" android:strokeWidth="1.8" android:strokeLineJoin="round" android:fillColor="#00000000" />
+    <path android:pathData="M9,20.5h6" android:strokeColor="#FFFFFF" android:strokeWidth="1.8" android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M8.5,11.5l3.5,-3 3.5,3M9.8,10.6v3.6h4.4v-3.6" android:strokeColor="#FFFFFF" android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" />
+</vector>

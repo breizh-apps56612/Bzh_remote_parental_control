@@ -68,6 +68,7 @@ object Ui {
         if (primary && android.os.Build.VERSION.SDK_INT >= 21) { elevation = dp(c, 3).toFloat(); stateListAnimator = null }
         isClickable = true; isFocusable = true
         setOnClickListener { action() }
+        Motion.pressable(this)
     }
 
     // ---------- Briques « liste de réglages » (tableau de bord) ----------
