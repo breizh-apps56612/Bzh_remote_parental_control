@@ -1410,7 +1410,7 @@ class GuardService : AccessibilityService() {
     fun command(cmd: String, req: JSONObject, phoneName: String, phoneFp: String): JSONObject = when (cmd) {
         "status" -> status()
         "media_control" -> mediaControl(req.optString("action"), req.optLong("by", 10))
-        "usage" -> usage(req.optLong("from"), req.optLong("to", System.currentTimeMillis()))
+        "usage" -> usage(req.optLong("from"), req.optLong("to", System.currentTimeMillis()), req.optString("profile").take(64).ifBlank { null })
         "apps" -> JSONObject().put("ok", true).put("apps", JSONArray().apply {
             val icons = req.optBoolean("icons")
             tvApps().forEach { (p, l) -> put(JSONObject().put("pkg", p).put("label", l).apply { if (icons) iconB64(p)?.let { put("icon", it) } }) }
@@ -1593,8 +1593,9 @@ class GuardService : AccessibilityService() {
         return (if (left <= 0) "Temps écoulé" else "Encore ${RulesEngine.fmt(left)}") to (left < 10 * 60_000L)
     }
 
-    private fun usage(from: Long, to: Long): JSONObject {
-        val sessions = log.sessions(from, to).filter { it.pkg !in exempt }
+    /** Temps passé entre [from] et [to] : toute la TV, ou un seul profil « Qui regarde ? » si [profile] est donné. */
+    private fun usage(from: Long, to: Long, profile: String? = null): JSONObject {
+        val sessions = log.sessions(from, to).filter { it.pkg !in exempt && (profile == null || it.profile == profile) }
         val totals = Stats.totals(sessions, from, to).filterKeys { it !in exempt }
         val days = ((to - from) / (24 * 3600_000L)).toInt().coerceIn(1, 31)
         val daily = JSONArray()
@@ -1606,6 +1607,8 @@ class GuardService : AccessibilityService() {
             .put("hourly", JSONArray(Stats.hourly(sessions, Stats.startOfDay(from), days).toList()))
             .put("daily", daily)
             .put("since", log.first() ?: JSONObject.NULL)
+            // Renvoyé pour que le téléphone sache que la TV a bien filtré par profil (une ancienne appli TV l'ignore)
+            .put("profile", profile ?: "")
     }
 
     private fun err(m: String) = JSONObject().put("ok", false).put("error", m)

@@ -68,13 +68,34 @@ class BoxDashboardActivity : AppCompatActivity() {
         val from = Usage.addDays(Usage.startOfDay(now), -6)
         runCatching {
             status = c.call("status")
-            week = c.call("usage", JSONObject().put("from", from).put("to", now))
+            // Activité : les chiffres du profil choisi (le total de la TV n'a d'intérêt que sans profils)
+            val sel = if (mode == MODE_ACTIVITY) activityProfile(ParentalStore(this).boxRules(device.id)) else null
+            val q = { a: Long, b: Long -> JSONObject().put("from", a).put("to", b).apply { if (sel != null) put("profile", sel.id) } }
+            week = c.call("usage", q(from, now))
+            today = if (sel != null) c.call("usage", q(Usage.startOfDay(now), now)) else null
             error = null
             if (fr.paul.telecommande.core.AppIcons.stale(this, device.id)) fr.paul.telecommande.core.AppIcons.refresh(this, device)
             logProgramReport(c)
         }.onFailure { error = it.message }
         render()
     }
+
+    /** Temps du jour du profil affiché dans « Activité » (rempli seulement quand un profil est choisi). */
+    private var today: JSONObject? = null
+    /** Profil choisi dans « Activité » (null = automatique : l'enfant qui regarde, sinon le premier enfant). */
+    private var actProfileId: String? = null
+
+    /** Profil affiché dans « Activité », ou null quand la TV n'a pas de profils (on montre alors toute la TV). */
+    private fun activityProfile(rules: fr.paul.telecommande.shared.BoxRules): fr.paul.telecommande.shared.Profile? {
+        val ps = rules.profiles
+        if (ps.isEmpty()) return null
+        actProfileId?.let { id -> ps.firstOrNull { it.id == id }?.let { return it } }
+        val watching = status?.optJSONObject("profile")?.optString("id")
+        return ps.firstOrNull { it.id == watching && !it.unlimited } ?: ps.firstOrNull { !it.unlimited } ?: ps.first()
+    }
+
+    /** La TV a-t-elle bien filtré par profil ? (une ancienne appli TV renvoie le temps de toute la TV) */
+    private fun filtered(p: fr.paul.telecommande.shared.Profile?, data: JSONObject?) = p != null && data?.optString("profile") == p.id
 
     /** Ce que la TV sait lire des programmes : noté dans le journal (toutes les 10 min au plus, et seulement si ça change). */
     private suspend fun logProgramReport(c: BoxClient) {
@@ -217,15 +238,28 @@ class BoxDashboardActivity : AppCompatActivity() {
         }
     }
 
-    /** Bandeau « Activité » : le temps du jour en très grand et la semaine en barres. */
+    /** Bandeau « Activité » : le profil choisi, son temps du jour en très grand, sa limite et sa semaine en barres. */
     private fun activityHero(rules: fr.paul.telecommande.shared.BoxRules): LinearLayout {
         val c = this
         val h = Premium.hero(c)
         heroTop(h)
         h.addView(Premium.heroText(c, "Activité", 28f, bold = true), Ui.lp(c, 18))
-        val todayMs = status?.optLong("todayTotal") ?: 0L
-        h.addView(Premium.heroText(c, "Aujourd'hui sur la TV", 13.5f, soft = true), Ui.lp(c, 14))
-        h.addView(Premium.bigNumber(c, Usage.format(todayMs), "", 56f), Ui.lp(c, 4))
+        val p = activityProfile(rules)
+        if (rules.profiles.size > 1) h.addView(profileChips(rules, p), Ui.lp(c, 14))
+
+        val usage = status?.optJSONObject("profileUsage")?.optJSONObject(p?.id ?: "*")
+        val todayMs = when {
+            p == null -> status?.optLong("todayTotal") ?: 0L
+            usage != null -> usage.optLong("ms")
+            filtered(p, today) -> today?.optJSONObject("byApp")?.let { o -> o.keys().asSequence().sumOf { o.optLong(it) } } ?: 0L
+            else -> 0L
+        }
+        val limit = limitOf(rules, p)
+        h.addView(Premium.heroText(c, if (p == null) "Aujourd'hui sur la TV" else "${p.emoji}  ${p.name} aujourd'hui", 13.5f, soft = true), Ui.lp(c, 14))
+        h.addView(Premium.bigNumber(c, Usage.format(todayMs), if (limit > 0) "sur " + Usage.format(limit * 60_000L) else "", 56f), Ui.lp(c, 4))
+        h.addView(Premium.heroText(c, todayCaption(rules, p, todayMs, limit, usage), 13f, soft = true), Ui.lp(c, 6))
+        if (limit > 0) h.addView(Premium.heroProgress(c, todayMs.toFloat() / (limit * 60_000L)), LinearLayout.LayoutParams(-1, Ui.dp(c, 6)).apply { topMargin = Ui.dp(c, 12) })
+
         val w = week
         if (w == null) { h.addView(Premium.heroText(c, loadingText(), 13f, soft = true), Ui.lp(c, 14)); return h }
         val now = System.currentTimeMillis()
@@ -233,17 +267,56 @@ class BoxDashboardActivity : AppCompatActivity() {
         val daily = w.optJSONArray("daily")
         val values = days.indices.map { i -> daily?.optLong(i) ?: 0L }
         val active = values.count { it > 0 }.coerceAtLeast(1)
-        h.addView(Premium.heroText(c, "Moyenne : ${Usage.format(values.sum() / active)} par jour regardé (7 jours)", 13f, soft = true), Ui.lp(c, 6))
+        h.addView(Premium.heroText(c, "Moyenne : ${Usage.format(values.sum() / active)} par jour regardé (7 jours)", 13f, soft = true), Ui.lp(c, 14))
         val fmt = SimpleDateFormat("EEE", Locale.FRANCE)
         h.addView(BarChartView(c).apply {
             heightDp = 130; onDark()
             labels = days.map { fmt.format(Date(it)).trimEnd('.').replaceFirstChar { ch -> ch.uppercase() } }
-            limitMin = if (rules.enabled) rules.dailyTotalMin else 0
+            limitMin = limit
             valuesMin = values.map { (it / 60_000).toInt() }
         }, Ui.lp(c, 14))
-        if (rules.enabled && rules.dailyTotalMin > 0)
-            h.addView(Premium.heroText(c, "Pointillés : limite de ${Usage.format(rules.dailyTotalMin * 60_000L)} · ambre : dépassée · menthe : aujourd'hui", 12f, soft = true), Ui.lp(c, 6))
+        if (limit > 0)
+            h.addView(Premium.heroText(c, "Pointillés : limite de ${Usage.format(limit * 60_000L)} · ambre : dépassée · menthe : aujourd'hui", 12f, soft = true), Ui.lp(c, 6))
+        if (p != null && !filtered(p, w))
+            h.addView(Premium.heroText(c, "Mettez à jour l'appli de la TV pour voir le détail de ce profil (en attendant : toute la TV).", 12f, soft = true), Ui.lp(c, 8))
         return h
+    }
+
+    /** Une ligne sous le grand chiffre : temps restant, dépassement ou « sans limite ». */
+    private fun todayCaption(rules: fr.paul.telecommande.shared.BoxRules, p: fr.paul.telecommande.shared.Profile?, todayMs: Long, limit: Int, usage: JSONObject?): String {
+        if (!rules.enabled) return "Contrat en pause : aucune limite"
+        if (p?.unlimited == true) return "Profil parent : aucune limite"
+        if (limit <= 0) return "Pas de limite par jour"
+        // La TV donne le temps restant exact (bonus compris) quand elle le connaît
+        val left = usage?.takeIf { it.has("left") }?.optLong("left")?.takeIf { it >= 0 } ?: (limit * 60_000L - todayMs)
+        return if (left <= 0) "Temps du jour écoulé" else "Reste " + Usage.format(left) + " aujourd'hui"
+    }
+
+    /** Pastilles de profil dans le bandeau : on choisit l'enfant dont on veut voir l'activité. */
+    private fun profileChips(rules: fr.paul.telecommande.shared.BoxRules, sel: fr.paul.telecommande.shared.Profile?): android.view.View {
+        val c = this
+        val row = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
+        rules.profiles.forEach { p ->
+            val on = p.id == sel?.id
+            row.addView(android.widget.TextView(c).apply {
+                text = "${p.emoji}  ${p.name}"; textSize = 14f; maxLines = 1; gravity = Gravity.CENTER
+                typeface = if (on) Ui.bold else Ui.medium
+                setTextColor(if (on) Ui.color(c, R.color.hero_bg) else android.graphics.Color.WHITE)
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    cornerRadius = Ui.dp(c, 20).toFloat()
+                    if (on) setColor(android.graphics.Color.WHITE) else { setColor(0x14FFFFFF); setStroke(Ui.dp(c, 1), 0x40FFFFFF) }
+                }
+                minHeight = Ui.dp(c, 44); setPadding(Ui.dp(c, 16), 0, Ui.dp(c, 16), 0)
+                contentDescription = "Voir l'activité de ${p.name}"
+                isClickable = true; isFocusable = true
+                setOnClickListener {
+                    if (on) return@setOnClickListener
+                    actProfileId = p.id; week = null; today = null; render()
+                    lifecycleScope.launch { load() }
+                }
+            }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = Ui.dp(c, 8) })
+        }
+        return android.widget.HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(row) }
     }
 
     /** Encart « demande de temps » : texte + deux boutons ronds Refuser / Accepter. */
@@ -540,27 +613,19 @@ class BoxDashboardActivity : AppCompatActivity() {
         if (unlocked) apply() else Ui.requirePin(this, "Code parent pour modifier le temps par jour.") { apply() }
     }
 
-    /** « Activité » : anneau du jour, qui regarde, ce qui passe, puis le détail en onglets. */
+    /** « Activité » : qui regarde en ce moment et ce qui passe, puis le détail du profil choisi en onglets. */
     private fun renderActivity(rules: fr.paul.telecommande.shared.BoxRules) {
         val c = this
         val st = status
-        val todayMs = st?.optLong("todayTotal") ?: 0L
-        val limitMin = if (rules.enabled) rules.dailyTotalMin else 0
         val hero = Ui.card(c)
         val who = st?.optJSONObject("profile")
-        hero.addView(Ui.label(c, "Qui regarde"))
+        hero.addView(Ui.label(c, "En ce moment"))
         hero.addView(Ui.text(c, when {
-            who != null -> "${who.optString("emoji")} ${who.optString("name")}"
-            rules.profiles.isEmpty() -> "—"
-            else -> "Personne"
+            st == null -> "—"
+            !st.optBoolean("interactive") -> "Personne devant la TV"
+            who != null -> "${who.optString("emoji")} ${who.optString("name")} regarde la TV"
+            else -> "La TV est allumée"
         }, 19f).apply { typeface = Ui.bold; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, Ui.lp(c, 4))
-        val (remain, over) = when {
-            !rules.enabled -> "Contrôle parental désactivé" to false
-            limitMin <= 0 -> "Pas de limite par jour" to false
-            todayMs >= limitMin * 60_000L -> "Limite dépassée de " + Usage.format(todayMs - limitMin * 60_000L) to true
-            else -> "Reste " + Usage.format(limitMin * 60_000L - todayMs) + " sur la TV aujourd'hui" to false
-        }
-        hero.addView(Ui.text(c, remain, 13.5f, muted = !over).apply { if (over) setTextColor(Ui.color(c, R.color.danger)) }, Ui.lp(c, 6))
 
         st?.optJSONObject("media")?.let { m ->
             hero.addView(Ui.divider(c), LinearLayout.LayoutParams(-1, 1).apply { topMargin = Ui.dp(c, 16) })
@@ -612,13 +677,19 @@ class BoxDashboardActivity : AppCompatActivity() {
     private fun todayTab(card: LinearLayout, rules: fr.paul.telecommande.shared.BoxRules) {
         val c = this
         val st = status
-        val todayMap = st?.optJSONObject("today"); val appLabels = st?.optJSONObject("labels")
+        val p = activityProfile(rules)
+        // Profil choisi : ses applis du jour ; sans profils (ou ancienne appli TV) : toute la TV
+        val own = today?.takeIf { filtered(p, it) }
+        val todayMap = own?.optJSONObject("byApp") ?: st?.optJSONObject("today")
+        val appLabels = own?.optJSONObject("labels") ?: st?.optJSONObject("labels")
         val entries = todayMap?.keys()?.asSequence()?.map { it to todayMap.optLong(it) }?.filter { it.second > 0 }?.sortedByDescending { it.second }?.toList() ?: emptyList()
-        if (entries.isEmpty()) { card.addView(Ui.text(c, if (st == null) loadingText() else "Rien de regardé aujourd'hui.", 14f, muted = true), Ui.lp(c, 16)); return }
+        if (entries.isEmpty()) { card.addView(Ui.text(c, if (st == null) loadingText() else if (p != null) "${p.name} n'a rien regardé aujourd'hui." else "Rien de regardé aujourd'hui.", 14f, muted = true), Ui.lp(c, 16)); return }
+        // Les limites par appli ne concernent pas le profil parent
+        val limited = rules.enabled && p?.unlimited != true
         val max = entries.maxOf { it.second }
         val shown = if (showAllApps) entries else entries.take(4)
         shown.forEach { (pkg, ms) ->
-            val limit = if (rules.enabled) rules.apps[pkg]?.limitMin ?: 0 else 0
+            val limit = if (limited) rules.apps[pkg]?.limitMin ?: 0 else 0
             val over = limit > 0 && ms >= limit * 60_000L
             val line = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, Ui.dp(c, 14), 0, 0) }
             val icon = appIcon(pkg)

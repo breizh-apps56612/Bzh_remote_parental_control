@@ -9,6 +9,7 @@ Gratuite, open source (GPL-3.0), sans compte, sans serveur, sans publicité.
 ## Ce que fait l'appli
 
 - **Interface « Aurora »** (téléphone 2.4.38) : barre de navigation Maison · Parental · Activité · Réglages avec la télécommande au centre ; accueil « en direct » de la TV principale et demandes de temps à accepter d'un geste ; écran Parental organisé par profil (temps par jour de chaque enfant réglable en un geste).
+- **Activité par profil** (téléphone 2.4.48 / TV 1.4.47) : l'écran Activité montre le temps, les applis et la semaine de l'enfant choisi (pastilles de profil), avec ses propres limites ; le profil parent n'a jamais de limite affichée.
 
 - **Télécommande** : pavé tactile, clavier du téléphone, vraie souris (flèche affichée sur la TV), lancement des applis avec leurs icônes, volume, veille.
 - **Contrôle parental** (appli « Box » installée sur la TV, active même téléphone éteint) : temps par jour au total et par appli, horaires et jours autorisés, couvre-feu, profils « Qui regarde ? » (demandé à chaque allumage, ou profil par défaut changeable sur la TV), fin d'épisode avant de couper, demandes de temps depuis la TV, messages et récompenses, Paramètres et installations protégés.
