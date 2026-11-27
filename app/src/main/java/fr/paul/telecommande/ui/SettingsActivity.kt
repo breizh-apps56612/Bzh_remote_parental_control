@@ -99,7 +99,12 @@ class SettingsActivity : AppCompatActivity() {
                     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
             }
         )
-        AlertDialog.Builder(this).setTitle(d.name).setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }
-            .setNegativeButton("Fermer", null).show()
+        val icons = listOf("🎮" to TileSheet.MINT, "⭐" to TileSheet.AMBER, "✏️" to TileSheet.INDIGO)
+        val sheet = TileSheet(this)
+        sheet.show(TileSheet.Page("📺", d.name, d.type.label.substringBefore(" (")) { sh, col ->
+            sh.sections(col, TileSheet.Section(null, items.mapIndexed { i, (label, action) ->
+                TileSheet.Tile(icons[i].first, label, null, icons[i].second) { sheet.dismiss(); action() }
+            }))
+        })
     }
 }

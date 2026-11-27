@@ -71,79 +71,103 @@ object Ui {
         Motion.pressable(this)
     }
 
-    // ---------- Briques « liste de réglages » (tableau de bord) ----------
+    // ---------- Tuiles (2.5.4) : toutes les listes de réglages de l'appli sont des grilles de tuiles ----------
 
-    /** Carte de liste : lignes séparées par un trait fin, sans marge intérieure verticale. */
+    private const val ROW_TAG = "tile-row"
+
+    /** Grille de tuiles, deux par ligne (une tuile seule en fin de grille prend toute la largeur). */
     fun group(c: Context) = LinearLayout(c).apply {
         orientation = LinearLayout.VERTICAL
-        setBackgroundResource(R.drawable.bg_card)
-        setPadding(0, dp(c, 4), 0, dp(c, 4))
-        elevation = dp(c, 2).toFloat()
+        setPadding(0, 0, 0, 0)
     }
 
     fun divider(c: Context) = View(c).apply { setBackgroundColor(color(c, R.color.line)) }
 
-    /** Ajoute un trait de séparation (aligné sur le texte) si la carte contient déjà une ligne. */
+    /** Place une tuile dans la grille : à côté de la précédente si sa ligne a encore de la place, sinon sur une nouvelle ligne. */
     fun addRow(g: LinearLayout, row: View) {
         val c = g.context
-        if (g.childCount > 0) g.addView(divider(c), LinearLayout.LayoutParams(-1, 1).apply { marginStart = dp(c, 66) })
-        g.addView(row)
+        val last = g.getChildAt(g.childCount - 1) as? LinearLayout
+        val line = if (last != null && last.tag == ROW_TAG && last.childCount < 2) last
+            else LinearLayout(c).apply { tag = ROW_TAG }.also { g.addView(it, LinearLayout.LayoutParams(-1, -2).apply { if (g.childCount > 0) topMargin = dp(c, 10) }) }
+        line.addView(row, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply {
+            if (line.childCount > 0) marginStart = dp(c, 10)
+        })
     }
 
-    /** Pastille ronde teintée contenant un emoji (icône de ligne). */
-    fun badge(c: Context, emoji: String, danger: Boolean = false) = TextView(c).apply {
-        text = emoji; textSize = 18f; gravity = Gravity.CENTER
+    /** Teintes douces des pastilles, choisies d'après le titre (chaque tuile garde toujours la même). */
+    private val TINTS = intArrayOf(0x337C74FF, 0x2E34F5C5, 0x33FFB020, 0x2E3B82F6, 0x33A855F7)
+    fun tintFor(key: String) = TINTS[(key.hashCode() and 0x7FFFFFFF) % TINTS.size]
+
+    /** Pastille carrée arrondie et teintée contenant un emoji (icône de tuile). */
+    fun badge(c: Context, emoji: String, danger: Boolean = false, tint: Int = tintFor(emoji)) = TextView(c).apply {
+        text = emoji; textSize = 20f; gravity = Gravity.CENTER
         background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            setColor(if (danger) (color(c, R.color.danger) and 0x00FFFFFF) or 0x22000000 else color(c, R.color.accent_soft))
+            cornerRadius = dp(c, 14).toFloat()
+            setColor(if (danger) (color(c, R.color.danger) and 0x00FFFFFF) or 0x26000000 else tint)
         }
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
-    /** Ligne cliquable : icône, titre, sous-titre facultatif, valeur à droite et chevron. */
+    /** Fond de tuile : carte arrondie, filet fin, effet d'appui. */
+    fun tileBackground(c: Context): android.graphics.drawable.Drawable = android.graphics.drawable.RippleDrawable(
+        android.content.res.ColorStateList.valueOf(color(c, R.color.accent_soft)),
+        GradientDrawable().apply { cornerRadius = dp(c, 22).toFloat(); setColor(color(c, R.color.surface)); setStroke(dp(c, 1), color(c, R.color.line)) }, null)
+
+    /**
+     * Tuile de réglage : pastille en haut (et à droite, l'interrupteur s'il y en a un), le titre, sa précision,
+     * et la valeur actuelle en couleur. Toute la tuile se touche.
+     */
     fun row(c: Context, emoji: String, title: String, sub: String? = null, value: String? = null,
-            danger: Boolean = false, icon: android.graphics.Bitmap? = null, action: (() -> Unit)? = null) = LinearLayout(c).apply {
-        gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(c, 62)
-        setPadding(dp(c, 16), dp(c, 10), dp(c, 14), dp(c, 10))
-        if (icon != null) addView(android.widget.ImageView(c).apply {
+            danger: Boolean = false, icon: android.graphics.Bitmap? = null, action: (() -> Unit)? = null): LinearLayout =
+        tileOf(c, emoji, title, sub, value, danger, icon, null, action)
+
+    private fun tileOf(c: Context, emoji: String, title: String, sub: String?, value: String?, danger: Boolean,
+                       icon: android.graphics.Bitmap?, trailing: View?, action: (() -> Unit)?) = LinearLayout(c).apply {
+        orientation = LinearLayout.VERTICAL
+        background = tileBackground(c)
+        elevation = dp(c, 1).toFloat()
+        setPadding(dp(c, 14), dp(c, 14), dp(c, 14), dp(c, 14))
+        minimumHeight = dp(c, 120)
+        val top = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
+        if (icon != null) top.addView(android.widget.ImageView(c).apply {
             setImageBitmap(icon); scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             clipToOutline = true
-            background = GradientDrawable().apply { cornerRadius = dp(c, 10).toFloat(); setColor(color(c, R.color.surface2)) }
-        }, LinearLayout.LayoutParams(dp(c, 38), dp(c, 38)).apply { marginEnd = dp(c, 12) })
-        else addView(badge(c, emoji, danger), LinearLayout.LayoutParams(dp(c, 38), dp(c, 38)).apply { marginEnd = dp(c, 12) })
-        val texts = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-        texts.addView(text(c, title, 15.5f).apply {
-            typeface = medium; maxLines = 2
+            background = GradientDrawable().apply { cornerRadius = dp(c, 12).toFloat(); setColor(color(c, R.color.surface2)) }
+        }, LinearLayout.LayoutParams(dp(c, 44), dp(c, 44)))
+        else top.addView(badge(c, emoji, danger, tintFor(title)), LinearLayout.LayoutParams(dp(c, 44), dp(c, 44)))
+        top.addView(View(c), LinearLayout.LayoutParams(0, 1, 1f))
+        if (trailing != null) top.addView(trailing)
+        addView(top)
+        addView(View(c), LinearLayout.LayoutParams(1, 0, 1f))
+        addView(text(c, title, 15f).apply {
+            typeface = bold; maxLines = 3
             if (danger) setTextColor(color(c, R.color.danger))
-        })
-        if (!sub.isNullOrBlank()) texts.addView(text(c, sub, 12.5f, muted = true).apply { maxLines = 2 })
-        addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!value.isNullOrBlank()) addView(text(c, value, 14f, muted = true).apply { maxLines = 1; setPadding(dp(c, 8), 0, 0, 0) })
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(c, 12) })
+        if (!sub.isNullOrBlank()) addView(text(c, sub, 12.5f, muted = true).apply { maxLines = 4; ellipsize = android.text.TextUtils.TruncateAt.END },
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(c, 2) })
+        if (!value.isNullOrBlank()) addView(text(c, value, 14f).apply {
+            typeface = bold; maxLines = 2; setTextColor(color(c, if (danger) R.color.danger else R.color.accent))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(c, 6) })
+        contentDescription = listOfNotNull(title, sub, value).joinToString(", ")
         if (action != null) {
-            addView(text(c, "›", 22f, muted = true).apply { setPadding(dp(c, 8), 0, 0, dp(c, 2)); importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO })
             isClickable = true; isFocusable = true
-            val tv = android.util.TypedValue()
-            c.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
-            setBackgroundResource(tv.resourceId)
             setOnClickListener { action() }
+            Motion.pressable(this, 0.96f)
         }
     }
 
-    /** Ligne avec interrupteur : toute la ligne bascule (cible large, plus facile au doigt). */
+    /** Tuile avec interrupteur : toute la tuile bascule (cible large, plus facile au doigt). */
     fun switchRow(c: Context, emoji: String, title: String, sub: String?, checked: Boolean, onChange: (Boolean) -> Unit): LinearLayout {
         val sw = androidx.appcompat.widget.SwitchCompat(c).apply {
             isChecked = checked; isClickable = false; isFocusable = false
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        return row(c, emoji, title, sub).apply {
-            addView(sw, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(c, 8) })
+        return tileOf(c, emoji, title, sub, if (checked) "Activé" else "Désactivé", false, null, sw, null).apply {
             isClickable = true; isFocusable = true
-            val tv = android.util.TypedValue()
-            c.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
-            setBackgroundResource(tv.resourceId)
             contentDescription = title + if (checked) ", activé" else ", désactivé"
             setOnClickListener { sw.isChecked = !sw.isChecked; onChange(sw.isChecked) }
+            Motion.pressable(this, 0.96f)
         }
     }
 
@@ -290,9 +314,21 @@ object Ui {
     /** « Quel âge a l'enfant ? » : 2 à 17 ans. Sert à appliquer d'office la classification des programmes. */
     fun askAge(c: Context, name: String, current: Int?, done: (Int) -> Unit) {
         val ages = (2..17).toList()
-        AlertDialog.Builder(c).setTitle(if (name.isBlank()) "Quel âge a l'enfant ?" else "Quel âge a $name ?")
-            .setSingleChoiceItems(ages.map { "$it ans" }.toTypedArray(), ages.indexOf(current ?: -1)) { d, i -> d.dismiss(); done(ages[i]) }
-            .setNegativeButton("Annuler", null).show()
+        val title = if (name.isBlank()) "Quel âge a l'enfant ?" else "Quel âge a $name ?"
+        val a = c as? Activity
+        if (a == null) {
+            AlertDialog.Builder(c).setTitle(title)
+                .setSingleChoiceItems(ages.map { "$it ans" }.toTypedArray(), ages.indexOf(current ?: -1)) { d, i -> d.dismiss(); done(ages[i]) }
+                .setNegativeButton("Annuler", null).show()
+            return
+        }
+        // Une tuile par âge : l'appli propose ensuite des réglages adaptés
+        val sheet = TileSheet(a)
+        sheet.show(TileSheet.Page("🎂", title, "Les programmes et le temps conseillé s'adaptent à son âge") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, ages.map { age ->
+                TileSheet.Tile("", (if (age == current) "✓ " else "") + "$age ans", key = true) { sheet.dismiss(); done(age) }
+            }, 4))
+        })
     }
 
     fun birthYearFor(age: Int) = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) - age

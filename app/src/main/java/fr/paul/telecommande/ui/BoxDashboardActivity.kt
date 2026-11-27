@@ -184,13 +184,45 @@ class BoxDashboardActivity : AppCompatActivity() {
     private fun limitOf(rules: fr.paul.telecommande.shared.BoxRules, p: fr.paul.telecommande.shared.Profile?) =
         rules.forProfile(p).let { if (!rules.enabled || !it.enabled) 0 else it.dailyTotalMin }
 
-    /** « Plus » : les autres gestes (autre durée, récompense, changer qui regarde). */
+    /** « Plus » : les autres gestes, en tuiles. */
     private fun moreActions(rules: fr.paul.telecommande.shared.BoxRules) {
-        val items = mutableListOf("Ajouter une autre durée, ou du temps sur une appli" to { addTime() },
-            "Afficher « Bravo ! » sur la TV (récompense)" to { BoxActions.reward(this, device) })
-        if (rules.profiles.isNotEmpty()) items += "Changer qui regarde la TV" to { BoxActions.pickProfile(this, device, rules.profiles) { lifecycleScope.launch { load() } } }
-        AlertDialog.Builder(this).setTitle("Autres gestes").setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }
-            .setNegativeButton("Fermer", null).show()
+        val sheet = TileSheet(this)
+        val tiles = mutableListOf(
+            TileSheet.Tile("⏱️", "Ajouter du temps", "Une autre durée, ou sur une seule appli", TileSheet.MINT) { sheet.push(addTimePage(sheet)) },
+            TileSheet.Tile("🎉", "Récompense", "Afficher « Bravo ! » sur la TV", TileSheet.AMBER) { sheet.dismiss(); BoxActions.reward(this, device) },
+            TileSheet.Tile("💬", "Message", "Écrire sur l'écran de la TV", TileSheet.SKY) { sheet.dismiss(); BoxActions.message(this, device) })
+        if (rules.profiles.isNotEmpty()) tiles += TileSheet.Tile("👀", "Qui regarde ?", "Changer le profil sur la TV", TileSheet.INDIGO) {
+            sheet.dismiss(); BoxActions.pickProfile(this, device, rules.profiles) { lifecycleScope.launch { load() } }
+        }
+        sheet.show(TileSheet.Page("✨", "Autres gestes", device.name) { sh, col -> sh.sections(col, TileSheet.Section(null, tiles)) })
+    }
+
+    /** Ajouter du temps : sur quoi (toute la TV ou une appli), puis combien. */
+    private fun addTimePage(sheet: TileSheet): TileSheet.Page = TileSheet.Page("⏱️", "Ajouter du temps", "Sur toute la TV, ou sur une seule appli") { sh, col ->
+        val st = status
+        val todayMap = st?.optJSONObject("today"); val appLabels = st?.optJSONObject("labels")
+        val pkgs = listOf("*") + (todayMap?.keys()?.asSequence()?.toList() ?: emptyList())
+        sh.sections(col, TileSheet.Section(null, pkgs.map { pkg ->
+            val name = if (pkg == "*") "Toute la TV" else appLabels?.optString(pkg)?.ifBlank { null } ?: AppCatalog.name(pkg)
+            TileSheet.Tile(if (pkg == "*") "📺" else "▶️", name, if (pkg == "*") "Temps de TV du jour" else "Cette appli seulement",
+                if (pkg == "*") TileSheet.MINT else TileSheet.INDIGO, icon = if (pkg == "*") null else appIcon(pkg)) {
+                sheet.push(TileSheet.Page("⏱️", name, "Combien de temps en plus ?") { s2, c2 ->
+                    s2.sections(c2, TileSheet.Section(null, listOf(10, 15, 30, 60).map { m ->
+                        TileSheet.Tile("", "+$m min", key = true) { sheet.dismiss(); grantTime(pkg, m) }
+                    }, 2))
+                })
+            }
+        }))
+    }
+
+    private fun grantTime(pkg: String, minutes: Int) {
+        if (!unlocked) { Ui.requirePin(this, "Code parent pour ajouter du temps.") { unlocked = true; grantTime(pkg, minutes) }; return }
+        lifecycleScope.launch {
+            runCatching { BoxClient.of(this@BoxDashboardActivity, device).call("bonus", JSONObject().put("pkg", pkg).put("minutes", minutes)) }
+                .onSuccess { Ui.toast(this@BoxDashboardActivity, "+$minutes min accordées") }
+                .onFailure { Ui.toast(this@BoxDashboardActivity, "Erreur : ${it.message}") }
+            load()
+        }
     }
 
     /** « + 15 min » sur le temps de TV total, avec l'empreinte ou le code parent. */

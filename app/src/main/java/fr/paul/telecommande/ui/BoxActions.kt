@@ -42,12 +42,13 @@ object BoxActions {
     )
 
     fun message(a: AppCompatActivity, d: Device) {
-        val items = PRESETS.map { "${it.first}  ${it.second}" } + "✏️  Message personnalisé…"
-        AlertDialog.Builder(a).setTitle("Message sur ${d.name}")
-            .setItems(items.toTypedArray()) { _, i ->
-                if (i < PRESETS.size) send(a, d, PRESETS[i].first, PRESETS[i].second, PRESETS[i].third)
-                else custom(a, d)
-            }.setNegativeButton("Annuler", null).show()
+        val sheet = TileSheet(a)
+        val tints = listOf(TileSheet.AMBER, TileSheet.INDIGO, TileSheet.MINT, TileSheet.SKY)
+        sheet.show(TileSheet.Page("💬", "Message", "Il s'affiche en grand sur ${d.name} (la vidéo se met en pause)") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, PRESETS.mapIndexed { i, (emoji, title, text) ->
+                TileSheet.Tile(emoji, title, text, tints[i % tints.size]) { sheet.dismiss(); send(a, d, emoji, title, text) }
+            } + TileSheet.Tile("✏️", "Votre message", "Écrire ce que vous voulez", TileSheet.VIOLET) { sheet.dismiss(); custom(a, d) }))
+        })
     }
 
     private fun custom(a: AppCompatActivity, d: Device) {
@@ -67,11 +68,15 @@ object BoxActions {
 
     fun reward(a: AppCompatActivity, d: Device) {
         Ui.requirePin(a, "Accorder une récompense ?") {
-            AlertDialog.Builder(a).setTitle("Récompense sur ${d.name}")
-                .setItems(TASKS.map { "${it.first}  ·  +${it.second} min" }.toTypedArray()) { _, i ->
-                    val (label, min) = TASKS[i]
-                    call(a, d, "bonus", JSONObject().put("pkg", "*").put("minutes", min).put("reason", label), "+$min min accordées")
-                }.setNegativeButton("Annuler", null).show()
+            val sheet = TileSheet(a)
+            sheet.show(TileSheet.Page("🎉", "Récompense", "« Bravo ! » s'affiche sur ${d.name}, avec le temps en plus") { sh, col ->
+                sh.sections(col, TileSheet.Section(null, TASKS.map { (label, min) ->
+                    TileSheet.Tile(label.substringBefore(" "), label.substringAfter(" "), "+$min min", TileSheet.AMBER) {
+                        sheet.dismiss()
+                        call(a, d, "bonus", JSONObject().put("pkg", "*").put("minutes", min).put("reason", label), "+$min min accordées")
+                    }
+                }))
+            })
         }
     }
 
@@ -113,18 +118,25 @@ object BoxActions {
 
     // ---------- Profil « Qui regarde ? » choisi depuis le téléphone ----------
 
+    /** « Qui regarde ? » depuis le téléphone : une tuile par profil. */
     fun pickProfile(a: AppCompatActivity, d: Device, profiles: List<fr.paul.telecommande.shared.Profile>, done: () -> Unit = {}) {
-        if (profiles.isEmpty()) { Ui.toast(a, "Aucun profil : créez-en dans « Règles et limites »"); return }
-        AlertDialog.Builder(a).setTitle("Qui regarde ${d.name} ?")
-            .setItems(profiles.map { "${it.emoji}  ${it.name}" }.toTypedArray()) { _, i ->
-                Ui.requirePin(a, "Changer de profil ?") {
-                    a.lifecycleScope.launch {
-                        runCatching { BoxClient.of(a, d).call("set_profile", JSONObject().put("id", profiles[i].id)) }
-                            .onSuccess { Ui.toast(a, "Profil ${profiles[i].name} actif"); done() }
-                            .onFailure { Ui.toast(a, it.message ?: "La TV ne répond pas") }
+        if (profiles.isEmpty()) { Ui.toast(a, "Aucun profil : ajoutez un enfant dans l'onglet Enfants"); return }
+        val sheet = TileSheet(a)
+        sheet.show(TileSheet.Page("👀", "Qui regarde ?", "Le profil appliqué maintenant sur ${d.name}") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, profiles.map { p ->
+                TileSheet.Tile(p.emoji, p.name, if (p.unlimited) "Aucune limite · code parent" else p.age()?.let { "$it ans" } ?: "Enfant",
+                    if (p.unlimited) TileSheet.AMBER else TileSheet.INDIGO) {
+                    sheet.dismiss()
+                    Ui.requirePin(a, "Changer de profil ?") {
+                        a.lifecycleScope.launch {
+                            runCatching { BoxClient.of(a, d).call("set_profile", JSONObject().put("id", p.id)) }
+                                .onSuccess { Ui.toast(a, "Profil ${p.name} actif"); done() }
+                                .onFailure { Ui.toast(a, it.message ?: "La TV ne répond pas") }
+                        }
                     }
                 }
-            }.setNegativeButton("Annuler", null).show()
+            }))
+        })
     }
 
     // ---------- Diagnostic ----------

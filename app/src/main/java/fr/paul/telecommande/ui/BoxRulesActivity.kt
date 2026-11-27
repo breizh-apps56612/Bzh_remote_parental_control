@@ -200,10 +200,14 @@ class BoxRulesActivity : AppCompatActivity() {
                 if (def == null) "Demander" else "Par défaut") {
                 val choices = listOf("" to "Demander « Qui regarde ? » à chaque allumage") +
                     rules.profiles.map { it.id to "Toujours ${it.emoji} ${it.name}" + if (it.unlimited) " (sans limite)" else "" }
-                androidx.appcompat.app.AlertDialog.Builder(c).setTitle("À l'allumage de la TV")
-                    .setSingleChoiceItems(choices.map { it.second }.toTypedArray(), choices.indexOfFirst { it.first == (def?.id ?: "") }.coerceAtLeast(0)) { d, i ->
-                        d.dismiss(); rules.defaultProfile = choices[i].first; save() }
-                    .setNegativeButton("Annuler", null).show()
+                val sheet = TileSheet(c)
+                sheet.show(TileSheet.Page("⏻", "À l'allumage de la TV", "Demander qui regarde, ou appliquer un profil d'office") { sh, col ->
+                    sh.sections(col, TileSheet.Section(null, listOf(TileSheet.Tile("👀", "Demander", "« Qui regarde ? » à chaque allumage" + if (def == null) " · actuel" else "", TileSheet.MINT) {
+                        sheet.dismiss(); rules.defaultProfile = ""; save() }) + rules.profiles.map { p ->
+                        TileSheet.Tile(p.emoji, "Toujours ${p.name}", (if (p.unlimited) "Sans limite" else "Ses règles") + if (def?.id == p.id) " · actuel" else "",
+                            if (p.unlimited) TileSheet.AMBER else TileSheet.INDIGO) { sheet.dismiss(); rules.defaultProfile = p.id; save() }
+                    }))
+                })
             })
         }
         rules.profiles.forEachIndexed { i, p ->
@@ -245,20 +249,32 @@ class BoxRulesActivity : AppCompatActivity() {
         val labels = fr.paul.telecommande.shared.RatingReader.CONTENT_LABELS
         Ui.addRow(prog, Ui.row(c, "⚠️", "Contenus interdits",
             rules.blockedContents.mapNotNull { labels[it] }.joinToString(", ").ifEmpty { "Aucun (l'âge suffit)" }) {
+            // Une tuile par contenu : la toucher l'interdit ou l'autorise, tout de suite
             val keys = labels.keys.toList()
-            val checked = keys.map { it in rules.blockedContents }.toBooleanArray()
-            androidx.appcompat.app.AlertDialog.Builder(c).setTitle("Interdire quand l'appli signale…")
-                .setMultiChoiceItems(keys.map { labels[it] }.toTypedArray(), checked) { _, i, on -> checked[i] = on }
-                .setPositiveButton("Enregistrer") { _, _ -> rules.blockedContents = keys.filterIndexed { i, _ -> checked[i] }.toMutableList(); save() }
-                .setNegativeButton("Annuler", null).show()
+            val sheet = TileSheet(c)
+            sheet.show(TileSheet.Page("⚠️", "Contenus interdits", "Interdire quand l'appli signale…") { sh, col ->
+                sh.sections(col, TileSheet.Section(null, keys.map { k ->
+                    val on = k in rules.blockedContents
+                    TileSheet.Tile(if (on) "⛔" else "✅", labels[k] ?: k, if (on) "Interdit" else "Autorisé", if (on) TileSheet.ROSE else TileSheet.MINT) {
+                        if (on) rules.blockedContents.remove(k) else rules.blockedContents.add(k)
+                        save(); sh.refresh()
+                    }
+                }))
+            })
         })
         val policies = listOf("ask" to "Demander au parent", "allow" to "Autoriser", "block" to "Bloquer")
         Ui.addRow(prog, Ui.row(c, "❔", "Sans classification", "Films et séries (Netflix, Disney+…)",
             mapOf("ask" to "Demander", "allow" to "Autoriser", "block" to "Bloquer")[rules.unknownPolicy]) {
-            androidx.appcompat.app.AlertDialog.Builder(c).setTitle("Film ou série sans classification lisible")
-                .setSingleChoiceItems(policies.map { it.second }.toTypedArray(), policies.indexOfFirst { it.first == rules.unknownPolicy }) { d, i ->
-                    d.dismiss(); rules.unknownPolicy = policies[i].first; save() }
-                .setNegativeButton("Annuler", null).show()
+            val sheet = TileSheet(c)
+            val icons = mapOf("ask" to "🙋", "allow" to "✅", "block" to "⛔")
+            sheet.show(TileSheet.Page("❔", "Sans classification", "Film ou série dont l'âge n'est pas lisible") { sh, col ->
+                sh.sections(col, TileSheet.Section(null, policies.map { (k, label) ->
+                    TileSheet.Tile(icons[k] ?: "", label, if (k == rules.unknownPolicy) "Choix actuel" else null,
+                        if (k == "block") TileSheet.ROSE else if (k == "allow") TileSheet.MINT else TileSheet.AMBER) {
+                        sheet.dismiss(); rules.unknownPolicy = k; save()
+                    }
+                }, 1))
+            })
         })
         Ui.addRow(prog, Ui.row(c, "🚫", "Titres et chaînes interdits",
             rules.blockedPrograms.joinToString(", ").ifEmpty { "Aucun · ex. une série, une chaîne YouTube" }) { editWordList(
@@ -376,10 +392,15 @@ class BoxRulesActivity : AppCompatActivity() {
     }
 
     private fun pick(title: String, options: List<Int>, current: Int, done: (Int) -> Unit) {
-        val labels = options.map { if (it == 0) "Aucune limite" else Usage.format(it * 60_000L) }.toTypedArray()
-        AlertDialog.Builder(this).setTitle(title)
-            .setSingleChoiceItems(labels, options.indexOf(current).coerceAtLeast(0)) { d, i -> d.dismiss(); done(options[i]) }
-            .setNegativeButton("Annuler", null).show()
+        // Une tuile par durée ; la durée actuelle est marquée d'un ✓
+        val sheet = TileSheet(this)
+        sheet.show(TileSheet.Page("⏱️", title, "Touchez la durée voulue") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, options.map { m ->
+                TileSheet.Tile("", (if (m == current) "✓ " else "") + (if (m == 0) "Aucune limite" else Usage.format(m * 60_000L)), key = true) {
+                    sheet.dismiss(); done(m)
+                }
+            }, 2))
+        })
     }
 
     private fun time(minutes: Int, done: (Int) -> Unit) =

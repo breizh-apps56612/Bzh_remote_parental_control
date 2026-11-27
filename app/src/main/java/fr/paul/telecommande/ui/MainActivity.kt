@@ -114,7 +114,10 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { showAddMenu() }
         })
         list.addView(head, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22) })
-        devices.forEach { d -> list.addView(deviceRow(d, d.id == main.id), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }) }
+        val grid = Ui.group(this)
+        devices.forEach { d -> Ui.addRow(grid, deviceTile(d, d.id == main.id)) }
+        Ui.addRow(grid, Ui.row(this, "➕", "Ajouter un écran", "TV, box ou infrarouge") { showAddMenu() })
+        list.addView(grid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         list.addView(AuroraNav.spacer(this))
     }
 
@@ -260,10 +263,13 @@ class MainActivity : AppCompatActivity() {
     private fun pickPrimary() {
         val all = store.all()
         val main = AuroraNav.primary(this)
-        AlertDialog.Builder(this).setTitle("TV principale")
-            .setSingleChoiceItems(all.map { it.name }.toTypedArray(), all.indexOfFirst { it.id == main?.id }) { dlg, i ->
-                AuroraNav.setPrimary(this, all[i]); dlg.dismiss(); refresh()
-            }.setNegativeButton("Annuler", null).show()
+        val sheet = TileSheet(this)
+        sheet.show(TileSheet.Page("⭐", "TV principale", "Celle que la touche Télécommande ouvre directement") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, all.map { d ->
+                TileSheet.Tile("📺", d.name, if (d.id == main?.id) "Principale actuellement" else d.type.label.substringBefore(" ("),
+                    if (d.id == main?.id) TileSheet.MINT else TileSheet.INDIGO) { sheet.dismiss(); AuroraNav.setPrimary(this, d); refresh() }
+            }))
+        })
     }
 
     /** Deux tuiles : temps de TV du jour et couvre-feu / protection. */
@@ -369,6 +375,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Ligne d'appareil : pastille en dégradé, nom, état, flèche. */
+    /** Un écran en tuile : le toucher ouvre ses actions (télécommande, enfants, modifier…). */
+    private fun deviceTile(d: Device, isMain: Boolean): View {
+        val st = status[d.id]
+        val detail = when {
+            d.hasBoxApp && status.containsKey(d.id) -> when {
+                st == null -> "Injoignable"
+                st.optBoolean("interactive") -> "Allumée · " + st.optString("label").ifBlank { "accueil" }
+                else -> "En veille"
+            }
+            d.type == DeviceType.IR -> "Infrarouge"
+            else -> d.type.label.substringBefore(" (")
+        }
+        return Ui.row(this, if (d.type == DeviceType.IR) "🔴" else "📺", d.name, detail, if (isMain) "TV principale" else null) { showDeviceMenu(d) }
+    }
+
     private fun deviceRow(d: Device, isMain: Boolean): View {
         val card = LinearLayout(this).apply {
             gravity = android.view.Gravity.CENTER_VERTICAL
@@ -415,15 +436,17 @@ class MainActivity : AppCompatActivity() {
         startActivity(Intent(this, RemoteActivity::class.java).putExtra(RemoteActivity.EXTRA_ID, d.id))
     }
 
+    /** Ajouter un écran : trois tuiles claires. */
     private fun showAddMenu() {
-        val options = arrayOf(getString(R.string.scan), getString(R.string.manual), "Infrarouge (ce téléphone)")
-        AlertDialog.Builder(this).setTitle(R.string.add).setItems(options) { _, which ->
-            when (which) {
-                0 -> scan()
-                1 -> editDevice(null, null)
-                2 -> editDevice(null, Device(name = "TV (infrarouge)", type = DeviceType.IR, irBrand = IrBrands.AUTO))
-            }
-        }.show()
+        val sheet = TileSheet(this)
+        sheet.show(TileSheet.Page("➕", "Ajouter un écran", "TV, box ou appareil infrarouge") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, listOf(
+                TileSheet.Tile("📡", getString(R.string.scan), "L'appli cherche toute seule sur le Wi-Fi (conseillé)", TileSheet.MINT) { sheet.dismiss(); scan() },
+                TileSheet.Tile("✍️", getString(R.string.manual), "Choisir la marque et saisir l'adresse", TileSheet.INDIGO) { sheet.dismiss(); editDevice(null, null) },
+                TileSheet.Tile("🔴", "Infrarouge", "Ce téléphone devient une télécommande à infrarouge", TileSheet.ROSE) {
+                    sheet.dismiss(); editDevice(null, Device(name = "TV (infrarouge)", type = DeviceType.IR, irBrand = IrBrands.AUTO))
+                }), 1))
+        })
     }
 
     override fun onDestroy() {
@@ -469,34 +492,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Un écran : ce qu'on peut faire avec, en tuiles. */
     private fun showDeviceMenu(d: Device) {
-        val items = mutableListOf("Modifier", "Réinitialiser l'appairage", "Supprimer")
-        if (d.isSmartBox) { items.add(0, "Contrôle parental"); items.add(0, "Temps d'écran") }
-        if (d.type == DeviceType.VESTEL) items.add(0, "Tester la télécommande")
-        AlertDialog.Builder(this).setTitle(d.name)
-            .setItems(items.toTypedArray()) { _, which ->
-                when (items[which]) {
-                    "Tester la télécommande" -> VestelSetup.start(this, d) { refresh() }
-                    "Temps d'écran" -> startActivity(Intent(this, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, d.id))
-                    "Contrôle parental" -> startActivity(Intent(this, ParentalActivity::class.java).putExtra(ParentalActivity.EXTRA_ID, d.id))
-                    "Modifier" -> Ui.requirePin(this, "Modifier « ${d.name} » ?") { editDevice(d, null) }
-                    "Réinitialiser l'appairage" -> { d.token = ""; if (d.type == DeviceType.SONY || d.type == DeviceType.FREEBOX || d.type == DeviceType.VESTEL) d.secret = ""
-                        store.save(d); Toast.makeText(this, "Appairage réinitialisé", Toast.LENGTH_SHORT).show() }
-                    "Supprimer" -> Ui.requirePin(this, "Supprimer « ${d.name} » ?") {
-                        AlertDialog.Builder(this).setMessage("Supprimer « ${d.name} » ?")
-                            .setPositiveButton("Supprimer") { _, _ ->
-                                store.delete(d.id)
-                                fr.paul.telecommande.core.ParentalStore(this).save(d.id, fr.paul.telecommande.core.ParentalRules())
-                                fr.paul.telecommande.core.TvMonitor.sync(this)
-                                refresh()
-                            }
-                            .setNegativeButton("Annuler", null).show()
+        val sheet = TileSheet(this)
+        val tiles = mutableListOf(
+            TileSheet.Tile("🎮", "Télécommande", "Piloter ${d.name}", TileSheet.MINT) { sheet.dismiss(); openRemote(d) })
+        if (d.isSmartBox) tiles += TileSheet.Tile("🛡️", "Enfants", "Règles et temps de TV", TileSheet.INDIGO) {
+            sheet.dismiss(); AuroraNav.setPrimary(this, d); AuroraNav.open(this, AuroraNav.Tab.KIDS)
+        }
+        if (d.type == DeviceType.VESTEL) tiles += TileSheet.Tile("🧪", "Tester la télécommande", "Vérifier les touches", TileSheet.SKY) { sheet.dismiss(); VestelSetup.start(this, d) { refresh() } }
+        tiles += TileSheet.Tile("✏️", "Modifier", "Nom, marque, adresse", TileSheet.AMBER) { sheet.dismiss(); Ui.requirePin(this, "Modifier « ${d.name} » ?") { editDevice(d, null) } }
+        tiles += TileSheet.Tile("🔁", "Réappairer", "Si la TV ne répond plus", TileSheet.VIOLET) {
+            sheet.dismiss()
+            d.token = ""; if (d.type == DeviceType.SONY || d.type == DeviceType.FREEBOX || d.type == DeviceType.VESTEL) d.secret = ""
+            store.save(d); Toast.makeText(this, "Appairage réinitialisé", Toast.LENGTH_SHORT).show()
+        }
+        tiles += TileSheet.Tile("🗑️", "Supprimer", "Retirer cet écran de l'appli", TileSheet.ROSE) {
+            sheet.dismiss()
+            Ui.requirePin(this, "Supprimer « ${d.name} » ?") {
+                AlertDialog.Builder(this).setMessage("Supprimer « ${d.name} » ?")
+                    .setPositiveButton("Supprimer") { _, _ ->
+                        store.delete(d.id)
+                        fr.paul.telecommande.core.ParentalStore(this).save(d.id, fr.paul.telecommande.core.ParentalRules())
+                        fr.paul.telecommande.core.TvMonitor.sync(this)
+                        refresh()
                     }
-                }
-            }.show()
+                    .setNegativeButton("Annuler", null).show()
+            }
+        }
+        sheet.show(TileSheet.Page("📺", d.name, d.type.label.substringBefore(" (")) { sh, col -> sh.sections(col, TileSheet.Section(null, tiles)) })
     }
 
-    /** Formulaire d'ajout / modification, construit dynamiquement selon le type choisi. */
     private fun editDevice(existing: Device?, preset: Device?) {
         val d = existing ?: preset ?: Device(name = "", type = DeviceType.SAMSUNG)
         val types = DeviceType.values()

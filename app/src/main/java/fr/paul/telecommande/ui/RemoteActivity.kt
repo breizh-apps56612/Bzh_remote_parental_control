@@ -1089,19 +1089,20 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
 
     private fun showHelp() {
         val voiceFile = java.io.File(filesDir, "voix-derniere.wav")
-        val items = mutableListOf("Diagnostic de connexion", "Journal de diagnostic", "Rechercher une mise à jour")
-        if (voiceFile.exists()) items.add("Réécouter la dernière recherche vocale")
-        AlertDialog.Builder(this).setTitle("Aide et dépannage").setItems(items.toTypedArray()) { _, i ->
-            when (items[i]) {
-                "Diagnostic de connexion" -> showDiagnostic()
-                "Journal de diagnostic" -> showJournal()
-                "Rechercher une mise à jour" -> PhoneUpdate.checkAndOffer(this, force = true)
-                "Réécouter la dernière recherche vocale" -> runCatching {
-                    android.media.MediaPlayer().apply { setDataSource(voiceFile.path); setOnCompletionListener { it.release() }; prepare(); start() }
-                    Ui.toast(this, "Lecture de ce que la TV a reçu…")
-                }.onFailure { Ui.toast(this, "Lecture impossible") }
-            }
-        }.setNegativeButton("Fermer", null).show()
+        val sheet = TileSheet(this)
+        val tiles = mutableListOf(
+            TileSheet.Tile("🩺", "Diagnostic de connexion", "Pourquoi la TV ne répond pas", TileSheet.MINT) { sheet.dismiss(); showDiagnostic() },
+            TileSheet.Tile("📝", "Journal de diagnostic", "À envoyer en cas de problème", TileSheet.INDIGO) { sheet.dismiss(); showJournal() },
+            TileSheet.Tile("⬇️", "Mise à jour", "Rechercher une nouvelle version", TileSheet.SKY) { sheet.dismiss(); PhoneUpdate.checkAndOffer(this, force = true) })
+        if (voiceFile.exists()) tiles += TileSheet.Tile("🎙️", "Dernière recherche vocale", "Réécouter ce que la TV a reçu", TileSheet.VIOLET) {
+            runCatching {
+                android.media.MediaPlayer().apply { setDataSource(voiceFile.path); setOnCompletionListener { it.release() }; prepare(); start() }
+                Ui.toast(this, "Lecture de ce que la TV a reçu…")
+            }.onFailure { Ui.toast(this, "Lecture impossible") }
+        }
+        sheet.show(TileSheet.Page("❓", "Aide et dépannage", "Glisser = naviguer · toucher = OK · rester appuyé à gauche / droite = en continu") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, tiles))
+        })
     }
 
     private fun showJournal() {
