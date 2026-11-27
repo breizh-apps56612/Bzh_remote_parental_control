@@ -161,6 +161,7 @@ class RulesWizardActivity : AppCompatActivity() {
             Step.SUMMARY -> summary()
         }
         if (step != Step.SUMMARY && step != Step.PROFILES) liveAdvice()
+        gridify(content)
         renderNav()
     }
 
@@ -200,27 +201,55 @@ class RulesWizardActivity : AppCompatActivity() {
     // ---------- Éléments ----------
 
     /** Grande carte de choix (style bouton radio). */
+    /** Un choix en tuile : coche ronde en haut, titre, précision ; cerclé d'indigo quand il est choisi. */
     private fun choice(title: String, sub: String?, selected: Boolean, onClick: () -> Unit): View {
         val c = this
         return LinearLayout(c).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            background = GradientDrawable().apply {
-                cornerRadius = Ui.dp(c, 20).toFloat()
-                setColor(Ui.color(c, R.color.surface))
-                setStroke(Ui.dp(c, if (selected) 2 else 1), Ui.color(c, if (selected) R.color.accent else R.color.line))
-            }
-            setPadding(Ui.dp(c, 16), Ui.dp(c, 14), Ui.dp(c, 16), Ui.dp(c, 14))
+            tag = CHOICE
+            orientation = LinearLayout.VERTICAL
+            background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Ui.color(c, R.color.accent_soft)),
+                GradientDrawable().apply {
+                    cornerRadius = Ui.dp(c, 22).toFloat()
+                    setColor(Ui.color(c, if (selected) R.color.indigo_soft else R.color.surface))
+                    setStroke(Ui.dp(c, if (selected) 2 else 1), Ui.color(c, if (selected) R.color.accent else R.color.line))
+                }, null)
+            setPadding(Ui.dp(c, 14), Ui.dp(c, 14), Ui.dp(c, 14), Ui.dp(c, 14))
+            minimumHeight = Ui.dp(c, 104)
             isClickable = true; isFocusable = true; setOnClickListener { onClick() }
-            addView(View(c).apply {
+            contentDescription = title + (sub?.let { ", $it" } ?: "") + if (selected) ", choisi" else ""
+            addView(TextView(c).apply {
+                text = if (selected) "✓" else ""; gravity = Gravity.CENTER; textSize = 14f; typeface = Ui.bold; setTextColor(Color.WHITE)
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     if (selected) setColor(Ui.color(c, R.color.accent)) else { setColor(Color.TRANSPARENT); setStroke(Ui.dp(c, 2), Ui.color(c, R.color.line)) }
                 }
-            }, LinearLayout.LayoutParams(Ui.dp(c, 20), Ui.dp(c, 20)).apply { marginEnd = Ui.dp(c, 14) })
-            val t = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-            t.addView(Ui.text(c, title, 16f).apply { typeface = Ui.medium })
-            sub?.let { t.addView(Ui.text(c, it, 13f, muted = true), Ui.lp(c, 2)) }
-            addView(t, LinearLayout.LayoutParams(0, -2, 1f))
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(Ui.dp(c, 26), Ui.dp(c, 26)))
+            addView(View(c), LinearLayout.LayoutParams(1, 0, 1f))
+            addView(Ui.text(c, title, 15.5f).apply { typeface = Ui.bold; maxLines = 3 }, Ui.lp(c, 12))
+            sub?.let { addView(Ui.text(c, it, 12.5f, muted = true).apply { maxLines = 4 }, Ui.lp(c, 2)) }
+            Motion.pressable(this, 0.96f)
+        }
+    }
+
+    private val CHOICE = "wizard-choice"
+
+    /** Les choix qui se suivent sont rangés en grille de tuiles (deux par ligne). */
+    private fun gridify(container: LinearLayout) {
+        val views = (0 until container.childCount).map { container.getChildAt(it) }
+        container.removeAllViews()
+        var grid: LinearLayout? = null
+        views.forEach { v ->
+            if (v.tag == CHOICE) {
+                val g = grid ?: Ui.group(this).also { grid = it; container.addView(it, gap(18)) }
+                (v.parent as? android.view.ViewGroup)?.removeView(v)
+                Ui.addRow(g, v)
+            } else {
+                grid = null
+                val lp = v.layoutParams
+                (v.parent as? android.view.ViewGroup)?.removeView(v)
+                if (lp != null) container.addView(v, lp) else container.addView(v)
+            }
         }
     }
 
@@ -385,20 +414,12 @@ class RulesWizardActivity : AppCompatActivity() {
         val c = this
         val all = (apps + rules.apps.keys.filter { k -> apps.none { it.first == k } }.map { it to it }).distinctBy { it.first }
         if (all.isEmpty()) { content.addView(Ui.text(c, "Chargement des applis de la TV… (la TV doit être allumée). Vous pouvez passer cette étape.", 14f, muted = true), gap(18)); return }
-        val card = Ui.card(c)
+        val grid = Ui.group(c)
         all.forEach { (pkg, label) ->
             val r = rules.apps[pkg]
-            val row = LinearLayout(c).apply {
-                gravity = Gravity.CENTER_VERTICAL; setPadding(0, Ui.dp(c, 10), 0, Ui.dp(c, 10))
-                isClickable = true; setOnClickListener { appChoice(pkg, label) }
-            }
-            row.addView(Ui.text(c, label, 15f), LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(Ui.text(c, appLabel(r), 14f).apply {
-                setTextColor(Ui.color(c, if (r == null || r.isDefault) R.color.muted else if (r.blocked) R.color.danger else R.color.accent)); typeface = Ui.medium
-            })
-            card.addView(row)
+            Ui.addRow(grid, Ui.row(c, label.take(1).uppercase(), label, null, appLabel(r), danger = r?.blocked == true) { appChoice(pkg, label) })
         }
-        content.addView(card, gap(18))
+        content.addView(grid, gap(18))
     }
 
     /** Règle d'une appli : limite par jour, plage horaire personnalisée, jours, ou blocage. */

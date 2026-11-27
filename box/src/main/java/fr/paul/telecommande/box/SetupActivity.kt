@@ -55,25 +55,48 @@ class SetupActivity : Activity() {
 
     private fun button(label: String, primary: Boolean = false, onClick: () -> Unit) = BoxUi.button(this, label, primary, 16f, onClick)
 
+    /** Rangée de tuiles en cours (trois par ligne). */
+    private var tileRow: LinearLayout? = null
+    /** Bouton de l'étape 1, pour y placer le focus quand la protection n'est pas encore active. */
+    private var firstAction: android.view.View? = null
+
+    /** Ajoute une tuile à la grille : trois par ligne, à hauteur égale. */
+    private fun addTile(tile: android.view.View) {
+        val row = tileRow?.takeIf { it.childCount < 3 } ?: LinearLayout(this).also {
+            tileRow = it; root.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        }
+        row.addView(tile, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f).apply { if (row.childCount > 0) marginStart = dp(16) })
+    }
+
+    /** Les tuiles suivantes commencent une nouvelle ligne (après un titre de partie). */
+    private fun breakTiles() { tileRow = null }
+
+    /** Tuile d'étape : pastille (numéro ou ✓), titre, explication, et son bouton en bas (le focus de la télécommande va dessus). */
     private fun step(n: String, title: String, desc: String, done: Boolean?, action: String?, onClick: (() -> Unit)?) {
         val active = done == false && n == "1"
-        val row = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            background = BoxUi.cardBg(this@SetupActivity, 24f, highlight = active)
-            setPadding(dp(24), dp(20), dp(24), dp(20))
+        val tile = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = BoxUi.cardBg(this@SetupActivity, 26f, highlight = active)
+            setPadding(dp(24), dp(22), dp(24), dp(22))
+            minimumHeight = dp(230)
         }
-        row.addView(BoxUi.badge(this, if (done == true) "✓" else n, when (done) { true -> true; false -> false; null -> null }, 48f))
-        val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        texts.addView(text(title, 20f, bold = true))
-        texts.addView(text(desc, 14.5f, BoxUi.MUTED), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
-        row.addView(texts, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(20); marginEnd = dp(16) })
-        if (action != null && onClick != null) row.addView(button(action, active, onClick))
-        root.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        tile.addView(BoxUi.badge(this, if (done == true) "✓" else n, when (done) { true -> true; false -> false; null -> null }, 48f))
+        tile.addView(text(title, 19f, bold = true), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        tile.addView(text(desc, 13.5f, BoxUi.MUTED).apply { maxLines = 5 }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        tile.addView(android.view.View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        if (action != null && onClick != null) {
+            val b = button(action, active, onClick)
+            tile.addView(b, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
+            if (n == "1") firstAction = b
+        } else tile.addView(text(when (done) { true -> "C'est fait"; false -> "À faire"; null -> "Non proposé" }, 15f,
+            when (done) { true -> BoxUi.OK; false -> BoxUi.WARN; null -> BoxUi.MUTED }, bold = true), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
+        addTile(tile)
     }
 
     private fun render() {
         root.removeAllViews()
         changeProfileButton = null
+        tileRow = null; firstAction = null
         val store = BoxStore.get(this)
         val guard = GuardService.enabled(this)
         root.addView(BoxUi.label(this, "Télécommande Box"))
@@ -135,13 +158,12 @@ class SetupActivity : Activity() {
 
         if (phones.isNotEmpty()) {
             root.addView(BoxUi.label(this, "Téléphones appairés", BoxUi.MUTED), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(32) })
+            breakTiles()
             phones.forEach { (fp, name) ->
-                val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(8)) }
-                row.addView(text("$name  ·  ${fp.take(8)}…", 16f), LinearLayout.LayoutParams(0, -2, 1f))
-                row.addView(button("Retirer") { withPin { store.removePhone(fp); render() } })
-                root.addView(row)
+                step("📱", name, "Empreinte ${fp.take(8)}… · ce téléphone règle cette TV.", true, "Retirer") { withPin { store.removePhone(fp); render() } }
             }
         }
+        breakTiles()
         root.addView(text(
             "Confidentialité : les données restent dans votre maison (sur cette box et le téléphone appairé). Aucun compte, aucun serveur. " +
                 if (store.encrypted) "Réglages chiffrés." else "Attention : le chiffrement matériel n'est pas disponible sur cette box.",
@@ -149,7 +171,7 @@ class SetupActivity : Activity() {
         // Focus de départ : « Changer de profil » quand la protection est active (le geste le plus courant),
         // sinon le bouton de l'étape 1. Avant : toujours « Ouvrir » (Accessibilité), même protection validée.
         val protectedNow = guard || GuardService.instance != null
-        (changeProfileButton.takeIf { protectedNow } ?: (root.getChildAt(3) as? LinearLayout)?.getChildAt(2))?.requestFocus()
+        (changeProfileButton.takeIf { protectedNow } ?: firstAction)?.requestFocus()
     }
 
     private var changeProfileButton: android.view.View? = null
@@ -163,25 +185,27 @@ class SetupActivity : Activity() {
         if (rules.profiles.isEmpty()) return
         val active = rules.profiles.firstOrNull { it.id == store.activeProfile() }
         val def = rules.startProfile()
-        val row = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            background = BoxUi.cardBg(this@SetupActivity, 24f)
-            setPadding(dp(24), dp(20), dp(24), dp(20))
+        val tile = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = BoxUi.cardBg(this@SetupActivity, 26f)
+            setPadding(dp(24), dp(22), dp(24), dp(22))
+            minimumHeight = dp(230)
         }
-        row.addView(BoxUi.badge(this, active?.emoji ?: "?", null, 48f))
-        val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        texts.addView(text("Qui regarde : ${active?.name ?: "personne pour l'instant"}", 20f, bold = true))
-        texts.addView(text("À l'allumage : " + (def?.let { "profil ${it.emoji} ${it.name} appliqué d'office" } ?: "la TV demande « Qui regarde ? »") +
-            if (def?.unlimited == true) ". Attention : sans aucune limite tant que personne ne change." else ".", 14.5f, BoxUi.MUTED),
-            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
-        row.addView(texts, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(20); marginEnd = dp(16) })
-        row.addView(button("Changer de profil", true) {
+        tile.addView(BoxUi.badge(this, active?.emoji ?: "?", null, 48f))
+        tile.addView(text("Qui regarde : ${active?.name ?: "personne"}", 19f, bold = true), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+        tile.addView(text("À l'allumage : " + (def?.let { "${it.emoji} ${it.name} d'office" } ?: "la TV demande « Qui regarde ? »") +
+            if (def?.unlimited == true) ". Attention : sans aucune limite." else ".", 13.5f, BoxUi.MUTED).apply { maxLines = 4 },
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) })
+        tile.addView(android.view.View(this), LinearLayout.LayoutParams(1, 0, 1f))
+        val btns = LinearLayout(this)
+        btns.addView(button("Changer", true) {
             val g = GuardService.instance
             if (g == null) android.widget.Toast.makeText(this, "Activez d'abord la protection (étape 1).", android.widget.Toast.LENGTH_LONG).show()
             else { g.askWhoWatches(); moveTaskToBack(true) }
-        }.also { changeProfileButton = it })
-        row.addView(button("Au démarrage") { withPin { chooseStartProfile() } }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
-        root.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        }.also { changeProfileButton = it; it.contentDescription = "Changer de profil" })
+        btns.addView(button("Au démarrage") { withPin { chooseStartProfile() } }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(12) })
+        tile.addView(btns, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
+        addTile(tile)
     }
 
     private fun chooseStartProfile() {

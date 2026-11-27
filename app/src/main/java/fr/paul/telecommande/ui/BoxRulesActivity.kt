@@ -309,23 +309,29 @@ class BoxRulesActivity : AppCompatActivity() {
     }
 
     /** Liste modifiable : toucher un élément propose de le retirer ; « Ajouter » demande un titre ou une chaîne. */
+    /** Liste en tuiles : toucher un élément propose de le retirer ; la tuile « Ajouter » demande un titre ou une chaîne. */
     private fun editWordList(title: String, items: List<Pair<String, String>>, canAdd: Boolean = true, done: (remove: String?, add: String?) -> Unit) {
         val c = this
-        val b = androidx.appcompat.app.AlertDialog.Builder(c).setTitle(title)
-        if (items.isEmpty()) b.setMessage(if (canAdd) "Rien pour l'instant." else "Rien pour l'instant. Ils s'ajoutent quand vous répondez « Toujours » à une demande.")
-        else b.setItems(items.map { "✕  " + it.second }.toTypedArray()) { _, i ->
-            androidx.appcompat.app.AlertDialog.Builder(c).setMessage("Retirer « ${items[i].second.substringBefore("  ·  ")} » ?")
-                .setPositiveButton("Retirer") { _, _ -> done(items[i].first, null) }.setNegativeButton("Annuler", null).show()
-        }
-        if (canAdd) b.setPositiveButton("Ajouter") { _, _ ->
-            val input = android.widget.EditText(c).apply { hint = "Titre, chaîne ou mot"; inputType = android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES }
-            val frame = android.widget.FrameLayout(c).apply { setPadding(Ui.dp(c, 20), 0, Ui.dp(c, 20), 0); addView(input) }
-            androidx.appcompat.app.AlertDialog.Builder(c).setTitle("Interdire").setView(frame)
-                .setMessage("Comparé sans accents ni majuscules, par mots entiers : « chat » n'interdit pas « château ».")
-                .setPositiveButton("Ajouter") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let { done(null, it.take(60)) } }
-                .setNegativeButton("Annuler", null).show()
-        }
-        b.setNegativeButton("Fermer", null).show()
+        val sheet = TileSheet(c)
+        sheet.show(TileSheet.Page(if (canAdd) "🚫" else "✅", title, if (items.isEmpty())
+            (if (canAdd) "Rien pour l'instant." else "Rien pour l'instant. Ils s'ajoutent quand vous répondez « Toujours » à une demande.")
+            else "Touchez un élément pour le retirer") { sh, col ->
+            val tiles = items.map { (key, label) ->
+                TileSheet.Tile(if (canAdd) "🚫" else "✅", label.substringBefore("  ·  "), label.substringAfter("  ·  ", "Touchez pour retirer"),
+                    if (canAdd) TileSheet.ROSE else TileSheet.MINT) {
+                    androidx.appcompat.app.AlertDialog.Builder(c).setMessage("Retirer « ${label.substringBefore("  ·  ")} » ?")
+                        .setPositiveButton("Retirer") { _, _ -> sheet.dismiss(); done(key, null) }.setNegativeButton("Annuler", null).show()
+                }
+            } + if (canAdd) listOf(TileSheet.Tile("➕", "Ajouter", "Un titre, une chaîne ou un mot", TileSheet.INDIGO) {
+                val input = android.widget.EditText(c).apply { hint = "Titre, chaîne ou mot"; inputType = android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES }
+                val frame = android.widget.FrameLayout(c).apply { setPadding(Ui.dp(c, 20), 0, Ui.dp(c, 20), 0); addView(input) }
+                androidx.appcompat.app.AlertDialog.Builder(c).setTitle("Interdire").setView(frame)
+                    .setMessage("Comparé sans accents ni majuscules, par mots entiers : « chat » n'interdit pas « château ».")
+                    .setPositiveButton("Ajouter") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let { sheet.dismiss(); done(null, it.take(60)) } }
+                    .setNegativeButton("Annuler", null).show()
+            }) else emptyList()
+            sh.sections(col, TileSheet.Section(null, tiles))
+        })
     }
 
     private fun summary(r: AppRule?): String {

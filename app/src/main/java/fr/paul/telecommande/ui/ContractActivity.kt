@@ -166,12 +166,14 @@ class ContractActivity : AppCompatActivity() {
         nav.visibility = View.GONE
         h.addView(Premium.heroText(c, "Le contrat de ${profile.name}", 26f, bold = true), Ui.lp(c, 18))
         h.addView(Premium.heroText(c, "Vous fixez les règles, à votre façon. La TV les applique, et l'appli vous aide à les faire évoluer.", 14.5f, soft = true), Ui.lp(c, 8))
-        content.addView(choiceCard("Créer un contrat", "5 phrases à compléter, puis vous réglez tout d'un geste. Environ 2 minutes.", true) { next() }, Ui.lp(c, 18))
-        content.addView(choiceCard("Rester en mode simple", "Une limite par jour, et c'est tout. Vous la changez quand vous voulez.", false) {
+        val pick = Ui.group(c)
+        content.addView(pick, Ui.lp(c, 18))
+        Ui.addRow(pick, Ui.row(c, "📜", "Créer un contrat", "5 phrases à compléter, puis tout se règle d'un geste. Environ 2 minutes.", "Conseillé") { next() })
+        Ui.addRow(pick, Ui.row(c, "⏱️", "Mode simple", "Une limite par jour, et c'est tout. Vous la changez quand vous voulez.") {
             val i = store.boxRules(device.id).profiles.indexOfFirst { it.id == profile.id }
             startActivity(Intent(c, BoxRulesActivity::class.java).putExtra(BoxRulesActivity.EXTRA_ID, device.id).putExtra(BoxRulesActivity.EXTRA_PROFILE, i))
             finish()
-        }, Ui.lp(c, 10))
+        })
         content.addView(Ui.text(c, "Il n'y a pas de bonne ou de mauvaise façon : chaque famille a ses règles. Vous pourrez mettre le contrat en pause, le modifier ou l'arrêter à tout moment.", 13f, muted = true), Ui.lp(c, 16))
     }
 
@@ -207,34 +209,37 @@ class ContractActivity : AppCompatActivity() {
         card.addView(TextView(c).apply {
             text = sentence; textSize = 19f; typeface = Ui.bold; setTextColor(Ui.color(c, R.color.ink)); setLineSpacing(0f, 1.2f)
         })
-        val opts = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        val opts = Ui.group(c)
         q.options.forEachIndexed { i, o ->
-            opts.addView(chip(o, i == chosen) {
+            Ui.addRow(opts, chip(o, i == chosen) {
                 answers[q.id] = i; touched += q.id; render()
                 // Une réponse choisie : la phrase suivante arrive d'elle-même (le temps de voir le choix)
                 val at = index
                 content.postDelayed({ if (!isFinishing && index == at) next() }, 350)
-            }, Ui.lp(c, 8))
+            })
         }
-        card.addView(opts, Ui.lp(c, 10))
+        card.addView(opts, Ui.lp(c, 14))
         content.addView(card, Ui.lp(c, 18))
         if (qi == ContractWizard.QUESTIONS.lastIndex)
             content.addView(Ui.text(c, "Vos réponses placent les curseurs à l'étape suivante. Vous pourrez tout ajuster.", 13f, muted = true), Ui.lp(c, 12))
     }
 
+    /** Une proposition en tuile : grande, cerclée d'indigo quand elle est choisie. */
     private fun chip(label: String, on: Boolean, action: () -> Unit) = TextView(this).apply {
         val c = this@ContractActivity
-        text = label; textSize = 15f; typeface = if (on) Ui.bold else Ui.medium
+        text = (if (on) "✓  " else "") + label; textSize = 15.5f; typeface = Ui.bold
         setTextColor(Ui.color(c, if (on) R.color.indigo_ink else R.color.ink))
-        background = GradientDrawable().apply {
-            cornerRadius = Ui.dp(c, 16).toFloat()
-            setColor(Ui.color(c, if (on) R.color.indigo_soft else R.color.tile))
-            if (on) setStroke(Ui.dp(c, 2), Ui.color(c, R.color.accent))
-        }
-        minHeight = Ui.dp(c, 50); gravity = Gravity.CENTER_VERTICAL
-        setPadding(Ui.dp(c, 16), Ui.dp(c, 10), Ui.dp(c, 16), Ui.dp(c, 10))
+        background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Ui.color(c, R.color.accent_soft)),
+            GradientDrawable().apply {
+                cornerRadius = Ui.dp(c, 20).toFloat()
+                setColor(Ui.color(c, if (on) R.color.indigo_soft else R.color.tile))
+                setStroke(Ui.dp(c, if (on) 2 else 1), Ui.color(c, if (on) R.color.accent else R.color.line))
+            }, null)
+        minHeight = Ui.dp(c, 84); gravity = Gravity.BOTTOM or Gravity.START
+        setPadding(Ui.dp(c, 14), Ui.dp(c, 12), Ui.dp(c, 14), Ui.dp(c, 14))
         contentDescription = label + if (on) ", choisi" else ""
         isClickable = true; isFocusable = true; setOnClickListener { action() }
+        Motion.pressable(this, 0.95f)
     }
 
     // ---------- 3. Table de mixage ----------
@@ -291,8 +296,10 @@ class ContractActivity : AppCompatActivity() {
         val c = this
         h.addView(Premium.heroText(c, "Montrer le contrat à ${profile.name} ?", 24f, bold = true), Ui.lp(c, 16))
         h.addView(Premium.heroText(c, "Sur la TV, ${profile.name} verra ses règles expliquées simplement et pourra appuyer sur « J'ai compris ».", 14f, soft = true), Ui.lp(c, 6))
-        content.addView(choiceSelect("Oui, sur la TV", "Pour qu'il comprenne les règles. Il le verra la prochaine fois qu'il regarde.", showChild) { showChild = true; render() }, Ui.lp(c, 18))
-        content.addView(choiceSelect("Non", "Le contrat reste sur votre téléphone.", !showChild) { showChild = false; render() }, Ui.lp(c, 10))
+        val yn = Ui.group(c)
+        Ui.addRow(yn, choiceSelect("📺  Oui, sur la TV", "Pour qu'il comprenne les règles. Il le verra la prochaine fois qu'il regarde.", showChild) { showChild = true; render() })
+        Ui.addRow(yn, choiceSelect("📱  Non", "Le contrat reste sur votre téléphone.", !showChild) { showChild = false; render() })
+        content.addView(yn, Ui.lp(c, 18))
         val card = Ui.card(c)
         card.addView(Ui.label(c, "Votre contrat"))
         card.addView(Ui.text(c, ContractWizard.sentence(profile.name, mix), 15f), Ui.lp(c, 6))
@@ -306,9 +313,10 @@ class ContractActivity : AppCompatActivity() {
             cornerRadius = Ui.dp(c, 20).toFloat(); setColor(Ui.color(c, if (on) R.color.indigo_soft else R.color.surface))
             setStroke(Ui.dp(c, if (on) 2 else 1), Ui.color(c, if (on) R.color.accent else R.color.line))
         }
-        setPadding(Ui.dp(c, 18), Ui.dp(c, 14), Ui.dp(c, 18), Ui.dp(c, 14))
-        addView(Ui.text(c, title, 16f).apply { typeface = Ui.bold })
-        addView(Ui.text(c, sub, 13.5f, muted = true), Ui.lp(c, 3))
+        setPadding(Ui.dp(c, 16), Ui.dp(c, 16), Ui.dp(c, 16), Ui.dp(c, 16))
+        minimumHeight = Ui.dp(c, 130)
+        addView(Ui.text(c, (if (on) "✓  " else "") + title, 16f).apply { typeface = Ui.bold })
+        addView(Ui.text(c, sub, 13f, muted = true), Ui.lp(c, 4))
         isClickable = true; isFocusable = true; contentDescription = "$title. $sub" + if (on) ", choisi" else ""
         setOnClickListener { action() }
     }

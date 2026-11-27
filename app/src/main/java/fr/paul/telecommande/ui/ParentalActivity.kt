@@ -75,102 +75,78 @@ class ParentalActivity : AppCompatActivity() {
         root.removeAllViews()
         root.addView(Ui.text(c, device.name, 13f, muted = true))
         root.addView(Ui.title(c, "Contrôle parental"))
-        root.addView(Ui.button(c, "✨ Assistant pas à pas", primary = true) {
+        // Tout en tuiles : l'essentiel d'abord, puis chaque appli
+        val top = Ui.group(c)
+        Ui.addRow(top, Ui.row(c, "✨", "Pas à pas", "Tout régler, une question à la fois") {
             startActivity(android.content.Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
-        }, Ui.lp(c, 12))
-        root.addView(Ui.button(c, "📊 Ce qui a été regardé") {
+        })
+        Ui.addRow(top, Ui.row(c, "📊", "Ce qui a été regardé", "Aujourd'hui, la semaine, les horaires") {
             startActivity(android.content.Intent(c, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, device.id))
-        }, Ui.lp(c, 8))
+        })
+        root.addView(top, Ui.lp(c, 14))
         if (!unlocked) {
-            root.addView(Ui.text(c, "Réglages protégés par le code parent.", 14f, muted = true), Ui.lp(c, 10))
-            root.addView(Ui.button(c, "Déverrouiller", primary = true) { unlock() }, Ui.lp(c, 14))
+            val lock = Ui.group(c)
+            Ui.addRow(lock, Ui.row(c, "🔑", "Déverrouiller", "Les réglages sont protégés par le code parent") { unlock() })
+            root.addView(lock, Ui.lp(c, 12))
+            root.addView(AuroraNav.spacer(c))
             return
         }
 
-        // --- activation ---
-        val main = Ui.card(c)
-        main.addView(SwitchCompat(c).apply {
-            text = "Activer le contrôle parental"; textSize = 16f; setTextColor(Ui.color(c, R.color.ink))
-            isChecked = rules.enabled
-            setOnCheckedChangeListener { b, on ->
-                if (on && !store.hasPin) {
-                    b.setOnCheckedChangeListener(null); b.isChecked = false
-                    Ui.createPin(c) { ok -> if (ok) { rules.enabled = true; askNotifications(); save() } }
-                } else { rules.enabled = on; if (on) askNotifications(); save() }
-            }
+        root.addView(Ui.label(c, "L'essentiel"), Ui.lp(c, 22))
+        val ess = Ui.group(c)
+        Ui.addRow(ess, Ui.switchRow(c, "🛡️", "Contrôle parental", "Le téléphone surveille la box et prévient 5 min avant chaque limite", rules.enabled) { on ->
+            if (on && !store.hasPin) Ui.createPin(c) { ok -> if (ok) { rules.enabled = true; askNotifications() }; save() }
+            else { rules.enabled = on; if (on) askNotifications(); save() }
         })
-        main.addView(Ui.text(c,
-            "Le téléphone surveille la box en permanence (même avec la télécommande d'origine) et vous prévient 5 minutes avant chaque limite.",
-            12f, muted = true), Ui.lp(c, 6))
-        root.addView(main, Ui.lp(c, 14))
-
-        // --- temps total ---
-        val total = Ui.card(c)
-        total.addView(Ui.text(c, "Temps de TV par jour", 16f))
-        total.addView(Ui.text(c, "Une fois atteint, la TV est mise en veille.", 12f, muted = true))
-        total.addView(Ui.button(c, if (rules.dailyTotalMin > 0) Usage.format(rules.dailyTotalMin * 60_000L) else "Aucune limite") {
+        Ui.addRow(ess, Ui.row(c, "⏱️", "Temps de TV par jour", "Une fois atteint, la TV se met en veille",
+            if (rules.dailyTotalMin > 0) Usage.format(rules.dailyTotalMin * 60_000L) else "Aucune limite") {
             pickMinutes("Temps de TV par jour", listOf(0, 60, 90, 120, 180, 240, 300), rules.dailyTotalMin) { rules.dailyTotalMin = it; save() }
-        }, Ui.lp(c, 10))
-        root.addView(total, Ui.lp(c, 10))
-
-        // --- couvre-feu ---
-        val bed = Ui.card(c)
-        bed.addView(SwitchCompat(c).apply {
-            text = "Couvre-feu"; textSize = 16f; setTextColor(Ui.color(c, R.color.ink))
-            isChecked = rules.bedtimeEnabled
-            setOnCheckedChangeListener { _, on -> rules.bedtimeEnabled = on; save() }
         })
-        bed.addView(Ui.text(c, "Pendant ce créneau, la TV est mise en veille si quelqu'un l'allume.", 12f, muted = true))
-        val times = LinearLayout(c)
-        times.addView(Ui.button(c, "De " + ParentalLogic.hhmm(rules.bedtimeStart)) {
-            pickTime(rules.bedtimeStart) { rules.bedtimeStart = it; save() }
-        }, LinearLayout.LayoutParams(0, Ui.dp(c, 48), 1f).apply { marginEnd = Ui.dp(c, 6) })
-        times.addView(Ui.button(c, "à " + ParentalLogic.hhmm(rules.bedtimeEnd)) {
-            pickTime(rules.bedtimeEnd) { rules.bedtimeEnd = it; save() }
-        }, LinearLayout.LayoutParams(0, Ui.dp(c, 48), 1f).apply { marginStart = Ui.dp(c, 6) })
-        bed.addView(times, Ui.lp(c, 10))
-        root.addView(bed, Ui.lp(c, 10))
+        Ui.addRow(ess, Ui.switchRow(c, "🌙", "Couvre-feu", "La TV se met en veille si on l'allume", rules.bedtimeEnabled) { rules.bedtimeEnabled = it; save() })
+        if (rules.bedtimeEnabled) {
+            Ui.addRow(ess, Ui.row(c, "🕘", "Début du couvre-feu", null, ParentalLogic.hhmm(rules.bedtimeStart)) { pickTime(rules.bedtimeStart) { rules.bedtimeStart = it; save() } })
+            Ui.addRow(ess, Ui.row(c, "🌅", "Fin du couvre-feu", null, ParentalLogic.hhmm(rules.bedtimeEnd)) { pickTime(rules.bedtimeEnd) { rules.bedtimeEnd = it; save() } })
+        }
+        root.addView(ess, Ui.lp(c, 8))
 
-        // --- limites par appli ---
-        val apps = Ui.card(c)
-        apps.addView(Ui.text(c, "Limites par appli (par jour)", 16f))
-        apps.addView(Ui.text(c, "À la limite, la box revient à l'accueil, et à chaque nouvelle ouverture de l'appli.", 12f, muted = true))
+        root.addView(Ui.label(c, "Chaque appli, par jour"), Ui.lp(c, 22))
+        val apps = Ui.group(c)
         val now = System.currentTimeMillis()
         val seen = UsageDb.get(c).totalsByApp(device.id, Usage.addDays(Usage.startOfDay(now), -30), now).keys
             .filter { AppCatalog.kind(it) != AppCatalog.Kind.HOME && it != "unknown" }
         val today = TvMonitor.todayUsage(c, device.id)
         (defaultApps + seen + rules.perAppMin.keys).distinct().forEach { pkg ->
-            val row = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, Ui.dp(c, 6), 0, Ui.dp(c, 6)) }
-            val texts = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
-            texts.addView(Ui.text(c, AppCatalog.name(pkg), 15f))
-            today[pkg]?.let { texts.addView(Ui.text(c, "Aujourd'hui : " + Usage.format(it), 12f, muted = true)) }
-            row.addView(texts, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             val cur = rules.perAppMin[pkg] ?: 0
-            row.addView(Ui.button(c, if (cur > 0) Usage.format(cur * 60_000L) else "Aucune", primary = cur > 0) {
+            Ui.addRow(apps, Ui.row(c, AppCatalog.name(pkg).take(1).uppercase(), AppCatalog.name(pkg),
+                today[pkg]?.let { "Aujourd'hui : " + Usage.format(it) } ?: "Pas regardée aujourd'hui",
+                if (cur > 0) Usage.format(cur * 60_000L) + " par jour" else "Sans limite") {
                 pickMinutes(AppCatalog.name(pkg), listOf(0, 15, 30, 45, 60, 90, 120, 180), cur) { m ->
                     if (m > 0) rules.perAppMin[pkg] = m else rules.perAppMin.remove(pkg)
                     save()
                 }
-            }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, Ui.dp(c, 44)))
-            apps.addView(row)
+            })
         }
-        root.addView(apps, Ui.lp(c, 10))
+        root.addView(apps, Ui.lp(c, 8))
 
-        // --- code ---
-        root.addView(Ui.button(c, if (store.hasPin) "Changer le code parent" else "Créer le code parent") {
+        root.addView(Ui.label(c, "Sécurité"), Ui.lp(c, 22))
+        val sec = Ui.group(c)
+        Ui.addRow(sec, Ui.row(c, "🔑", if (store.hasPin) "Changer le code parent" else "Créer le code parent", "Il protège ces réglages") {
             Ui.createPin(c) { render() }
-        }, Ui.lp(c, 16))
+        })
+        root.addView(sec, Ui.lp(c, 8))
         root.addView(Ui.text(c,
             "Fonctionne avec les box Android TV / Google TV. Le téléphone doit rester sur le Wi-Fi de la maison ; " +
-                "s'il part, les limites ne sont plus appliquées jusqu'à son retour.", 12f, muted = true), Ui.lp(c, 12))
+                "s'il part, les limites ne sont plus appliquées jusqu'à son retour.", 12f, muted = true), Ui.lp(c, 14))
         root.addView(AuroraNav.spacer(c))
     }
 
     private fun pickMinutes(title: String, options: List<Int>, current: Int, done: (Int) -> Unit) {
-        val labels = options.map { if (it == 0) "Aucune limite" else Usage.format(it * 60_000L) }.toTypedArray()
-        AlertDialog.Builder(this).setTitle(title)
-            .setSingleChoiceItems(labels, options.indexOf(current).coerceAtLeast(0)) { dlg, i -> dlg.dismiss(); done(options[i]) }
-            .setNegativeButton("Annuler", null).show()
+        val sheet = TileSheet(this)
+        sheet.show(TileSheet.Page("⏱️", title, "Touchez la durée voulue") { sh, col ->
+            sh.sections(col, TileSheet.Section(null, options.map { m ->
+                TileSheet.Tile("", (if (m == current) "✓ " else "") + (if (m == 0) "Aucune limite" else Usage.format(m * 60_000L)), key = true) { sheet.dismiss(); done(m) }
+            }, 2))
+        })
     }
 
     private fun pickTime(minutes: Int, done: (Int) -> Unit) {
