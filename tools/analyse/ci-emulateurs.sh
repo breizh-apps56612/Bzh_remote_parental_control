@@ -39,12 +39,14 @@ echo no | avdmanager create avd -f -n phone -k "system-images;android-$API_PHONE
 echo no | avdmanager create avd -f -n tv -k "system-images;android-$API_TV;android-tv;x86" -d tv_1080p
 emulator -list-avds
 OPTS=(-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -memory 2048 -netfast)
+adb start-server >/dev/null 2>&1   # crée la clé adb AVANT les émulateurs (sinon « device unauthorized »)
 nohup emulator -avd tv -port 5556 "${OPTS[@]}" > "$OUT/journaux/emulateur-tv.log" 2>&1 &
 nohup emulator -avd phone -port 5554 "${OPTS[@]}" > "$OUT/journaux/emulateur-telephone.log" 2>&1 &
 for i in $(seq 1 60); do
   a=$(timeout 10 adb -s $TV shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
   b=$(timeout 10 adb -s $PH shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
   [ "$a" = 1 ] && [ "$b" = 1 ] && break
+  if [ "$i" = 12 ] && adb devices | grep -q unauthorized; then adb kill-server; adb start-server >/dev/null 2>&1; fi
   pgrep -f "avd tv" >/dev/null && pgrep -f "avd phone" >/dev/null || { tail -5 "$OUT"/journaux/emulateur-*.log; break; }
   sleep 10
 done
