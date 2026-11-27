@@ -55,7 +55,7 @@ class ParentalActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             val p = Ui.dp(this@ParentalActivity, 16); setPadding(p, p, p, p * 2)
         }
-        setContentView(AuroraNav.wrap(this, ScrollView(this).apply { addView(root) }, AuroraNav.Tab.PARENTAL))
+        setContentView(AuroraNav.wrap(this, ScrollView(this).apply { addView(root) }, AuroraNav.Tab.KIDS))
         unlocked = !store.hasPin
         render()
         if (!unlocked) unlock()
@@ -78,6 +78,9 @@ class ParentalActivity : AppCompatActivity() {
         root.addView(Ui.button(c, "✨ Assistant pas à pas", primary = true) {
             startActivity(android.content.Intent(c, RulesWizardActivity::class.java).putExtra(RulesWizardActivity.EXTRA_ID, device.id))
         }, Ui.lp(c, 12))
+        root.addView(Ui.button(c, "📊 Ce qui a été regardé") {
+            startActivity(android.content.Intent(c, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, device.id))
+        }, Ui.lp(c, 8))
         if (!unlocked) {
             root.addView(Ui.text(c, "Réglages protégés par le code parent.", 14f, muted = true), Ui.lp(c, 10))
             root.addView(Ui.button(c, "Déverrouiller", primary = true) { unlock() }, Ui.lp(c, 14))

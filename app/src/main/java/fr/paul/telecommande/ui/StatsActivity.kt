@@ -50,7 +50,7 @@ class StatsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             val p = Ui.dp(this@StatsActivity, 16); setPadding(p, p, p, p * 2)
         }
-        setContentView(AuroraNav.wrap(this, ScrollView(this).apply { addView(root) }, AuroraNav.Tab.ACTIVITY))
+        setContentView(AuroraNav.wrap(this, ScrollView(this).apply { addView(root) }, AuroraNav.Tab.KIDS))
         lifecycleScope.launch {
             while (isActive) { render(); delay(30_000) }
         }

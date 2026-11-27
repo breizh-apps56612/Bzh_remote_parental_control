@@ -94,6 +94,8 @@
         <activity android:name=".ui.ProgramApproveActivity" android:exported="false" android:theme="@style/Theme.Telecommande.Invisible"
             android:excludeFromRecents="true" android:showWhenLocked="true" android:turnScreenOn="true" />
         <activity android:name=".ui.RulesWizardActivity" android:exported="false" android:theme="@style/Theme.Telecommande.Remote" />
+        <activity android:name=".ui.SettingsActivity" android:exported="false" android:theme="@style/Theme.Telecommande.Remote" />
+        <activity android:name=".ui.HelpActivity" android:exported="false" android:theme="@style/Theme.Telecommande.Remote" />
         <activity android:name=".ui.ContractActivity" android:exported="false" android:theme="@style/Theme.Telecommande.Remote" />
         <activity android:name=".ui.HomeOverviewActivity" android:exported="false" android:theme="@style/Theme.Telecommande.Remote" />
         <!-- « Partager » un lien (YouTube, navigateur…) vers la TV -->

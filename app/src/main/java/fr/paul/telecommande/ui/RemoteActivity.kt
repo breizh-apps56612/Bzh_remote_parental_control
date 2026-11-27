@@ -954,6 +954,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
                 text = label; gravity = Gravity.CENTER; textSize = 14f; setTextColor(color(R.color.ink))
                 setBackgroundResource(R.drawable.bg_tile); isClickable = true; isFocusable = true; contentDescription = label
                 setOnClickListener { dialog?.dismiss(); action() }
+                Motion.pressable(this, 0.95f)
             }
             tools.addView(v, GridLayout.LayoutParams().apply {
                 width = 0; height = dp(56); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(4), dp(4), dp(4), dp(4))
@@ -963,23 +964,30 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         tool(if (touchpad.mouseMode) "🖱️  Souris : arrêter" else "🖱️  Mode souris") { setMouse(!touchpad.mouseMode) }
         tool("🔵  Souris Bluetooth") { startActivity(Intent(this, BtMouseActivity::class.java)) }
         if (device.hasBoxApp) tool("⏯️  Reprendre") { showContinue() }
-        tool("⚙️  Réglages") { showSettings() }
+        tool("⚙️  Réglages de la télécommande") { showSettings() }
         if (AdminMenu.enabled(this)) tool("🛠️  Administrateur") { showAdmin() }
-        tool("❓  Aide") { showHelp() }
+        tool("❓  Aide de la télécommande") { showHelp() }
+        box0.addView(TextView(this).apply {
+            text = "OUTILS"; textSize = 12.5f; typeface = Ui.bold; setTextColor(color(R.color.muted)); setPadding(dp(6), dp(8), 0, dp(2))
+        })
         box0.addView(tools)
 
-        // Touches
-        box0.addView(TextView(this).apply {
-            text = "Touches"; textSize = 12f; setTextColor(color(R.color.muted)); setPadding(dp(6), dp(14), 0, dp(2))
-        })
-        val grid = GridLayout(this).apply { columnCount = 4 }
+        // Touches de la TV, rangées par usage (un titre au-dessus de chaque groupe)
+        fun section(title: String): GridLayout {
+            box0.addView(TextView(this).apply {
+                text = title; textSize = 12.5f; typeface = Ui.bold; setTextColor(color(R.color.muted)); setPadding(dp(6), dp(16), 0, dp(2))
+            })
+            return GridLayout(this).apply { columnCount = 4 }.also { box0.addView(it) }
+        }
+        var grid = section("CHIFFRES ET CHAÎNES")
         fun add(label: String, key: RemoteKey?, bg: Int = 0, action: (() -> Unit)? = null) {
             val v = TextView(this).apply {
-                text = label; gravity = Gravity.CENTER; textSize = 15f; setTextColor(color(R.color.ink))
+                text = label; gravity = Gravity.CENTER; textSize = 15f; setTextColor(if (bg != 0) Color.WHITE else color(R.color.ink))
                 setBackgroundResource(R.drawable.bg_key)
                 if (bg != 0) background = GradientDrawable().apply { setColor(bg); cornerRadius = 18 * d }
                 isClickable = true; isFocusable = true; contentDescription = label.ifBlank { key?.name }
                 setOnClickListener { it.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); if (action != null) { dialog?.dismiss(); action() } else key?.let { k -> press(k) } }
+                Motion.pressable(this, 0.9f)
             }
             grid.addView(v, GridLayout.LayoutParams().apply {
                 width = 0; height = dp(52); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(4), dp(4), dp(4), dp(4))
@@ -987,15 +995,17 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
         }
         (1..9).forEach { add("$it", RemoteKey.digit(it)) }
         add("0", RemoteKey.D0); add("CH +", RemoteKey.CH_UP); add("CH −", RemoteKey.CH_DOWN)
-        add("Source", RemoteKey.INPUT); add("Infos", RemoteKey.INFO); add("Menu", RemoteKey.MENU); add("Guide", RemoteKey.GUIDE)
-        add("◀◀", RemoteKey.REWIND); add("■", RemoteKey.STOP); add("▶▶", RemoteKey.FAST_FORWARD); add("Quitter", RemoteKey.EXIT)
+        grid = section("LECTURE")
+        add("◀◀", RemoteKey.REWIND); add("■", RemoteKey.STOP); add("▶▶", RemoteKey.FAST_FORWARD); add("Muet", RemoteKey.MUTE)
+        grid = section("TOUCHES DE COULEUR")
         add("Rouge", RemoteKey.RED, 0xFF9F1239.toInt()); add("Vert", RemoteKey.GREEN, 0xFF166534.toInt())
         add("Jaune", RemoteKey.YELLOW, 0xFF854D0E.toInt()); add("Bleu", RemoteKey.BLUE, 0xFF1E40AF.toInt())
+        grid = section("AUTRES TOUCHES DE LA TV")
+        add("Source", RemoteKey.INPUT); add("Infos", RemoteKey.INFO); add("Menu", RemoteKey.MENU); add("Guide", RemoteKey.GUIDE)
+        add("Quitter", RemoteKey.EXIT)
         add("Allumer", null) { atv?.allowPowerOnce(); powerOn() }
-        add("Muet", RemoteKey.MUTE)
-        box0.addView(grid)
         val scroll = android.widget.ScrollView(this).apply { addView(box0) }
-        dialog = AlertDialog.Builder(this).setTitle("Plus").setView(scroll).setNegativeButton("Fermer", null).show()
+        dialog = AlertDialog.Builder(this).setTitle("Plus de touches et d'outils").setView(scroll).setNegativeButton("Fermer", null).show()
     }
 
     // ---------- Navigation, menu, touches répétées ----------

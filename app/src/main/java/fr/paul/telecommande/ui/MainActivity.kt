@@ -30,7 +30,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
-    companion object { const val EXTRA_ADD = "add" }
+    companion object {
+        const val EXTRA_ADD = "add"
+        /** Ouvrir directement le menu « Modifier / réappairer / supprimer » d'un écran (depuis Réglages). */
+        const val EXTRA_EDIT = "edit_device"
+    }
 
     private lateinit var store: DeviceStore
     private lateinit var list: LinearLayout
@@ -51,12 +55,19 @@ class MainActivity : AppCompatActivity() {
                 (it.ytScreenId.isNotBlank() && (it.ytAutoSkipAds || it.ytSkipSponsors))) }) {
             fr.paul.telecommande.service.AssistantService.start(this)
         }
-        if (intent.getBooleanExtra(EXTRA_ADD, false)) showAddMenu()
+        handleExtras(intent)
+        // Première ouverture : la visite guidée (4 écrans, « Passer » possible)
+        if (!intent.getBooleanExtra(EXTRA_ADD, false) && intent.getStringExtra(EXTRA_EDIT) == null) window.decorView.post { Tour.show(this) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.getBooleanExtra(EXTRA_ADD, false)) showAddMenu()
+        handleExtras(intent)
+    }
+
+    private fun handleExtras(i: Intent) {
+        if (i.getBooleanExtra(EXTRA_ADD, false)) showAddMenu()
+        i.getStringExtra(EXTRA_EDIT)?.let { id -> store.get(id)?.let { showDeviceMenu(it) } }
     }
 
     override fun onResume() {
@@ -122,7 +133,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { AdminMenu.secretTap(this@MainActivity) }
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(4) })
         row.addView(texts, LinearLayout.LayoutParams(0, -2, 1f))
-        row.addView(AuroraNav.roundButton(this, R.drawable.ic_settings, "Réglages") { AuroraNav.settings(this) })
+
         return row
     }
 
@@ -282,7 +293,7 @@ class MainActivity : AppCompatActivity() {
             t1.addView(small("sur " + fr.paul.telecommande.core.Usage.format(limit * 60_000L) + (watcher?.let { " · ${it.name}" } ?: " aujourd'hui")), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
         } else t1.addView(small(when { today == null && !tracking -> "Suivi désactivé"; today == null -> "TV injoignable"; else -> "aujourd'hui · sans limite" }),
             LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
-        t1.setOnClickListener { AuroraNav.open(this, AuroraNav.Tab.ACTIVITY) }
+        t1.setOnClickListener { AuroraNav.open(this, AuroraNav.Tab.KIDS) }
         t1.contentDescription = "Temps de TV aujourd'hui, voir l'activité"
 
         val t2 = tile(if (bedtimeOn) "Couvre-feu" else "Protection", if (bedtimeOn) hm(bedtime) else if (enabled) "Active" else "Inactive")
@@ -298,7 +309,7 @@ class MainActivity : AppCompatActivity() {
                 ellipsize = android.text.TextUtils.TruncateAt.END
             })
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-        t2.setOnClickListener { AuroraNav.open(this, AuroraNav.Tab.PARENTAL) }
+        t2.setOnClickListener { AuroraNav.open(this, AuroraNav.Tab.KIDS) }
         t2.contentDescription = "Contrôle parental, " + if (enabled) "actif" else "inactif"
 
         row.addView(t1, LinearLayout.LayoutParams(0, -1, 1f).apply { marginEnd = dp(6) })

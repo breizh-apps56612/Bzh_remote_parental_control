@@ -14,20 +14,20 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * Kit visuel de l'appli TV — même identité que le téléphone (premium sombre, accent violet),
+ * Kit visuel de l'appli TV — même identité que le téléphone (nuit « Aurora », dégradé indigo → sarcelle, menthe),
  * pensé pour la télécommande : le bouton qui a le focus grossit et s'illumine.
  */
 object BoxUi {
-    const val BG = 0xFF08080C.toInt()
-    const val SURFACE = 0xFF13131B.toInt()
-    const val SURFACE_HI = 0xFF1C1C28.toInt()
+    const val BG = 0xFF05061A.toInt()
+    const val SURFACE = 0xFF11132A.toInt()
+    const val SURFACE_HI = 0xFF1B1D3A.toInt()
     const val STROKE = 0x1FFFFFFF
     const val INK = 0xFFF3F2FA.toInt()
-    const val MUTED = 0xFF8F8CA6.toInt()
-    const val SOFT = 0xFFC9C6DA.toInt()
-    const val ACCENT = 0xFF8B6CFF.toInt()
-    const val ACCENT2 = 0xFFC46BFF.toInt()
-    const val OK = 0xFF3DDC97.toInt()
+    const val MUTED = 0xFF9A9DC0.toInt()
+    const val SOFT = 0xFFC7C8EE.toInt()
+    const val ACCENT = 0xFF7C74FF.toInt()
+    const val ACCENT2 = 0xFF0EA5A0.toInt()
+    const val OK = 0xFF34F5C5.toInt()
     const val WARN = 0xFFFBBF24.toInt()
     const val DANGER = 0xFFFF6B7A.toInt()
 
@@ -36,12 +36,12 @@ object BoxUi {
 
     private fun Context.dp(v: Float) = v * resources.displayMetrics.density
 
-    /** Fond d'écran : noir profond + halo violet en haut. */
+    /** Fond d'écran : nuit bleutée + halo indigo en haut (comme le bandeau du téléphone). */
     fun screen(c: Context): android.graphics.drawable.Drawable {
         val base = GradientDrawable().apply { setColor(BG) }
         val glow = GradientDrawable().apply {
             gradientType = GradientDrawable.RADIAL_GRADIENT; gradientRadius = c.dp(700f)
-            setGradientCenter(0.5f, 0f); colors = intArrayOf(0x553A2A8C, 0x00000000)
+            setGradientCenter(0.5f, 0f); colors = intArrayOf(0x664B48E0, 0x00000000)
         }
         return LayerDrawable(arrayOf(base, glow))
     }
