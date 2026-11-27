@@ -1,0 +1,9 @@
+# Propose chaque semaine la mise à jour des actions GitHub figées par empreinte (correctifs de sécurité).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "CI"

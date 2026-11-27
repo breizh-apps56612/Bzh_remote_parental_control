@@ -49,6 +49,8 @@ Il faut le SDK Android 34 (`ANDROID_HOME`). Les APK officiels sont signés avec 
 
 Les APK officiels sont compilés, testés et signés par GitHub Actions à chaque envoi sur `main` (onglet **Actions** › dernier run › **Artifacts**). La clé de signature y est un secret du dépôt, invisible et inaccessible aux copies du dépôt. Les numéros de version sont fixés dans `app/build.gradle.kts` et `box/build.gradle.kts`.
 
+Chaque envoi sur `main` passe aussi sur un **banc d'essai à émulateurs** (workflow « Émulateurs (téléphone + TV) ») : un téléphone et une TV Android virtuels, l'appli installée sur chacun, puis des vérifications de fonctionnement et de sécurité (connexion sans certificat refusée, téléphone inconnu refusé, mauvais code d'appairage refusé, appairage SPAKE2, résistance aux connexions en masse et aux messages piégés, appuis au hasard sans plantage). Le résumé s'affiche dans le run, avec captures et journaux en artefact. Ce banc n'utilise aucun secret : les APK testés sont signés avec une clé jetable. Script : `tools/analyse/ci-emulateurs.sh`.
+
 ## Revenir en arrière (refonte 2.5)
 
 La version d'avant la refonte est gardée sur la branche [`avant-refonte`](../../tree/avant-refonte) (téléphone 2.4.49) et son APK reste téléchargeable sur le site : `/archives/Telecommande-2.4.49.apk`.

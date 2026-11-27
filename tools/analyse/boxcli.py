@@ -6,6 +6,7 @@
   python3 boxcli.py status | get_rules | usage '{"from":0,"to":0}' | box_log | diag | apps …
   python3 boxcli.py nocert                 → vérifie que la box refuse une connexion sans certificat
   python3 boxcli.py flood 12               → ouvre N connexions muettes puis tente « status » (test de blocage)
+  python3 boxcli.py profond 5000           → envoie un JSON imbriqué N fois (la Box doit refuser sans planter)
 Options : BOX=127.0.0.1:7363 (défaut), ID=dossier du certificat de test (défaut : ./id, créé au besoin).
 """
 import hashlib, hmac, json, os, secrets, socket, ssl, subprocess, sys, time
@@ -85,6 +86,14 @@ if __name__ == "__main__":
         try: print("pendant :", json.dumps(call("status"), ensure_ascii=False)[:100])
         except Exception as e: print("pendant : BLOQUÉ —", e)
         for s in socks: s.close()
+    elif cmd == "profond":  # message JSON très imbriqué : la Box doit refuser sans planter
+        n = int(sys.argv[2]) if len(sys.argv) > 2 else 5000
+        s, _ = conn(); f = s.makefile("rwb")
+        try:
+            f.write(('{"id":"1","cmd":"status","x":' + "[" * n + "]" * n + "}\n").encode()); f.flush()
+            print("réponse :", f.readline().decode(errors="replace")[:200].strip() or "(connexion fermée)")
+        except Exception as e: print("réponse : connexion coupée —", e)
+        finally: s.close()
     else:
         params = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
         print(json.dumps(call(cmd, **params), ensure_ascii=False)[:6000])

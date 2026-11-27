@@ -1,0 +1,90 @@
+name: Émulateurs (téléphone + TV)
+
+# Banc d'essai permanent : à chaque envoi sur main (ou à la main, onglet Actions), compile les deux applis,
+# démarre un émulateur téléphone et un émulateur Android TV, et vérifie fonctionnement + sécurité.
+# Script : tools/analyse/ci-emulateurs.sh — résultats : résumé du run + artefact « emulateurs-resultats ».
+#
+# Sécurité :
+#  - aucun secret utilisé : les APK testés sont signés avec une clé de debug jetable, jamais avec la clé officielle ;
+#  - droits minimaux (lecture seule du dépôt), jeton non conservé après le checkout ;
+#  - ne tourne jamais sur les pull requests (code extérieur) ni sur les copies (forks) du dépôt ;
+#  - actions externes figées par empreinte de commit (mises à jour proposées par Dependabot) ;
+#  - paramètres manuels limités à une liste de choix et passés par variables d'environnement (pas d'injection) ;
+#  - résultats conservés 7 jours, sans clé ni donnée personnelle (émulateurs vierges, certificat de test effacé).
+on:
+  push:
+    branches: [ main ]
+    paths-ignore: [ "site/**", "**.md" ]
+  workflow_dispatch:
+    inputs:
+      api_tv:
+        description: "Version Android de la TV (API)"
+        type: choice
+        options: [ "30", "29", "28", "33", "34" ]
+        default: "30"
+      api_phone:
+        description: "Version Android du téléphone (API)"
+        type: choice
+        options: [ "30", "29", "33", "34" ]
+        default: "30"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emulateurs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulateurs:
+    if: github.repository_owner == 'breizh-apps56612'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+        with:
+          gradle-version: "8.7"
+          cache-read-only: true
+
+      # Sans les variables ANDROID_KEYSTORE_*, Gradle signe avec une clé de debug générée sur le runner.
+      - name: Compiler les APK (clé de debug jetable)
+        run: gradle --no-daemon :app:assembleRelease :box:assembleRelease
+
+      - name: Activer KVM (accélération des émulateurs)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tesseract-ocr >/dev/null
+
+      - name: Banc d'essai
+        env:
+          APK_PHONE: app/build/outputs/apk/release/app-release.apk
+          APK_BOX: box/build/outputs/apk/release/box-release.apk
+          API_TV: ${{ inputs.api_tv || '30' }}
+          API_PHONE: ${{ inputs.api_phone || '30' }}
+          OUT: ${{ runner.temp }}/emu-resultats
+        run: bash tools/analyse/ci-emulateurs.sh
+
+      - name: Résumé
+        if: always()
+        env:
+          OUT: ${{ runner.temp }}/emu-resultats
+        run: cat "$OUT/resume.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "Pas de résumé" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: emulateurs-resultats
+          path: ${{ runner.temp }}/emu-resultats
+          retention-days: 7
+          if-no-files-found: warn
