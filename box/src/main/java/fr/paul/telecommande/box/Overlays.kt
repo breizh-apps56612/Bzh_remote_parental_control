@@ -109,6 +109,15 @@ class Overlays(private val ctx: Context) {
 
     // ---------- Bandeau de compte à rebours ----------
 
+    /**
+     * Place du bandeau « Bonne séance… » : en haut à droite, ou juste SOUS la pastille de profil quand elle est
+     * affichée (accueil Freebox) — avant, il recouvrait la pastille et le bandeau d'Oqee.
+     */
+    private fun bannerParams() = params(focusable = false, fullscreen = false, gravity = Gravity.TOP or Gravity.END).apply {
+        val bp = badgeParams
+        if (badge != null && bp != null) { x = bp.x; y = bp.y + badgeSize + dp(14) } else { x = dp(32); y = dp(32) }
+    }
+
     fun showBanner(message: String) = ui {
         remove(banner)
         val v = LinearLayout(ctx).apply {
@@ -118,7 +127,7 @@ class Overlays(private val ctx: Context) {
             addView(BoxUi.badge(ctx, "⏳", false, 44f).apply { textSize = 18f })
             addView(text(message, 19f, bold = true), LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(14) })
         }
-        add(v, params(focusable = false, fullscreen = false, gravity = Gravity.TOP or Gravity.END).apply { x = dp(32); y = dp(32) })
+        add(v, bannerParams())
         banner = v
         main.postDelayed({ if (banner === v) { remove(v); banner = null } }, 9000)
     }
@@ -529,6 +538,8 @@ class Overlays(private val ctx: Context) {
 
     private var badge: View? = null
     private var badgeKey: String? = null
+    private var badgeParams: WindowManager.LayoutParams? = null
+    private var badgeSize = 0
     val badgeVisible get() = badge != null
 
     /**
@@ -562,11 +573,17 @@ class Overlays(private val ctx: Context) {
         add(col, params(focusable = false, fullscreen = false, gravity = Gravity.TOP or Gravity.END).apply {
             x = (screenW - (centerX + size / 2)).coerceAtLeast(0)
             y = (centerY - size / 2).coerceAtLeast(0)
-        })
-        badge = col; badgeKey = key
+        }.also { badgeParams = it })
+        badge = col; badgeKey = key; badgeSize = size
+        // Un bandeau déjà affiché descend sous la pastille au lieu de la recouvrir
+        banner?.let { b -> runCatching { wm.updateViewLayout(b, bannerParams()) } }
     }
 
-    fun hideProfileBadge() = ui { remove(badge); badge = null; badgeKey = null }
+    fun hideProfileBadge() = ui {
+        val had = badge != null
+        remove(badge); badge = null; badgeKey = null; badgeParams = null
+        if (had) banner?.let { b -> runCatching { wm.updateViewLayout(b, bannerParams()) } }
+    }
 
     fun hideAll() = ui {
         listOf(block, banner, code, pin, pointer, timer, who, message, still, badge, contract).forEach { remove(it) }
