@@ -175,11 +175,119 @@ class BoxDashboardActivity : AppCompatActivity() {
         root = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; val pd = Ui.dp(c, 16); setPadding(pd, Ui.dp(c, 2), pd, 0) }
         page.addView(root, LinearLayout.LayoutParams(-1, -2))
         if (error != null) root.addView(Ui.text(c, "Vérifiez que la TV est allumée et sur le même Wi-Fi. Nouvel essai toutes les 30 s.", 13f, muted = true), Ui.lp(c, 14))
-        listOf("today" to "Aujourd'hui", "week" to "Les 7 derniers jours", "hours" to "Les horaires").forEach { (id, title) ->
-            root.addView(heading(title), Ui.lp(c, 22))
-            renderDetail(rules, id)
+        val w = week
+        if (w != null && w.has("sessions") && (p == null || filtered(p, w))) {
+            root.addView(activityChartCard(w, limitOf(rules, p)), Ui.lp(c, 18))
+        } else {
+            // Ancienne appli TV (sans le détail des séances) : l'affichage d'avant
+            listOf("today" to "Aujourd'hui", "week" to "Les 7 derniers jours", "hours" to "Les horaires").forEach { (id, title) ->
+                root.addView(heading(title), Ui.lp(c, 22))
+                renderDetail(rules, id)
+            }
         }
         root.addView(AuroraNav.spacer(c))
+    }
+
+    /** Mode du cadre de diagramme de l'onglet Activité (0 = journée, 1 = horaires, 2 = semaine), gardé entre deux rafraîchissements. */
+    private var chartMode = 0
+
+    /**
+     * Un seul cadre, trois modes : chiffres clés, diagramme précis (toucher = valeur exacte), puis tableau par appli.
+     * Tout est calculé ici à partir des séances envoyées par la TV.
+     */
+    private fun activityChartCard(w: JSONObject, limitMin: Int): LinearLayout {
+        val c = this
+        val now = System.currentTimeMillis()
+        val dayStart = Usage.startOfDay(now)
+        val starts = (6 downTo 0).map { Usage.addDays(dayStart, -it) }
+        val labels = w.optJSONObject("labels")
+        fun name(pkg: String) = labels?.optString(pkg)?.ifBlank { null } ?: AppCatalog.name(pkg)
+        val raw = w.optJSONArray("sessions")
+        val list = (0 until (raw?.length() ?: 0)).mapNotNull { i ->
+            raw?.optJSONArray(i)?.let { a -> Triple(a.optString(0), a.optLong(1), minOf(a.optLong(2), now)) }
+        }.filter { it.third > it.second && it.first.isNotBlank() }
+        // Les 3 applis les plus regardées sur 7 jours gardent chacune leur couleur, le reste va dans « Autres »
+        val top = list.groupBy { it.first }.mapValues { e -> e.value.sumOf { it.third - it.second } }
+            .entries.sortedByDescending { it.value }.map { it.key }
+        val named = top.take(if (top.size <= 4) 4 else 3)
+        val groupNames = named.map { name(it) } + if (top.size > 4) listOf("Autres") else emptyList()
+        val sess = list.map { (pkg, a, b) -> ActivityChartView.Sess(named.indexOf(pkg).let { if (it < 0) 3 else it }, a, b) }
+
+        val card = Ui.card(c)
+        val readout = Ui.text(c, "", 13.5f, muted = true).apply { minLines = 2 }
+        val stats = LinearLayout(c).apply { setPadding(0, Ui.dp(c, 16), 0, 0) }
+        val table = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        val chart = ActivityChartView(c).apply {
+            this.sessions = sess; this.groupNames = groupNames; this.dayStart = dayStart; this.limitMin = limitMin
+            weekStarts = starts
+            val fmt = SimpleDateFormat("EEE", Locale.FRANCE)
+            weekLabels = starts.mapIndexed { i, t -> if (i == 6) "Auj." else fmt.format(java.util.Date(t)).trimEnd('.').replaceFirstChar { ch -> ch.uppercase() } }
+            onPick = { readout.text = it; readout.setTextColor(Ui.color(c, R.color.ink)) }
+        }
+        fun stat(v: String, l: String) = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(Ui.title(c, v, 21f)); addView(Ui.text(c, l, 12f, muted = true), Ui.lp(c, 3))
+        }
+        fun fill() {
+            val m = ActivityChartView.Mode.values()[chartMode]
+            chart.mode = m
+            readout.setTextColor(Ui.color(c, R.color.muted))
+            readout.text = when (m) {
+                ActivityChartView.Mode.DAY -> "Touchez un bloc pour voir les heures exactes."
+                ActivityChartView.Mode.HOURS -> "Touchez une heure pour voir le détail par appli."
+                ActivityChartView.Mode.WEEK -> "Touchez un jour pour voir le détail par appli."
+            }
+            stats.removeAllViews()
+            val isWeek = m == ActivityChartView.Mode.WEEK
+            val per = if (isWeek) chart.minutes(starts.first(), dayStart + ActivityChartView.DAY) else chart.minutes(dayStart, now)
+            val total = per.sum()
+            if (isWeek) {
+                val days = starts.map { chart.minutes(it, it + ActivityChartView.DAY).sum() }
+                val active = days.count { it > 0 }.coerceAtLeast(1)
+                stats.addView(stat(ActivityChartView.fmt(total), "sur 7 jours"), LinearLayout.LayoutParams(0, -2, 1f))
+                stats.addView(stat(ActivityChartView.fmt(total / active), "par jour regardé"), LinearLayout.LayoutParams(0, -2, 1f))
+                if (limitMin > 0) stats.addView(stat("${days.count { it > limitMin }}", "jours au-delà du contrat"), LinearLayout.LayoutParams(0, -2, 1f))
+            } else {
+                val today = sess.filter { it.end > dayStart }.map { ((minOf(it.end, now) - maxOf(it.start, dayStart)) / 60_000).toInt() }.filter { it >= 1 }
+                stats.addView(stat(ActivityChartView.fmt(total), "regardées"), LinearLayout.LayoutParams(0, -2, 1f))
+                stats.addView(stat(if (limitMin > 0) ActivityChartView.fmt((limitMin - total).coerceAtLeast(0)) else "—",
+                    if (limitMin > 0) "restantes sur ${ActivityChartView.fmt(limitMin)}" else "sans limite"), LinearLayout.LayoutParams(0, -2, 1f))
+                stats.addView(stat("${today.size}", if (today.isEmpty()) "séance" else "séances · max ${ActivityChartView.fmt(today.maxOrNull() ?: 0)}"), LinearLayout.LayoutParams(0, -2, 1f))
+            }
+            // Tableau : appli, temps exact, part
+            table.removeAllViews()
+            val head = LinearLayout(c)
+            head.addView(Ui.text(c, "Appli", 11.5f, muted = true), LinearLayout.LayoutParams(0, -2, 1f))
+            head.addView(Ui.text(c, if (isWeek) "7 jours" else "Aujourd'hui", 11.5f, muted = true).apply { gravity = Gravity.END }, LinearLayout.LayoutParams(Ui.dp(c, 86), -2))
+            head.addView(Ui.text(c, "Part", 11.5f, muted = true).apply { gravity = Gravity.END }, LinearLayout.LayoutParams(Ui.dp(c, 52), -2))
+            table.addView(head)
+            per.indices.filter { per[it] > 0 }.sortedByDescending { per[it] }.forEach { g ->
+                table.addView(Ui.divider(c), LinearLayout.LayoutParams(-1, 1).apply { topMargin = Ui.dp(c, 8) })
+                val row = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, Ui.dp(c, 8), 0, 0) }
+                row.addView(android.view.View(c).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply { cornerRadius = Ui.dp(c, 3).toFloat(); setColor(ActivityChartView.COLORS[g]) }
+                }, LinearLayout.LayoutParams(Ui.dp(c, 10), Ui.dp(c, 10)).apply { marginEnd = Ui.dp(c, 8) })
+                row.addView(Ui.text(c, groupNames.getOrElse(g) { "" }, 14f).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(Ui.text(c, ActivityChartView.fmt(per[g]), 14f).apply { gravity = Gravity.END }, LinearLayout.LayoutParams(Ui.dp(c, 86), -2))
+                row.addView(Ui.text(c, "${Math.round(per[g] * 100f / total.coerceAtLeast(1))} %", 14f).apply { gravity = Gravity.END; typeface = Ui.medium }, LinearLayout.LayoutParams(Ui.dp(c, 52), -2))
+                table.addView(row)
+            }
+            if (total == 0) table.addView(Ui.text(c, if (isWeek) "Rien de regardé ces 7 derniers jours." else "Rien de regardé aujourd'hui.", 14f, muted = true), Ui.lp(c, 10))
+        }
+        lateinit var tabsView: android.view.View
+        fun tabs(): android.view.View = Ui.tabs(c, listOf("Journée", "Horaires", "Semaine"), chartMode) { i ->
+            chartMode = i
+            val idx = card.indexOfChild(tabsView); card.removeView(tabsView); tabsView = tabs(); card.addView(tabsView, idx)
+            fill()
+        }.also { it.tag = "activite_modes" }
+        tabsView = tabs()
+        card.addView(tabsView)
+        card.addView(stats)
+        card.addView(readout, Ui.lp(c, 16))
+        card.addView(chart, Ui.lp(c, 6))
+        card.addView(table, Ui.lp(c, 14))
+        fill()
+        return card
     }
 
     /** État de la TV en une pastille (texte, couleur du point). */

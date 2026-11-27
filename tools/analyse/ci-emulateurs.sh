@@ -86,6 +86,16 @@ if [ ${#code} = 6 ]; then
   r=$(cli pair "$code")
   if [[ $r == *'"ok": true'* && $r == *'"box_prouve_le_code": true'* ]]; then ok "Appairage SPAKE2 avec le code affiché"; else ko "Appairage SPAKE2 avec le code affiché" "$r"; fi
   r=$(cli status); [[ $r == *'"ok": true'* ]] && ok "Téléphone appairé accepté" || ko "Téléphone appairé accepté" "${r:0:160}"
+  # Activité : la TV envoie le détail des séances [appli, début, fin] (diagrammes du téléphone, Box 1.4.56)
+  maint=$(( $(date +%s) * 1000 ))
+  r=$(timeout 90 python3 -I "$HERE/boxcli.py" usage "{\"from\":$((maint - 7*86400000)),\"to\":$maint}" 2>&1 | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read()); s = d.get("sessions")
+    ok = isinstance(s, list) and all(isinstance(x, list) and len(x) == 3 and x[1] < x[2] for x in s)
+    print(("OUI " if ok else "NON ") + str(len(s) if isinstance(s, list) else "absent"))
+except Exception as e: print("NON " + str(e)[:80])')
+  [[ $r == OUI* ]] && ok "Activité : détail des séances envoyé par la TV" "${r#OUI } séance(s)" || ko "Activité : détail des séances envoyé par la TV" "$r"
 else
   info "Appairage non testé" "code illisible sur la capture (lecture automatique), voir 02-tv-code-appairage.png"
 fi

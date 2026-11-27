@@ -102,4 +102,5 @@ if __name__ == "__main__":
         finally: s.close()
     else:
         params = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
-        print(json.dumps(call(cmd, **params), ensure_ascii=False)[:6000])
+        out = json.dumps(call(cmd, **params), ensure_ascii=False)
+        print(out if cmd == "usage" else out[:6000])  # usage : complet, pour relire le détail des séances

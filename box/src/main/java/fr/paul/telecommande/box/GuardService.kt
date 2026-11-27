@@ -1731,6 +1731,13 @@ class GuardService : AccessibilityService() {
             .put("hourly", JSONArray(Stats.hourly(sessions, Stats.startOfDay(from), days).toList()))
             .put("daily", daily)
             .put("since", log.first() ?: JSONObject.NULL)
+            // Détail de chaque séance [appli, début, fin], bornée à la période : le téléphone en tire ses diagrammes précis
+            .put("sessions", JSONArray().apply {
+                sessions.takeLast(MAX_SESSIONS).forEach { s ->
+                    val a = maxOf(s.start, from); val b = minOf(s.end, to)
+                    if (b > a) put(JSONArray().put(s.pkg).put(a).put(b))
+                }
+            })
             // Renvoyé pour que le téléphone sache que la TV a bien filtré par profil (une ancienne appli TV l'ignore)
             .put("profile", profile ?: "")
     }
@@ -1765,6 +1772,8 @@ class GuardService : AccessibilityService() {
     }.getOrDefault(false)
 
     companion object {
+        /** Séances renvoyées au plus par « usage » (7 jours d'une TV très utilisée tiennent largement). */
+        const val MAX_SESSIONS = 3000
         @Volatile var instance: GuardService? = null
             private set
 
