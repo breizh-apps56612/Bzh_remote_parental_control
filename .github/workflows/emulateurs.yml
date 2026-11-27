@@ -33,7 +33,7 @@ permissions:
 
 concurrency:
   group: emulateurs-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false   # le run en cours va au bout ; seul le dernier envoi en attente est gardé
 
 jobs:
   emulateurs:
