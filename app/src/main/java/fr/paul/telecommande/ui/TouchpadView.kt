@@ -181,6 +181,20 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
         contentDescription = "Pavé tactile : glisser pour naviguer, toucher pour valider"
     }
 
+    init {
+        // Ombre douce sous le pavé (forme arrondie identique au dessin)
+        outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(v: View, o: android.graphics.Outline) { o.setRoundRect(0, 0, v.width, v.height, 36 * d) }
+        }
+    }
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 3f * resources.displayMetrics.density }
+    private val okPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER; textSize = 15 * resources.displayMetrics.density; letterSpacing = 0.08f
+        typeface = runCatching { androidx.core.content.res.ResourcesCompat.getFont(context, R.font.sora_semibold) }.getOrNull()
+            ?: android.graphics.Typeface.DEFAULT_BOLD
+    }
+    private val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE; strokeWidth = resources.displayMetrics.density; color = ContextCompat.getColor(context, R.color.stroke)
     }
@@ -198,6 +212,9 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
         glowPaint.shader = android.graphics.RadialGradient(width / 2f, height / 2f, maxOf(1f, minOf(width, height) * 0.5f),
             ContextCompat.getColor(context, R.color.accent_soft), 0x00000000, android.graphics.Shader.TileMode.CLAMP)
         canvas.drawRoundRect(rect, r, r, glowPaint)
+        // reflet nacré en haut du pavé
+        sheenPaint.shader = android.graphics.LinearGradient(0f, 0f, 0f, height * 0.35f, 0x99FFFFFF.toInt(), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+        canvas.drawRoundRect(rect, r, r, sheenPaint)
         rect.inset(strokePaint.strokeWidth / 2, strokePaint.strokeWidth / 2)
         canvas.drawRoundRect(rect, r, r, strokePaint)
         rect.set(0f, 0f, width.toFloat(), height.toFloat())
@@ -262,8 +279,15 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
         centerDot.color = ContextCompat.getColor(context, R.color.surface)
         centerDot.alpha = 255
         centerDot.setShadowLayer(12 * d, 0f, 5 * d, (ContextCompat.getColor(context, R.color.accent) and 0x00FFFFFF) or 0x50000000)
-        canvas.drawCircle(cx, cy, haloR * (if (tap) 0.6f else 0.55f), centerDot)
+        val puckR = haloR * (if (tap) 0.6f else 0.55f)
+        canvas.drawCircle(cx, cy, puckR, centerDot)
         centerDot.clearShadowLayer()
+        // anneau signature indigo → sarcelle et « OK » au centre : on sait où toucher pour valider
+        ringPaint.shader = android.graphics.SweepGradient(cx, cy,
+            intArrayOf(ContextCompat.getColor(context, R.color.brand_a), ContextCompat.getColor(context, R.color.brand_b), ContextCompat.getColor(context, R.color.brand_a)), null)
+        canvas.drawCircle(cx, cy, puckR - ringPaint.strokeWidth / 2 - 3 * d, ringPaint)
+        okPaint.color = if (tap) ContextCompat.getColor(context, R.color.accent) else ink
+        canvas.drawText("OK", cx, cy - (okPaint.descent() + okPaint.ascent()) / 2, okPaint)
         holding?.let { g ->
             textPaint.color = ContextCompat.getColor(context, R.color.accent)
             canvas.drawText(when (g) { Gesture.LEFT -> "◀◀  en continu"; Gesture.RIGHT -> "en continu  ▶▶"; else -> "en continu" }, cx, cy - haloR - 14 * d, textPaint)

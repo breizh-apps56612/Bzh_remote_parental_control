@@ -126,15 +126,16 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
     /** Dernier appui sur le retour du téléphone (le second, juste après, ferme la télécommande). */
     private var backAt = 0L
 
-    /** La télécommande est toujours sombre, comme une vraie : on ne la confond pas avec les écrans (clairs) de l'appli. */
+    /** La télécommande est toujours claire (thème « Perle »), même si le téléphone est en thème sombre. */
     override fun attachBaseContext(newBase: android.content.Context) {
-        delegate.localNightMode = androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES
+        delegate.localNightMode = androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
         super.attachBaseContext(newBase)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_remote)
+        premiumLook()
         // Retour du téléphone : on prévient d'abord (c'est souvent la touche Retour de la TV qu'on voulait),
         // un second appui dans les 2,5 s ferme la télécommande
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
@@ -221,6 +222,40 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
             }
         }
         observe()
+    }
+
+    /**
+     * Rendu « Perle » : ombres douces teintées d'indigo (pas de liseré gris), boutons qui s'enfoncent
+     * sous le doigt, et arrivée en cascade (en-tête, carte, pavé, dock) à l'ouverture du volet.
+     */
+    private fun premiumLook() {
+        val tint = 0xFF2B2A8C.toInt()
+        fun lift(id: Int, elevDp: Float) = findViewById<View>(id).apply {
+            elevation = elevDp * d
+            if (Build.VERSION.SDK_INT >= 28) { outlineSpotShadowColor = tint; outlineAmbientShadowColor = tint }
+        }
+        listOf(R.id.btnClose, R.id.btnMenu, R.id.deviceChip).forEach { lift(it, 4f) }
+        lift(R.id.btnPower, 3f)
+        lift(R.id.contextPanel, 6f)
+        lift(R.id.touchpad, 8f)
+        lift(R.id.dockPill, 14f)
+        lift(R.id.micRing, 18f)
+        listOf(R.id.btnClose, R.id.btnMenu, R.id.btnPower, R.id.deviceChip, R.id.btnBack, R.id.btnHome, R.id.btnPlay, R.id.btnApps)
+            .forEach { Motion.pressable(findViewById(it), 0.92f) }
+        Motion.pressable(findViewById(R.id.micRing), 0.94f)
+        if (!Motion.enabled(this)) return
+        val ease = android.view.animation.PathInterpolator(0.2f, 0f, 0f, 1f)
+        listOf(R.id.remoteHeader, R.id.contextPanel, R.id.touchpad, R.id.remoteDock).forEachIndexed { i, id ->
+            findViewById<View>(id).apply {
+                alpha = 0f; translationY = 28 * d
+                animate().alpha(1f).translationY(0f).setStartDelay(90L + i * 70L).setDuration(520).setInterpolator(ease).start()
+            }
+        }
+        findViewById<View>(R.id.micRing).apply {
+            scaleX = 0.4f; scaleY = 0.4f
+            animate().scaleX(1f).scaleY(1f).setStartDelay(420).setDuration(460)
+                .setInterpolator(android.view.animation.OvershootInterpolator(2f)).start()
+        }
     }
 
     /** Referme le volet de la télécommande et revient à l'appli. */
@@ -594,7 +629,7 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
     private fun chip(label: String, on: Boolean = false, desc: String? = null, action: () -> Unit) = TextView(this).apply {
         text = label; textSize = 13f; gravity = Gravity.CENTER; typeface = Ui.medium
         setTextColor(if (on) Color.WHITE else color(R.color.ink))
-        setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip)
+        setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_remote_key)
         setPadding(dp(14), 0, dp(14), 0); minHeight = dp(40); height = dp(40)
         isClickable = true; isFocusable = true
         contentDescription = desc ?: label
