@@ -62,7 +62,7 @@ class Overlays(private val ctx: Context) {
     }
     private fun remove(v: View?) { if (v != null) runCatching { wm.removeView(v) } }
 
-    private fun card() = BoxUi.card(ctx)
+    private fun card(padH: Int = 44, padV: Int = 36) = BoxUi.card(ctx, padH, padV)
 
     private fun text(t: String, size: Float, color: Int = ink, bold: Boolean = false) = BoxUi.text(ctx, t, size, color, bold)
 
@@ -444,6 +444,42 @@ class Overlays(private val ctx: Context) {
         ok.requestFocus()
     }
 
+    // ---------- Contrat parental montré à l'enfant ----------
+
+    private var contract: View? = null
+
+    /** « Voici ton contrat » : les règles en quelques lignes simples, puis « J'ai compris » ou « J'ai une question ». */
+    fun showContract(name: String, lines: List<Triple<String, String, String>>, onOk: () -> Unit, onQuestion: () -> Unit) = ui {
+        remove(contract)
+        val root = BoxUi.Fit(ctx).apply { background = BoxUi.scrim() }
+        val c = card(padH = 52, padV = 40)
+        c.addView(text("Voici ton contrat, $name", 36f, bold = true))
+        c.addView(text("Tes parents ont choisi ces règles. Si tu n'es pas d'accord, parles-en avec eux.", 19f, muted),
+            LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) })
+        lines.forEach { (icon, title, sub) ->
+            val row = LinearLayout(ctx).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                background = BoxUi.cardBg(ctx, 22f); setPadding(dp(22), dp(14), dp(26), dp(14))
+            }
+            row.addView(text(icon, 30f), LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(18) })
+            val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+            col.addView(BoxUi.text(ctx, title, 22f, ink, bold = true, center = false))
+            if (sub.isNotBlank()) col.addView(BoxUi.text(ctx, sub, 17f, muted, center = false))
+            row.addView(col)
+            c.addView(row, LinearLayout.LayoutParams(dp(560), -2).apply { topMargin = dp(12) })
+        }
+        fun close() { remove(root); if (contract === root) contract = null }
+        val btns = LinearLayout(ctx).apply { gravity = Gravity.CENTER }
+        val ok = button("J'ai compris", true) { close(); onOk() }
+        btns.addView(ok)
+        btns.addView(button("J'ai une question", false) { close(); onQuestion() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(16) })
+        c.addView(btns, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(26) })
+        root.addView(c)
+        add(root, params(focusable = true, fullscreen = true))
+        contract = root
+        ok.requestFocus()
+    }
+
     // ---------- Récompense (« Bravo ! +15 min ») ----------
 
     fun showReward(title: String, sub: String) = ui {
@@ -533,8 +569,8 @@ class Overlays(private val ctx: Context) {
     fun hideProfileBadge() = ui { remove(badge); badge = null; badgeKey = null }
 
     fun hideAll() = ui {
-        listOf(block, banner, code, pin, pointer, timer, who, message, still, badge).forEach { remove(it) }
-        block = null; banner = null; code = null; pin = null; pointer = null; timer = null; who = null; message = null; still = null
+        listOf(block, banner, code, pin, pointer, timer, who, message, still, badge, contract).forEach { remove(it) }
+        block = null; banner = null; code = null; pin = null; pointer = null; timer = null; who = null; message = null; still = null; contract = null
         badge = null; badgeKey = null
     }
 }

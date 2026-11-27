@@ -84,6 +84,8 @@ object BoxLink {
                                 }
                                     "message_seen" -> notifyInfo(ctx, dev, "Message vu sur la TV", "« ${ev.optString("title")} » : quelqu'un a répondu « J'arrive ! »", 7900)
                                     "parent_unlock" -> notifyInfo(ctx, dev, "Code parent utilisé sur la TV", "+${ev.optInt("minutes")} min sur ${ev.optString("label")}", 7901)
+                                    "contract_seen" -> notifyInfo(ctx, dev, "Contrat lu sur la TV", "${ev.optString("name")} a lu son contrat et a appuyé sur « J'ai compris ».", 7902)
+                                    "contract_question" -> notifyInfo(ctx, dev, "${ev.optString("name")} a une question sur son contrat", "Prenez un moment pour en parler ensemble.", 7903)
                                 }
                                 events.tryEmit(dev.id to ev)
                             }

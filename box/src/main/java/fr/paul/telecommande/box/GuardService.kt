@@ -489,6 +489,7 @@ class GuardService : AccessibilityService() {
         val apply = {
             store.setActiveProfile(p.id); lastBlockPkg = null; lastInteraction = System.currentTimeMillis()
             overlays.showBanner("Bonne séance, ${p.name} ${p.emoji}")
+            main.postDelayed({ maybeShowContract(store.rules().profiles.firstOrNull { it.id == p.id }) }, 2_500)
             scheduleBadge(200)
             server.push(JSONObject().put("event", "profile").put("id", p.id).put("name", p.name).put("emoji", p.emoji))
             main.post { evaluate() }
@@ -498,6 +499,22 @@ class GuardService : AccessibilityService() {
             overlays.showPinPadEx(title, ::pinError, onSuccess = { apply() },
                 onCancel = { main.post { evaluate() } })
         } else apply()
+    }
+
+    /**
+     * Contrat parental que le parent a choisi de montrer à l'enfant : affiché une fois par version du contrat,
+     * quand l'enfant commence à regarder (ou quand le contrat change pendant qu'il regarde). Le téléphone est prévenu.
+     */
+    private fun maybeShowContract(p: fr.paul.telecommande.shared.Profile?) {
+        if (p == null || p.unlimited) return
+        val k = p.contract ?: return
+        if (!k.showChild || k.paused || store.activeProfile() != p.id) return
+        val sig = fr.paul.telecommande.shared.ContractWizard.signature(p)
+        if (store.contractSeen(p.id) == sig) return
+        val lines = fr.paul.telecommande.shared.ContractWizard.childLines(store.rules(), p)
+        overlays.showContract(p.name, lines,
+            onOk = { store.setContractSeen(p.id, sig); if (::server.isInitialized) server.push(JSONObject().put("event", "contract_seen").put("name", p.name)) },
+            onQuestion = { store.setContractSeen(p.id, sig); if (::server.isInitialized) server.push(JSONObject().put("event", "contract_question").put("name", p.name)) })
     }
 
     /** « Changer de profil » depuis l'appli Box de la TV : on réaffiche « Qui regarde ? ». */
@@ -1467,7 +1484,7 @@ class GuardService : AccessibilityService() {
             if (incoming.pinHash.isBlank() && store.rules().pinHash.isNotBlank()) incoming.pinHash = store.rules().pinHash
             store.saveRules(incoming)
             lastBlockPkg = null
-            main.post { evaluate() }
+            main.post { evaluate(); maybeShowContract(activeProfile(incoming)) }
             JSONObject().put("ok", true)
         }
         "end_grace" -> {

@@ -45,7 +45,15 @@ data class Profile(
     /** Âge maximum des programmes pour ce profil, si le parent le fixe à la main (0 = d'après l'âge de l'enfant). */
     var maxAge: Int = 0,
     /** Année de naissance (0 = inconnue) : l'âge sert à appliquer d'office la classification (un enfant de 9 ans ne voit pas un « -10 »). */
-    var birthYear: Int = 0
+    var birthYear: Int = 0,
+    /** Temps par jour le samedi et le dimanche (0 = comme en semaine). */
+    var weekendMin: Int = 0,
+    /** Extinction de la TV le soir pour ce profil, en minutes depuis minuit (-1 = couvre-feu de la famille). */
+    var bedtime: Int = -1,
+    /** Minutes de rab quand le temps est fini (-1 = réglage de la famille). */
+    var graceMin: Int = -1,
+    /** Contrat parental de cet enfant (null = mode simple). */
+    var contract: Contract? = null
 ) {
     /** Âge actuel (à un an près), ou null si inconnu. */
     fun age(year: Int = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)): Int? =
@@ -56,10 +64,14 @@ data class Profile(
 
     fun toJson(): JSONObject = JSONObject().put("id", id).put("name", name).put("emoji", emoji)
         .put("dailyTotalMin", dailyTotalMin).put("unlimited", unlimited).put("maxAge", maxAge).put("birthYear", birthYear)
+        .put("weekendMin", weekendMin).put("bedtime", bedtime).put("graceMin", graceMin)
+        .put("contract", contract?.toJson() ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(o: JSONObject) = Profile(o.optString("id"), o.optString("name"), o.optString("emoji", "🙂"),
-            o.optInt("dailyTotalMin").coerceIn(0, AppRule.DAY_MIN), o.optBoolean("unlimited"), o.optInt("maxAge").coerceIn(0, 18), o.optInt("birthYear").let { if (it in 1990..2100) it else 0 })
+            o.optInt("dailyTotalMin").coerceIn(0, AppRule.DAY_MIN), o.optBoolean("unlimited"), o.optInt("maxAge").coerceIn(0, 18), o.optInt("birthYear").let { if (it in 1990..2100) it else 0 },
+            o.optInt("weekendMin").coerceIn(0, AppRule.DAY_MIN), o.optInt("bedtime", -1).let { if (it in 0 until AppRule.DAY_MIN) it else -1 },
+            o.optInt("graceMin", -1).let { if (it in 0..30) it else -1 }, Contract.fromJson(o.optJSONObject("contract")))
     }
 }
 
@@ -108,11 +120,20 @@ data class BoxRules(
     /** Profil appliqué d'office à l'allumage, ou null s'il faut demander « Qui regarde ? ». */
     fun startProfile(): Profile? = defaultProfile.takeIf { it.isNotBlank() }?.let { id -> profiles.firstOrNull { it.id == id } }
 
-    /** Règles effectives pour un profil (parent = aucune limite). */
-    fun forProfile(p: Profile?): BoxRules {
+    /**
+     * Règles effectives pour un profil, le jour [dayOfWeek] (0 = lundi) : parent ou contrat en pause = aucune limite ;
+     * sinon le temps du jour (week-end compris), l'extinction du soir et le rab de fin propres à l'enfant.
+     */
+    fun forProfile(p: Profile?, dayOfWeek: Int = todayOfWeek()): BoxRules {
         if (p == null) return this
-        if (p.unlimited) return copy(enabled = false)
-        return if (p.dailyTotalMin > 0) copy(dailyTotalMin = p.dailyTotalMin) else this
+        if (p.unlimited || p.contract?.paused == true) return copy(enabled = false)
+        var r = this
+        val daily = if (dayOfWeek >= 5 && p.weekendMin > 0) p.weekendMin else p.dailyTotalMin
+        if (daily > 0) r = r.copy(dailyTotalMin = daily)
+        if (p.bedtime >= 0) r = r.copy(bedtimeEnabled = true, bedtimeStart = p.bedtime,
+            bedtimeEnd = if (bedtimeEnabled && bedtimeStart != bedtimeEnd) bedtimeEnd else RulesAdvisor.BEDTIME_END)
+        if (p.graceMin >= 0) r = r.copy(graceMin = p.graceMin)
+        return r
     }
 
     fun toJson(): JSONObject {
@@ -133,6 +154,9 @@ data class BoxRules(
     }
 
     companion object {
+        /** Jour de la semaine d'aujourd'hui, 0 = lundi … 6 = dimanche. */
+        fun todayOfWeek(): Int = (java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+
         fun fromJson(o: JSONObject?): BoxRules {
             if (o == null) return BoxRules()
             val apps = mutableMapOf<String, AppRule>()

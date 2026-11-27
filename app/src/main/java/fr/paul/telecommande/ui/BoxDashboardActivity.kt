@@ -62,6 +62,12 @@ class BoxDashboardActivity : AppCompatActivity() {
         lifecycleScope.launch { while (isActive) { load(); delay(30_000) } }
     }
 
+    /** Retour du contrat ou des règles : on réaffiche avec les règles enregistrées. */
+    override fun onResume() {
+        super.onResume()
+        if (::page.isInitialized) render()
+    }
+
     private suspend fun load() {
         val c = BoxClient.of(this, device)
         val now = System.currentTimeMillis()
@@ -166,14 +172,15 @@ class BoxDashboardActivity : AppCompatActivity() {
         val u = st?.optJSONObject("profileUsage")?.optJSONObject(p?.id ?: "*")
         // Ancienne appli TV (sans temps par profil) : à défaut, le temps de toute la TV
         val used = u?.optLong("ms") ?: st?.optLong("todayTotal") ?: 0L
-        if (!rules.enabled || p?.unlimited == true) return used to null
+        val eff = rules.forProfile(p)
+        if (!rules.enabled || !eff.enabled) return used to null
         if (u != null && u.has("left")) return used to u.optLong("left").takeIf { it >= 0 }
-        val limit = if (p != null && p.dailyTotalMin > 0) p.dailyTotalMin else rules.dailyTotalMin
+        val limit = eff.dailyTotalMin
         return used to if (limit > 0) (limit * 60_000L - used).coerceAtLeast(0) else null
     }
 
     private fun limitOf(rules: fr.paul.telecommande.shared.BoxRules, p: fr.paul.telecommande.shared.Profile?) =
-        if (!rules.enabled || p?.unlimited == true) 0 else if (p != null && p.dailyTotalMin > 0) p.dailyTotalMin else rules.dailyTotalMin
+        rules.forProfile(p).let { if (!rules.enabled || !it.enabled) 0 else it.dailyTotalMin }
 
     /** Bandeau « Parental » : qui regarde, le temps qu'il lui reste en très grand, et les gestes du soir. */
     private fun parentalHero(rules: fr.paul.telecommande.shared.BoxRules): LinearLayout {
@@ -198,6 +205,7 @@ class BoxDashboardActivity : AppCompatActivity() {
         val (big, unit) = when {
             !rules.enabled -> "Libre" to "contrôle en pause"
             prof?.unlimited == true -> "Libre" to "profil parent"
+            prof?.contract?.paused == true -> "Libre" to "contrat en pause"
             left != null && left <= 0 -> "0" to "min · temps écoulé"
             left != null -> ((left + 59_999) / 60_000).toInt().let { m -> if (m < 60) "$m" to "min restantes" else fr.paul.telecommande.shared.RulesEngine.fmt(left) to "restantes" }
             else -> Usage.format(used) to "aujourd'hui"
@@ -284,8 +292,9 @@ class BoxDashboardActivity : AppCompatActivity() {
 
     /** Une ligne sous le grand chiffre : temps restant, dépassement ou « sans limite ». */
     private fun todayCaption(rules: fr.paul.telecommande.shared.BoxRules, p: fr.paul.telecommande.shared.Profile?, todayMs: Long, limit: Int, usage: JSONObject?): String {
-        if (!rules.enabled) return "Contrat en pause : aucune limite"
+        if (!rules.enabled) return "Contrôle parental désactivé : aucune limite"
         if (p?.unlimited == true) return "Profil parent : aucune limite"
+        if (p?.contract?.paused == true) return "Contrat en pause : aucune limite pour ${p.name}"
         if (limit <= 0) return "Pas de limite par jour"
         // La TV donne le temps restant exact (bonus compris) quand elle le connaît
         val left = usage?.takeIf { it.has("left") }?.optLong("left")?.takeIf { it >= 0 } ?: (limit * 60_000L - todayMs)
@@ -418,6 +427,12 @@ class BoxDashboardActivity : AppCompatActivity() {
         }.compact(), LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1f).apply { marginStart = Ui.dp(c, 5) })
         sum.addView(links, Ui.lp(c, 14))
         root.addView(sum, Ui.lp(c, 10))
+
+        // ----- Contrat parental de l'enfant choisi -----
+        if (prof != null && !prof.unlimited) {
+            root.addView(Ui.title(c, "Contrat parental", 18f), Ui.lp(c, 24))
+            contractCards(rules, prof).forEach { root.addView(it, Ui.lp(c, 10)) }
+        }
 
         // ----- Conseils de l'assistant : règles qui se contredisent ou ne servent à rien -----
         val names = status?.optJSONObject("labels")
@@ -599,7 +614,8 @@ class BoxDashboardActivity : AppCompatActivity() {
                 // Profil enfant : son propre temps (au moins 15 min ; il part du temps de la famille s'il n'en avait pas)
                 val p = r.profiles[i]
                 val base = if (p.dailyTotalMin > 0) p.dailyTotalMin else r.dailyTotalMin.takeIf { it > 0 } ?: 120
-                r.profiles[i] = p.copy(dailyTotalMin = (base + delta).coerceIn(15, 24 * 60))
+                r.profiles[i] = p.copy(dailyTotalMin = (base + delta).coerceIn(15, 24 * 60),
+                    weekendMin = if (p.weekendMin > 0) (p.weekendMin + delta).coerceIn(15, 24 * 60) else 0)
             } else r.dailyTotalMin = (r.dailyTotalMin + delta).coerceIn(0, 24 * 60)
             r.pinHash = store.boxPinHash
             r.version = System.currentTimeMillis()
@@ -649,6 +665,12 @@ class BoxDashboardActivity : AppCompatActivity() {
         }
         root.addView(hero, Ui.lp(c, 14))
 
+        // Bonus avec motif et bilan, pour l'enfant affiché (s'il a un contrat)
+        activityProfile(rules)?.takeIf { !it.unlimited && it.contract != null }?.let { p ->
+            reviewCard(p)?.let { root.addView(it, Ui.lp(c, 14)) }
+            if (p.contract?.paused == false) root.addView(bonusCard(p), Ui.lp(c, 14))
+        }
+
         root.addView(section("Détail"), Ui.lp(c, 24))
         val act = Ui.card(c)
         act.addView(Ui.tabs(c, listOf("Aujourd'hui", "Semaine", "Horaires"), tab) { tab = it; render() })
@@ -685,7 +707,7 @@ class BoxDashboardActivity : AppCompatActivity() {
         val entries = todayMap?.keys()?.asSequence()?.map { it to todayMap.optLong(it) }?.filter { it.second > 0 }?.sortedByDescending { it.second }?.toList() ?: emptyList()
         if (entries.isEmpty()) { card.addView(Ui.text(c, if (st == null) loadingText() else if (p != null) "${p.name} n'a rien regardé aujourd'hui." else "Rien de regardé aujourd'hui.", 14f, muted = true), Ui.lp(c, 16)); return }
         // Les limites par appli ne concernent pas le profil parent
-        val limited = rules.enabled && p?.unlimited != true
+        val limited = rules.enabled && rules.forProfile(p).enabled
         val max = entries.maxOf { it.second }
         val shown = if (showAllApps) entries else entries.take(4)
         shown.forEach { (pkg, ms) ->
@@ -818,4 +840,158 @@ class BoxDashboardActivity : AppCompatActivity() {
         }.show()
     }
 
+    // ---------- Contrat parental ----------
+
+    /** Modifie un profil (code parent), l'enregistre et l'envoie à la TV. */
+    private fun editProfile(profileId: String, reason: String, block: (fr.paul.telecommande.shared.BoxRules, fr.paul.telecommande.shared.Profile) -> Unit) {
+        val apply = {
+            unlocked = true
+            val store = ParentalStore(this)
+            val r = store.boxRules(device.id)
+            r.profiles.firstOrNull { it.id == profileId }?.let { p ->
+                block(r, p)
+                r.pinHash = store.boxPinHash
+                r.version = System.currentTimeMillis()
+                store.saveBoxRules(device.id, r)
+                render()
+                lifecycleScope.launch {
+                    runCatching { BoxClient.of(this@BoxDashboardActivity, device).call("set_rules", JSONObject().put("rules", r.toJson())) }
+                        .onFailure { Ui.toast(this@BoxDashboardActivity, "TV injoignable : le contrat sera envoyé à sa prochaine connexion") }
+                }
+            }
+            Unit
+        }
+        if (unlocked) apply() else Ui.requirePin(this, reason) { apply() }
+    }
+
+    private fun openContract(p: fr.paul.telecommande.shared.Profile, mixer: Boolean) {
+        startActivity(Intent(this, ContractActivity::class.java).putExtra(ContractActivity.EXTRA_ID, device.id)
+            .putExtra(ContractActivity.EXTRA_PROFILE, p.id).apply { if (mixer) putExtra(ContractActivity.EXTRA_START, ContractActivity.START_MIXER) })
+    }
+
+    /** Cartes « Contrat » de l'écran Parental : proposer d'en créer un, ou l'état du contrat, son bilan et ses gestes. */
+    private fun contractCards(rules: fr.paul.telecommande.shared.BoxRules, p: fr.paul.telecommande.shared.Profile): List<android.view.View> {
+        val c = this
+        val k = p.contract
+        if (k == null) {
+            val card = Ui.card(c)
+            card.addView(Ui.text(c, "Fixez les règles de ${p.name} à votre façon", 16f).apply { typeface = Ui.bold })
+            card.addView(Ui.text(c, "5 phrases à compléter, puis tout se règle d'un geste à la table de mixage. Vous pourrez le mettre en pause, le modifier ou l'arrêter à tout moment.", 13.5f, muted = true), Ui.lp(c, 6))
+            card.addView(Ui.button(c, "Créer le contrat de ${p.name}", primary = true) { openContract(p, false) }, Ui.lp(c, 14))
+            return listOf(card)
+        }
+        val out = mutableListOf<android.view.View>()
+        reviewCard(p)?.let { out += it }
+        val card = Ui.card(c)
+        val days = ((System.currentTimeMillis() - k.since) / fr.paul.telecommande.shared.ContractWizard.DAY_MS).toInt()
+        card.addView(Ui.pill(c, if (k.paused) "En pause : aucune limite pour ${p.name}" else if (days < 1) "Actif depuis aujourd'hui" else "Actif depuis $days jour" + if (days > 1) "s" else "",
+            Ui.color(c, if (k.paused) R.color.amber else R.color.ok)), LinearLayout.LayoutParams(-2, -2))
+        card.addView(Ui.text(c, fr.paul.telecommande.shared.ContractWizard.sentence(p.name, fr.paul.telecommande.shared.ContractWizard.mixOf(rules, p)), 15f).apply { setLineSpacing(0f, 1.2f) }, Ui.lp(c, 12))
+        if (k.showChild) card.addView(Ui.text(c, "Montré à ${p.name} sur la TV.", 12.5f, muted = true), Ui.lp(c, 6))
+        val btns = LinearLayout(c)
+        btns.addView(Ui.button(c, "Modifier", primary = true) { openContract(p, true) }, LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1f).apply { marginEnd = Ui.dp(c, 4) })
+        btns.addView(Ui.button(c, if (k.paused) "Reprendre" else "Pause") {
+            editProfile(p.id, if (k.paused) "Code parent pour reprendre le contrat." else "Code parent pour mettre le contrat en pause.") { _, q ->
+                q.contract?.status = if (k.paused) fr.paul.telecommande.shared.Contract.ACTIVE else fr.paul.telecommande.shared.Contract.PAUSED
+            }
+        }, LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1f).apply { marginStart = Ui.dp(c, 4); marginEnd = Ui.dp(c, 4) })
+        btns.addView(Ui.button(c, "Arrêter") {
+            AlertDialog.Builder(c).setTitle("Arrêter le contrat de ${p.name} ?")
+                .setMessage("${p.name} garde sa limite actuelle en semaine, en mode simple. Les bonus, les relectures et l'extinction du soir propres au contrat s'arrêtent.")
+                .setPositiveButton("Arrêter") { _, _ -> editProfile(p.id, "Code parent pour arrêter le contrat.") { _, q -> fr.paul.telecommande.shared.ContractWizard.stop(q) } }
+                .setNegativeButton("Annuler", null).show()
+        }, LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1f).apply { marginStart = Ui.dp(c, 4) })
+        card.addView(btns, Ui.lp(c, 14))
+        out += card
+        return out
+    }
+
+    /** Bilan proposé au parent quand c'est le moment (relecture prévue ou bonus répétés), ou null. */
+    private fun reviewCard(p: fr.paul.telecommande.shared.Profile): android.view.View? {
+        val c = this
+        val rv = fr.paul.telecommande.shared.ContractWizard.review(p.name, p.contract, System.currentTimeMillis()) ?: return null
+        val card = LinearLayout(c).apply {
+            orientation = LinearLayout.VERTICAL
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(Ui.color(c, R.color.indigo_soft)); cornerRadius = Ui.dp(c, 24).toFloat() }
+            setPadding(Ui.dp(c, 18), Ui.dp(c, 16), Ui.dp(c, 18), Ui.dp(c, 16))
+        }
+        card.addView(Ui.label(c, rv.title))
+        card.addView(Ui.text(c, rv.text, 16f).apply { typeface = Ui.bold; setTextColor(Ui.color(c, R.color.indigo_ink)); setLineSpacing(0f, 1.2f) }, Ui.lp(c, 6))
+        card.addView(Ui.text(c, "Ce n'est qu'une proposition : vous pouvez donner plus de liberté, récompenser autrement (une sortie, choisir le film du samedi…), resserrer, ou tout garder.", 13f, muted = true), Ui.lp(c, 6))
+        val btns = LinearLayout(c)
+        // Revoir : la table de mixage ; valider le contrat repousse le prochain bilan
+        btns.addView(Ui.button(c, "Revoir le contrat", primary = true) { openContract(p, true) }, LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1.3f).apply { marginEnd = Ui.dp(c, 4) })
+        btns.addView(Ui.button(c, "Garder tel quel") {
+            editProfile(p.id, "Code parent pour garder le contrat.") { _, q -> q.contract?.let { fr.paul.telecommande.shared.ContractWizard.postpone(it, System.currentTimeMillis()) } }
+        }, LinearLayout.LayoutParams(0, Ui.dp(c, 50), 1f).apply { marginStart = Ui.dp(c, 4) })
+        card.addView(btns, Ui.lp(c, 14))
+        return card
+    }
+
+    /** Motif choisi pour le prochain bonus (écran Activité). */
+    private var bonusReason = fr.paul.telecommande.shared.ContractWizard.REASONS.first()
+
+    /** « Accorder un bonus » : un motif, puis le bonus prévu par le contrat ; gardé pour les bilans. */
+    private fun bonusCard(p: fr.paul.telecommande.shared.Profile): android.view.View {
+        val c = this
+        val k = p.contract!!
+        val card = Ui.card(c)
+        card.addView(Ui.label(c, "Accorder un bonus à ${p.name}"))
+        val reasons = (fr.paul.telecommande.shared.ContractWizard.REASONS + listOf(bonusReason)).distinct()
+        val wrap = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        var line = LinearLayout(c)
+        reasons.forEachIndexed { i, r ->
+            if (i % 2 == 0 && i > 0) { wrap.addView(line, Ui.lp(c, 8)); line = LinearLayout(c) }
+            line.addView(reasonChip(r, r == bonusReason) { bonusReason = r; render() }, LinearLayout.LayoutParams(0, -2, 1f).apply { if (i % 2 == 0) marginEnd = Ui.dp(c, 4) else marginStart = Ui.dp(c, 4) })
+        }
+        if (reasons.size % 2 == 1) line.addView(reasonChip("Autre motif…", false) { askReason() }, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = Ui.dp(c, 4) })
+        wrap.addView(line, Ui.lp(c, 8))
+        if (reasons.size % 2 == 0) wrap.addView(reasonChip("Autre motif…", false) { askReason() }, Ui.lp(c, 8))
+        card.addView(wrap, Ui.lp(c, 4))
+        val minutes = k.bonusMinutes()
+        if (minutes > 0) {
+            card.addView(Ui.button(c, "+ $minutes min pour « $bonusReason »", primary = true) { grantBonus(p, minutes, bonusReason) }, Ui.lp(c, 14))
+        } else {
+            card.addView(Ui.text(c, "Votre contrat ne prévoit pas de bonus de temps.", 13.5f, muted = true), Ui.lp(c, 12))
+            card.addView(Ui.button(c, "Accorder quand même 15 min") { grantBonus(p, 15, bonusReason) }, Ui.lp(c, 8))
+        }
+        card.addView(Ui.text(c, "Le bonus s'ajoute au temps de TV du jour. Pensez aussi aux récompenses sans écran : une sortie, choisir le film du samedi…", 12.5f, muted = true), Ui.lp(c, 10))
+        return card
+    }
+
+    private fun reasonChip(label: String, on: Boolean, action: () -> Unit) = android.widget.TextView(this).apply {
+        val c = this@BoxDashboardActivity
+        text = label; textSize = 14f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; gravity = Gravity.CENTER
+        typeface = if (on) Ui.bold else Ui.medium
+        setTextColor(Ui.color(c, if (on) R.color.indigo_ink else R.color.ink))
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = Ui.dp(c, 16).toFloat(); setColor(Ui.color(c, if (on) R.color.indigo_soft else R.color.tile))
+            if (on) setStroke(Ui.dp(c, 2), Ui.color(c, R.color.accent))
+        }
+        minHeight = Ui.dp(c, 46); setPadding(Ui.dp(c, 10), 0, Ui.dp(c, 10), 0)
+        contentDescription = label + if (on) ", choisi" else ""
+        isClickable = true; isFocusable = true; setOnClickListener { action() }
+    }
+
+    private fun askReason() {
+        val input = android.widget.EditText(this).apply { hint = "Ex. : bonne note, rangé sa chambre"; maxLines = 1; filters = arrayOf(android.text.InputFilter.LengthFilter(40)) }
+        val box = LinearLayout(this).apply { val p = Ui.dp(this@BoxDashboardActivity, 20); setPadding(p, Ui.dp(this@BoxDashboardActivity, 8), p, 0); addView(input, LinearLayout.LayoutParams(-1, -2)) }
+        AlertDialog.Builder(this).setTitle("Motif du bonus").setView(box)
+            .setPositiveButton("OK") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let { bonusReason = it.replaceFirstChar { ch -> ch.uppercase() }; render() } }
+            .setNegativeButton("Annuler", null).show()
+    }
+
+    private fun grantBonus(p: fr.paul.telecommande.shared.Profile, minutes: Int, reason: String) {
+        if (!unlocked) { Ui.requirePin(this, "Code parent pour accorder un bonus.") { unlocked = true; grantBonus(p, minutes, reason) }; return }
+        lifecycleScope.launch {
+            runCatching { BoxClient.of(this@BoxDashboardActivity, device).call("bonus", JSONObject().put("pkg", "*").put("minutes", minutes)) }
+                .onSuccess {
+                    Ui.toast(this@BoxDashboardActivity, "+$minutes min pour ${p.name} : « $reason »")
+                    // Gardé dans le contrat pour les bilans (« 6 bonus devoirs en 2 mois »)
+                    editProfile(p.id, "") { _, q -> q.contract?.bonuses?.add(fr.paul.telecommande.shared.ContractBonus(System.currentTimeMillis(), minutes, reason)) }
+                }
+                .onFailure { Ui.toast(this@BoxDashboardActivity, "TV injoignable : réessayez dans un instant") }
+            load()
+        }
+    }
 }

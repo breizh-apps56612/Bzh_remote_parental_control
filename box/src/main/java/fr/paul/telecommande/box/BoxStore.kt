@@ -162,6 +162,10 @@ class BoxStore private constructor(context: Context) {
 
     // ---------- Profil « Qui regarde ? » ----------
 
+    /** Contrat déjà montré à l'enfant (empreinte de la version vue), pour ne pas le remontrer à chaque séance. */
+    fun contractSeen(profile: String): String? = prefs.getString("contractSeen|$profile", null)
+    fun setContractSeen(profile: String, signature: String) = prefs.edit().putString("contractSeen|$profile", signature).apply()
+
     @Synchronized fun activeProfile(): String? = prefs.getString("activeProfile", null)
     @Synchronized fun setActiveProfile(id: String?) {
         val e = prefs.edit().putString("activeProfile", id)
