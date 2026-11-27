@@ -1572,7 +1572,7 @@ class GuardService : AccessibilityService() {
         }
         "dev_action" -> devAction(req.optString("text"), req.optString("action", "click"))
         "dev_global" -> JSONObject().put("ok", act(when (req.optString("action")) {
-            "home" -> GLOBAL_ACTION_HOME; "recents" -> GLOBAL_ACTION_RECENTS; "notifications" -> GLOBAL_ACTION_NOTIFICATIONS; else -> GLOBAL_ACTION_BACK }, "outil de développement ($phoneName)")))
+            "home" -> GLOBAL_ACTION_HOME; "recents" -> GLOBAL_ACTION_RECENTS; "notifications" -> GLOBAL_ACTION_NOTIFICATIONS; else -> GLOBAL_ACTION_BACK }, "outil de développement ($phoneName)"))
         "box_log" -> {
             BoxLog.log("TV", "Journal demandé par $phoneName · ${stateLine()}")
             JSONObject().put("ok", true).put("log", BoxLog.tail(req.optInt("max", 800_000).coerceIn(10_000, 1_500_000)))
