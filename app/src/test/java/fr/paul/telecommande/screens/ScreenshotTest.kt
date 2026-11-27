@@ -269,6 +269,17 @@ class ScreenshotTest {
         val a = Robolectric.buildActivity(RulesWizardActivity::class.java, intent(RulesWizardActivity::class.java, RulesWizardActivity.EXTRA_ID)).setup().get()
         ShadowDialog.getLatestDialog()?.dismiss()
         shot(a, "06-assistant")
+        // Assistant déverrouillé : deux enfants d'âges éloignés, un couvre-feu qui coupe avant la fin des horaires
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        val r = fr.paul.telecommande.shared.BoxRules(enabled = true, bedtimeEnabled = true, bedtimeStart = 20 * 60, activeFrom = 7 * 60, activeTo = 21 * 60,
+            profiles = mutableListOf(fr.paul.telecommande.shared.Profile("leo", "Léo", "🦖", 60, birthYear = year - 7),
+                fr.paul.telecommande.shared.Profile("emma", "Emma", "🦄", 120, birthYear = year - 13)))
+        set(a, "rules", r)
+        a.javaClass.getDeclaredField("content").apply { isAccessible = true }.let { (it.get(a) as View).visibility = View.VISIBLE }
+        set(a, "index", 0); call(a, "render"); shot(a, "06a-assistant-profils")
+        set(a, "index", 2); call(a, "render"); shot(a, "06b-assistant-temps")
+        @Suppress("UNCHECKED_CAST") val n = (a.javaClass.getDeclaredField("steps").apply { isAccessible = true }.get(a) as List<Any>).size
+        set(a, "index", n - 1); call(a, "render"); shot(a, "06c-assistant-verification")
     }
 
     @Test fun pinApproval() {

@@ -23,9 +23,11 @@ object Premium {
     fun heroBackground(c: Context): android.graphics.drawable.Drawable {
         val r = dp(c, 36).toFloat()
         val base = GradientDrawable().apply { setColor(col(c, R.color.hero_bg)); cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r) }
+        // chaque halo reprend l'arrondi du fond : rien ne déborde dans les coins
         fun glow(color: Int, x: Float, y: Float, radiusDp: Int) = GradientDrawable().apply {
             gradientType = GradientDrawable.RADIAL_GRADIENT; gradientRadius = dp(c, radiusDp).toFloat()
             setGradientCenter(x, y); colors = intArrayOf(color, color and 0x00FFFFFF)
+            cornerRadii = floatArrayOf(0f, 0f, 0f, 0f, r, r, r, r)
         }
         return LayerDrawable(arrayOf(base, glow(col(c, R.color.hero_glow_a), 1f, 0f, 260), glow(col(c, R.color.hero_glow_b), 0f, 1.05f, 240)))
     }
