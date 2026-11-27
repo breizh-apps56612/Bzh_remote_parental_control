@@ -19,14 +19,14 @@ import fr.paul.telecommande.core.DeviceStore
 
 /**
  * Navigation de l'appli (2.5) partagée par les écrans principaux :
- * une barre flottante en pilule (Maison · Enfants · Aide · Réglages), l'onglet en cours sur une pastille indigo,
+ * une barre flottante en pilule (Maison · Enfants · Activité · Réglages ; l'Aide est dans Réglages), l'onglet en cours sur une pastille indigo,
  * et au centre la touche « Télécommande » : un carré nuit (comme la télécommande, toujours sombre) avec son nom
  * écrit dessous. Volontairement, rien ici ne ressemble aux touches de la TV (Retour TV, Accueil TV, micro rond).
  * La barre se range quand on fait défiler vers le bas et revient dès qu'on remonte.
  */
 object AuroraNav {
-    /** Les quatre onglets : Maison, Enfants (règles + ce qui a été regardé), Aide, Réglages. */
-    enum class Tab { HOME, KIDS, HELP, SETTINGS }
+    /** Les onglets de la barre : Maison, Enfants (règles), Activité (ce qui a été regardé), Réglages. Aide s'ouvre depuis Réglages. */
+    enum class Tab { HOME, KIDS, ACTIVITY, SETTINGS, HELP }
 
     private const val PREFS = "ui"
     private const val KEY_PRIMARY = "primary_device"
@@ -103,7 +103,7 @@ object AuroraNav {
             setPadding(0, 0, 0, Ui.dp(c, 11))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LinearLayout.LayoutParams(Ui.dp(c, 92), -1))
-        pill.addView(item(Tab.HELP, R.drawable.ic_help, "Aide"), LinearLayout.LayoutParams(0, -1, 1f))
+        pill.addView(item(Tab.ACTIVITY, R.drawable.ic_stats, "Activité"), LinearLayout.LayoutParams(0, -1, 1f))
         pill.addView(item(Tab.SETTINGS, R.drawable.ic_settings, "Réglages"), LinearLayout.LayoutParams(0, -1, 1f))
         frame.addView(pill, FrameLayout.LayoutParams(-1, Ui.dp(c, 72), Gravity.BOTTOM).apply {
             setMargins(Ui.dp(c, 14), 0, Ui.dp(c, 14), Ui.dp(c, 14))
@@ -139,15 +139,19 @@ object AuroraNav {
             Tab.HOME -> Intent(a, MainActivity::class.java).top()
             Tab.HELP -> Intent(a, HelpActivity::class.java)
             Tab.SETTINGS -> Intent(a, SettingsActivity::class.java)
-            Tab.KIDS -> {
+            Tab.KIDS, Tab.ACTIVITY -> {
                 if (d == null) { Ui.toast(a, "Ajoutez d'abord votre TV (onglet Maison)"); return }
                 if (!d.isSmartBox) {
                     val box = DeviceStore(a).all().firstOrNull { it.isSmartBox }
-                    if (box == null) { Ui.toast(a, "Les règles des enfants fonctionnent avec une box ou une TV Android TV."); return }
+                    if (box == null) { Ui.toast(a, if (tab == Tab.KIDS) "Les règles des enfants fonctionnent avec une box ou une TV Android TV." else "L'activité se suit avec une box ou une TV Android TV."); return }
                     setPrimary(a, box); open(a, tab); return
                 }
-                if (d.hasBoxApp) Intent(a, BoxDashboardActivity::class.java).putExtra(BoxDashboardActivity.EXTRA_ID, d.id)
-                else Intent(a, ParentalActivity::class.java).putExtra(ParentalActivity.EXTRA_ID, d.id)
+                when {
+                    d.hasBoxApp -> Intent(a, BoxDashboardActivity::class.java).putExtra(BoxDashboardActivity.EXTRA_ID, d.id)
+                        .putExtra(BoxDashboardActivity.EXTRA_MODE, if (tab == Tab.ACTIVITY) BoxDashboardActivity.MODE_ACTIVITY else BoxDashboardActivity.MODE_PARENTAL)
+                    tab == Tab.ACTIVITY -> Intent(a, StatsActivity::class.java).putExtra(StatsActivity.EXTRA_ID, d.id)
+                    else -> Intent(a, ParentalActivity::class.java).putExtra(ParentalActivity.EXTRA_ID, d.id)
+                }
             }
         }
         a.startActivity(i)

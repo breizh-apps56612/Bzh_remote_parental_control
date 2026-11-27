@@ -299,7 +299,7 @@ class MainActivity : AppCompatActivity() {
             t1.addView(small("sur " + fr.paul.telecommande.core.Usage.format(limit * 60_000L) + (watcher?.let { " · ${it.name}" } ?: " aujourd'hui")), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
         } else t1.addView(small(when { today == null && !tracking -> "Suivi désactivé"; today == null -> "TV injoignable"; else -> "aujourd'hui · sans limite" }),
             LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8) })
-        t1.setOnClickListener { AuroraNav.open(this, AuroraNav.Tab.KIDS) }
+        t1.setOnClickListener { AuroraNav.open(this, AuroraNav.Tab.ACTIVITY) }
         t1.contentDescription = "Temps de TV aujourd'hui, voir l'activité"
 
         val t2 = tile(if (bedtimeOn) "Couvre-feu" else "Protection", if (bedtimeOn) hm(bedtime) else if (enabled) "Active" else "Inactive")

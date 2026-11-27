@@ -61,7 +61,7 @@ class BoxDashboardActivity : AppCompatActivity() {
         page = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root = LinearLayout(this)
         setContentView(AuroraNav.wrap(this, ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(page) },
-            AuroraNav.Tab.KIDS))
+            if (mode == MODE_ACTIVITY) AuroraNav.Tab.ACTIVITY else AuroraNav.Tab.KIDS))
         Premium.darkStatusBar(this)
         render()
         lifecycleScope.launch { while (isActive) { load(); delay(30_000) } }
@@ -132,6 +132,9 @@ class BoxDashboardActivity : AppCompatActivity() {
         val st = status
         if (st != null && error == null) lastOk = System.currentTimeMillis()
 
+        // ===== Onglet Activité : ce que chaque enfant a regardé, tout de suite à l'écran =====
+        if (mode == MODE_ACTIVITY) { renderActivity(rules); return }
+
         // ===== Bandeau nuit : état de la TV, qui regarde, temps restant en très grand =====
         page.addView(familyHero(rules), LinearLayout.LayoutParams(-1, -2))
         root = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; val p = Ui.dp(c, 16); setPadding(p, Ui.dp(c, 2), p, 0) }
@@ -145,6 +148,37 @@ class BoxDashboardActivity : AppCompatActivity() {
         }
 
         renderFamily(rules)
+        root.addView(AuroraNav.spacer(c))
+    }
+
+    /**
+     * Onglet « Activité » : bandeau (enfant choisi, temps regardé aujourd'hui en grand), puis directement
+     * Aujourd'hui (applis), La semaine et Les horaires, sans passer par des tuiles.
+     */
+    private fun renderActivity(rules: fr.paul.telecommande.shared.BoxRules) {
+        val c = this
+        val p = activityProfile(rules)
+        val h = Premium.hero(c)
+        heroTop(h)
+        h.addView(Premium.heroText(c, "Activité", 28f, bold = true), Ui.lp(c, 18))
+        if (rules.profiles.isNotEmpty()) h.addView(profileChips(rules, p), Ui.lp(c, 14))
+        h.addView(Premium.heroText(c, if (p != null) "${p.emoji}  Ce que ${p.name} a regardé aujourd'hui" else "Ce que la TV a affiché aujourd'hui", 14.5f, soft = true), Ui.lp(c, 16))
+        val (used, _) = profileTime(rules, p)
+        val big = Usage.format(used)
+        h.addView(Premium.bigNumber(c, big, "regardées", if (big.length > 4) 52f else 72f), Ui.lp(c, 4))
+        val limit = limitOf(rules, p)
+        if (limit > 0) {
+            h.addView(Premium.heroProgress(c, used.toFloat() / (limit * 60_000L)), LinearLayout.LayoutParams(-1, Ui.dp(c, 6)).apply { topMargin = Ui.dp(c, 16) })
+            h.addView(Premium.heroText(c, "sur ${Usage.format(limit * 60_000L)} autorisées par jour", 12.5f, soft = true), Ui.lp(c, 8))
+        }
+        page.addView(h, LinearLayout.LayoutParams(-1, -2))
+        root = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL; val pd = Ui.dp(c, 16); setPadding(pd, Ui.dp(c, 2), pd, 0) }
+        page.addView(root, LinearLayout.LayoutParams(-1, -2))
+        if (error != null) root.addView(Ui.text(c, "Vérifiez que la TV est allumée et sur le même Wi-Fi. Nouvel essai toutes les 30 s.", 13f, muted = true), Ui.lp(c, 14))
+        listOf("today" to "Aujourd'hui", "week" to "Les 7 derniers jours", "hours" to "Les horaires").forEach { (id, title) ->
+            root.addView(heading(title), Ui.lp(c, 22))
+            renderDetail(rules, id)
+        }
         root.addView(AuroraNav.spacer(c))
     }
 
