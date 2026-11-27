@@ -138,6 +138,7 @@ class GuardService : AccessibilityService() {
         }.getOrNull()
         if (current != null && current == home && !overlays.blockVisible) {
             lastOffer = now
+            BoxLog.log("MISE À JOUR", "Nouvelle version de l'appli Box proposée à l'écran (TV sur l'accueil)")
             runCatching { startActivity(android.content.Intent(this, UpdateActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
     }
@@ -202,6 +203,7 @@ class GuardService : AccessibilityService() {
     private fun foreground(pkg: String, className: String?) {
         if (pkg == packageName || pkg in TRANSIENT || isIme(pkg)) return
         if (pkg == current) return
+        current?.let { exitReport(it, pkg) }
         current = pkg
         if (isFreebox) scheduleBadge(600)
         if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg) && !progWatch) { progWatch = true; refreshEvents() }
@@ -396,6 +398,7 @@ class GuardService : AccessibilityService() {
      * dans une appli de films est « Lecture », la classification est vérifiée avant la première image.
      */
     override fun onKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_UP) logKey(event)
         if (badgeEnd != null || swallowUpKey >= 0) badgeKey(event)?.let { return it }
         if (event.action != android.view.KeyEvent.ACTION_UP) return false
         val k = event.keyCode
@@ -488,6 +491,7 @@ class GuardService : AccessibilityService() {
         val last = store.lastProfile()?.let { id -> rules.profiles.firstOrNull { it.id == id } }
         val apply = {
             store.setActiveProfile(p.id); lastBlockPkg = null; lastInteraction = System.currentTimeMillis()
+            BoxLog.log("PROFIL", "${p.name} choisi sur la TV" + if (p.unlimited) " (sans limite)" else "")
             overlays.showBanner("Bonne séance, ${p.name} ${p.emoji}")
             main.postDelayed({ maybeShowContract(store.rules().profiles.firstOrNull { it.id == p.id }) }, 2_500)
             scheduleBadge(200)
@@ -627,8 +631,8 @@ class GuardService : AccessibilityService() {
         if (now - lastInteraction < rules.stillThereMin * 60_000L) return
         overlays.showStillThere(60, onYes = { lastInteraction = System.currentTimeMillis() }, onTimeout = {
             pauseMedia()
-            performGlobalAction(GLOBAL_ACTION_HOME)
-            if (android.os.Build.VERSION.SDK_INT >= 28) performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+            act(GLOBAL_ACTION_HOME, "personne devant la TV (« Tu es toujours là ? » sans réponse)")
+            if (android.os.Build.VERSION.SDK_INT >= 28) act(GLOBAL_ACTION_LOCK_SCREEN, "mise en veille après « Tu es toujours là ? »")
             addDiag("sleep", "Personne devant la TV : mise en veille")
             lastInteraction = System.currentTimeMillis()
         })
@@ -646,6 +650,7 @@ class GuardService : AccessibilityService() {
         // Profil par défaut choisi par le parent : appliqué d'office à l'allumage, sans « Qui regarde ? »
         if (interactive && allRules.enabled && profile == null && !overlays.whoVisible) allRules.startProfile()?.let { def ->
             store.setActiveProfile(def.id); lastBlockPkg = null; lastInteraction = now
+            BoxLog.log("PROFIL", "${def.name} appliqué d'office à l'allumage (profil par défaut)")
             overlays.showBanner("${def.emoji} ${def.name} · changer : appli Télécommande Box")
             server.push(JSONObject().put("event", "profile").put("id", def.id).put("name", def.name).put("emoji", def.emoji))
             addDiag("profile", "Profil par défaut appliqué à l'allumage : ${def.name}")
@@ -995,7 +1000,7 @@ class GuardService : AccessibilityService() {
         if (lastProgramBlock == key && overlays.blockVisible) return
         lastProgramBlock = key
         lastBlockPkg = pkg
-        performGlobalAction(GLOBAL_ACTION_HOME)
+        act(GLOBAL_ACTION_HOME, "programme bloqué sur ${label(pkg)}")
         val what = title ?: label(pkg)
         addDiag("program", "Programme bloqué sur ${label(pkg)} : $what. $reason")
         BoxLog.log("BLOCAGE", "${label(pkg)} : $what · $reason")
@@ -1129,8 +1134,10 @@ class GuardService : AccessibilityService() {
     private fun block(pkg: String, v: Verdict.Block, rules: BoxRules) {
         pauseMedia()
         if (overlays.pinVisible) return   // le parent est en train de valider : on ne recouvre pas le pavé
-        performGlobalAction(GLOBAL_ACTION_HOME)
-        if (lastBlockPkg == pkg && overlays.blockVisible) return
+        val again = lastBlockPkg == pkg && overlays.blockVisible   // déjà affiché : on renvoie l'accueil sans le re-noter
+        act(GLOBAL_ACTION_HOME, "${label(pkg)} bloquée : ${v.title}", log = !again)
+        if (again) return
+        BoxLog.log("BLOCAGE", "${label(pkg)} : ${v.title} · ${v.reason}")
         lastBlockPkg = pkg
         val pending = store.requests().any { it.optString("pkg") == pkg && it.optString("status") == "pending" && it.optString("kind") == v.kind }
         // Le parent peut débloquer sur place avec son code (sauf appli totalement interdite)
@@ -1171,7 +1178,7 @@ class GuardService : AccessibilityService() {
         val title = if (ProtectedApps.isInstaller(pkg)) "Installer ou supprimer une appli" else "Paramètres protégés"
         overlays.showPinPadEx(title, ::pinError,
             onSuccess = { settingsUnlockedUntil = System.currentTimeMillis() + 5 * 60_000 },
-            onCancel = { performGlobalAction(GLOBAL_ACTION_BACK); performGlobalAction(GLOBAL_ACTION_HOME) })
+            onCancel = { act(GLOBAL_ACTION_BACK, "$title : code parent annulé"); act(GLOBAL_ACTION_HOME, "$title : code parent annulé") })
     }
 
     /** Nouveau téléphone à appairer : le parent valide avant que le code d'appairage s'affiche. */
@@ -1206,7 +1213,83 @@ class GuardService : AccessibilityService() {
         else -> err("Commande inconnue")
     }
 
+    // ---------- Journal : qui a fait quoi (touches, actions de la Box, sorties d'applis, état de la TV) ----------
+
+    @Volatile private var lastKeyAt = 0L
+    @Volatile private var lastKeyName = ""
+    @Volatile private var lastBoxActionAt = 0L
+    @Volatile private var lastBoxAction = ""
+    @Volatile private var lastPhoneCmdAt = 0L
+    @Volatile private var lastPhoneCmd = ""
+    @Volatile private var lastStateLog = 0L
+
+    /** Action système faite par la Box elle-même (accueil, retour, veille), toujours notée avec sa raison. */
+    private fun act(action: Int, reason: String, log: Boolean = true): Boolean {
+        val name = when (action) { GLOBAL_ACTION_HOME -> "Accueil"; GLOBAL_ACTION_BACK -> "Retour"; GLOBAL_ACTION_RECENTS -> "Applis récentes"
+            GLOBAL_ACTION_NOTIFICATIONS -> "Notifications"; else -> if (android.os.Build.VERSION.SDK_INT >= 28 && action == GLOBAL_ACTION_LOCK_SCREEN) "Veille" else "action $action" }
+        lastBoxActionAt = System.currentTimeMillis(); lastBoxAction = "$name : $reason"
+        if (log) BoxLog.log("ACTION", "La Box envoie « $name » · $reason")
+        return performGlobalAction(action)
+    }
+
+    /** Touches de la vraie télécommande (et du téléphone). Les lettres et chiffres ne sont jamais notés. */
+    private fun logKey(e: android.view.KeyEvent) {
+        val k = e.keyCode
+        if (e.isPrintingKey && k != android.view.KeyEvent.KEYCODE_SPACE) return
+        val name = android.view.KeyEvent.keyCodeToString(k).removePrefix("KEYCODE_")
+        lastKeyAt = System.currentTimeMillis(); lastKeyName = name
+        val arrows = k == android.view.KeyEvent.KEYCODE_DPAD_UP || k == android.view.KeyEvent.KEYCODE_DPAD_DOWN ||
+            k == android.view.KeyEvent.KEYCODE_DPAD_LEFT || k == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+        val src = runCatching { e.device?.name }.getOrNull()?.takeIf { it.isNotBlank() } ?: "?"
+        val msg = "$name · ${current?.let { label(it) } ?: "?"} · source : $src"
+        if (arrows) BoxLog.change("TOUCHE", msg) else BoxLog.log("TOUCHE", msg)
+        val now = lastKeyAt
+        if (now - lastStateLog > 15 * 60_000L) { lastStateLog = now; BoxLog.log("ÉTAT", stateLine()) }
+    }
+
+    /** Une appli quitte l'écran : on dit pourquoi (touche, Box, téléphone) ou que la cause est inconnue. */
+    private fun exitReport(old: String, new: String) {
+        if (old in exempt || old == packageName) return
+        val now = System.currentTimeMillis()
+        fun ago(t: Long) = if (t == 0L) "jamais" else "il y a ${(now - t) / 1000} s"
+        val cause = when {
+            now - lastBoxActionAt < 8_000 -> "par la Box : $lastBoxAction"
+            now - lastKeyAt < 5_000 && lastKeyName in setOf("HOME", "BACK", "ESCAPE", "POWER", "TV_POWER", "SLEEP", "SETTINGS", "TV", "GUIDE", "MENU") ->
+                "touche $lastKeyName de la télécommande"
+            now - lastPhoneCmdAt < 5_000 -> "commande du téléphone : $lastPhoneCmd"
+            now - lastKeyAt < 3_000 -> "juste après la touche $lastKeyName (dans l'appli)"
+            else -> "SANS TOUCHE NI ACTION DE LA BOX (fermeture par l'appli elle-même ou par Android)"
+        }
+        val playing = runCatching { audioPlaying() }.getOrDefault(false)
+        BoxLog.log("SORTIE", "${label(old)} → ${label(new)} · cause : $cause · dernière touche $lastKeyName ${ago(lastKeyAt)} · " +
+            "dernière action Box ${ago(lastBoxActionAt)} · son en cours : ${if (playing) "oui" else "non"} · ${memLine()}")
+    }
+
+    private fun memLine(): String = runCatching {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val mi = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        val mine = runCatching { am.getProcessMemoryInfo(intArrayOf(android.os.Process.myPid()))[0].totalPss / 1024 }.getOrDefault(-1)
+        "mémoire libre ${mi.availMem / 1_048_576} / ${mi.totalMem / 1_048_576} Mo (seuil ${mi.threshold / 1_048_576} Mo${if (mi.lowMemory) ", MÉMOIRE BASSE" else ""}) · appli Box $mine Mo"
+    }.getOrDefault("mémoire ?")
+
+    /** Photo de l'état de la TV, ajoutée au journal à l'allumage, toutes les 15 min d'usage et à chaque export. */
+    private fun stateLine(): String = runCatching {
+        val rules = store.rules()
+        val p = activeProfile(rules)
+        val v = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+        val up = SystemClock.elapsedRealtime() / 60_000
+        "Box $v · à l'écran : ${current?.let { label(it) } ?: "?"} · profil : ${p?.name ?: "aucun"}${if (p?.unlimited == true) " (sans limite)" else ""} · " +
+            "contrôle ${if (rules.enabled) "actif" else "désactivé"} (${rules.profiles.size} profils) · TV allumée depuis ${up / 60} h ${up % 60} min · " +
+            "${memLine()} · fils ${Thread.activeCount()}"
+    }.getOrDefault("état ?")
+
     private fun pauseMedia() {
+        val playing = audioPlaying()
+        if (playing) {
+            val why = Throwable().stackTrace.getOrNull(1)?.methodName?.substringBefore('$').orEmpty()
+            BoxLog.log("ACTION", "Pause envoyée à ${current?.let { label(it) } ?: "l'appli à l'écran"} ($why)")
+            lastBoxActionAt = System.currentTimeMillis(); lastBoxAction = "pause ($why)"
+        }
         val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val t = SystemClock.uptimeMillis()
         am.dispatchMediaKeyEvent(KeyEvent(t, t, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE, 0))
@@ -1245,8 +1328,14 @@ class GuardService : AccessibilityService() {
     private val screenReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
-                Intent.ACTION_SCREEN_OFF -> { store.setActiveProfile(null); overlays.hideTimer(); endGrace(); hideBadge() }
-                Intent.ACTION_SCREEN_ON -> { lastInteraction = System.currentTimeMillis(); main.post { evaluate() } }
+                Intent.ACTION_SCREEN_OFF -> {
+                    BoxLog.log("ÉCRAN", "TV en veille (écran éteint) · ${current?.let { label(it) } ?: "?"} à l'écran · profil remis à zéro")
+                    store.setActiveProfile(null); overlays.hideTimer(); endGrace(); hideBadge()
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    BoxLog.log("ÉCRAN", "TV allumée · ${stateLine()}")
+                    lastInteraction = System.currentTimeMillis(); main.post { evaluate() }
+                }
             }
         }
     }
@@ -1282,6 +1371,7 @@ class GuardService : AccessibilityService() {
 
     private fun addDiag(kind: String, text: String) {
         val e = JSONObject().put("kind", kind).put("text", text).put("at", System.currentTimeMillis()).put("app", current ?: "")
+        BoxLog.log("DÉCISION", "[$kind] $text")
         store.addDiag(e)
         if (::server.isInitialized) server.push(JSONObject(e.toString()).put("event", "diag"))
     }
@@ -1424,7 +1514,16 @@ class GuardService : AccessibilityService() {
 
     // ---------- Commandes des téléphones appairés ----------
 
-    fun command(cmd: String, req: JSONObject, phoneName: String, phoneFp: String): JSONObject = when (cmd) {
+    fun command(cmd: String, req: JSONObject, phoneName: String, phoneFp: String): JSONObject {
+        if (cmd !in QUIET_COMMANDS) {
+            lastPhoneCmdAt = System.currentTimeMillis(); lastPhoneCmd = "$cmd ($phoneName)"
+            BoxLog.log("TÉLÉPHONE", "$phoneName → $cmd" + (req.optString("action").takeIf { it.isNotBlank() && cmd != "text" }?.let { " $it" } ?: "") +
+                (req.optString("pkg").takeIf { it.isNotBlank() }?.let { " · ${label(it)}" } ?: ""))
+        }
+        return commandImpl(cmd, req, phoneName, phoneFp)
+    }
+
+    private fun commandImpl(cmd: String, req: JSONObject, phoneName: String, phoneFp: String): JSONObject = when (cmd) {
         "status" -> status()
         "media_control" -> mediaControl(req.optString("action"), req.optLong("by", 10))
         "usage" -> usage(req.optLong("from"), req.optLong("to", System.currentTimeMillis()), req.optString("profile").take(64).ifBlank { null })
@@ -1443,7 +1542,7 @@ class GuardService : AccessibilityService() {
             if (tapAt(overlays.pointerX + 2, overlays.pointerY + 2, req.optBoolean("long"))) JSONObject().put("ok", true) else err("Clic impossible sur cette box")
         }
         "pointer_scroll" -> { swipe(overlays.pointerX, overlays.pointerY, req.optDouble("dy").toFloat()); JSONObject().put("ok", true) }
-        "back" -> { performGlobalAction(GLOBAL_ACTION_BACK); JSONObject().put("ok", true) }
+        "back" -> { act(GLOBAL_ACTION_BACK, "touche Retour envoyée par $phoneName"); JSONObject().put("ok", true) }
         "type_text" -> typeText(req.optString("text"), req.optBoolean("submit"))
         "message" -> {
             if (req.optBoolean("pause", true)) pauseMedia()
@@ -1454,6 +1553,7 @@ class GuardService : AccessibilityService() {
         }
         "set_profile" -> {
             val id = req.optString("id").ifBlank { null }
+            BoxLog.log("PROFIL", (store.rules().profiles.firstOrNull { it.id == id }?.name ?: "aucun") + " choisi depuis $phoneName")
             store.setActiveProfile(id); lastBlockPkg = null; main.post { evaluate() }
             JSONObject().put("ok", true)
         }
@@ -1465,17 +1565,18 @@ class GuardService : AccessibilityService() {
         "dev_kill" -> {
             // Ferme une appli en arrière-plan (ex. Netflix, pour qu'elle relise les réglages d'accessibilité au démarrage)
             val pkg = req.optString("pkg")
-            if (pkg == current) performGlobalAction(GLOBAL_ACTION_HOME)
+            if (pkg == current) act(GLOBAL_ACTION_HOME, "fermeture de ${label(pkg)} demandée par $phoneName")
             main.postDelayed({ runCatching { (getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).killBackgroundProcesses(pkg) } }, 1_500)
             BoxLog.log("DEV", "Fermeture de $pkg demandée")
             JSONObject().put("ok", true)
         }
         "dev_action" -> devAction(req.optString("text"), req.optString("action", "click"))
-        "dev_global" -> JSONObject().put("ok", performGlobalAction(when (req.optString("action")) {
-            "home" -> GLOBAL_ACTION_HOME; "recents" -> GLOBAL_ACTION_RECENTS; "notifications" -> GLOBAL_ACTION_NOTIFICATIONS; else -> GLOBAL_ACTION_BACK }))
+        "dev_global" -> JSONObject().put("ok", act(when (req.optString("action")) {
+            "home" -> GLOBAL_ACTION_HOME; "recents" -> GLOBAL_ACTION_RECENTS; "notifications" -> GLOBAL_ACTION_NOTIFICATIONS; else -> GLOBAL_ACTION_BACK }, "outil de développement ($phoneName)")))
         "box_log" -> {
-            BoxLog.log("TV", "Journal demandé par $phoneName")
-            JSONObject().put("ok", true).put("log", BoxLog.tail(req.optInt("max", 300_000).coerceIn(10_000, 600_000)))
+            BoxLog.log("TV", "Journal demandé par $phoneName · ${stateLine()}")
+            JSONObject().put("ok", true).put("log", BoxLog.tail(req.optInt("max", 800_000).coerceIn(10_000, 1_500_000)))
+                .put("state", stateLine()).put("diag", JSONArray(store.diag()))
                 .put("learn", learnReport())
         }
         "get_rules" -> JSONObject().put("ok", true).put("rules", store.rules().toJson())
@@ -1660,6 +1761,10 @@ class GuardService : AccessibilityService() {
     companion object {
         @Volatile var instance: GuardService? = null
             private set
+
+        /** Commandes de lecture ou très fréquentes (souris) : pas notées une par une dans le journal. */
+        val QUIET_COMMANDS = setOf("status", "usage", "apps", "pointer", "pointer_scroll", "diag", "dev_screen", "dev_events",
+            "dev_probe", "dev_tvquery", "box_log", "get_rules", "pin_pending", "programs", "requests", "prog_diag_result", "prog_report")
 
         val SETTINGS = ProtectedApps.SETTINGS + ProtectedApps.INSTALLERS
         val DREAMS = setOf("com.google.android.backdrop", "com.android.dreams.basic", "com.android.dreams.phototable")

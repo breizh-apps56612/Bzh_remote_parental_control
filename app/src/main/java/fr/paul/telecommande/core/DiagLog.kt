@@ -121,15 +121,36 @@ Le problème que je rencontre : """
         for (d in boxes) {
             append("\n\n========== Journal de la TV « ${d.name} » ==========\n")
             val res = runCatching {
-                kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeout(15_000) { BoxClient.of(c, d).call("box_log") } }
+                kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeout(25_000) { BoxClient.of(c, d).call("box_log", org.json.JSONObject().put("max", 1_200_000)) } }
             }
             res.onFailure { append("TV injoignable (${it.message ?: it.javaClass.simpleName}) : allumez-la et réessayez.\n") }
             res.getOrNull()?.let { r ->
                 if (!r.optBoolean("ok")) { append("Réponse : ${r.optString("error", "commande inconnue (mettez l'appli TV à jour)")}\n"); return@let }
+                r.optString("state").takeIf { it.isNotBlank() }?.let { append("État au moment de l'export : $it\n\n") }
                 append(r.optString("log"))
+                r.optJSONArray("diag")?.takeIf { it.length() > 0 }?.let { arr ->
+                    append("\n--- Décisions du contrôle parental (les plus récentes) ---\n")
+                    val f = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.FRANCE)
+                    for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { e ->
+                        append("${f.format(Date(e.optLong("at")))} [${e.optString("kind")}] ${e.optString("text")}" +
+                            (e.optString("app").takeIf { it.isNotBlank() }?.let { " · appli $it" } ?: "") + "\n")
+                    }
+                }
                 r.optJSONArray("learn")?.let { append("\n--- Ce que la TV a appris des applis ---\n${it.toString(1)}\n") }
             }
         }
+    }
+
+    /** Résumé en tête de fichier : version de l'appli, appareils enregistrés, lexique des étiquettes. */
+    private fun header(c: Context): String = buildString {
+        val v = runCatching { c.packageManager.getPackageInfo(c.packageName, 0) }.getOrNull()
+        append("Appli téléphone : ${v?.versionName ?: "?"} (${v?.let { if (Build.VERSION.SDK_INT >= 28) it.longVersionCode else @Suppress("DEPRECATION") it.versionCode.toLong() } ?: "?"})\n")
+        append("Export : ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.FRANCE).format(Date())}\n")
+        runCatching { DeviceStore(c).all() }.getOrDefault(emptyList()).forEach { d ->
+            append("Appareil : ${d.name} · ${d.type} · ${d.host.ifBlank { "adresse inconnue" }}${if (d.hasBoxApp) " · appli Box appairée" else ""}\n")
+        }
+        append("Lexique TV : SORTIE = une appli quitte l'écran et pourquoi · ACTION = ce que la Box a fait elle-même · TOUCHE = touche de télécommande · " +
+            "FENÊTRE = écran affiché par la Box · TÉLÉPHONE = commande reçue du téléphone · ÉTAT = mémoire, profil, version · DÉCISION = choix du contrôle parental\n")
     }
 
     fun export(a: Activity, toClaude: Boolean = false) {
@@ -142,7 +163,9 @@ Le problème que je rencontre : """
             out.listFiles()?.forEach { if (it != file) it.delete() }
             file.writeText(buildString {
                 append("Journal de diagnostic Télécommande\n")
-                append("Téléphone : ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}\n\n")
+                append("Téléphone : ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}\n")
+                append(header(a))
+                append("\n========== Journal du téléphone ==========\n")
                 old()?.takeIf { it.exists() }?.let { append(it.readText()) }
                 current()?.takeIf { it.exists() }?.let { append(it.readText()) }
                 append(boxLogs(a))

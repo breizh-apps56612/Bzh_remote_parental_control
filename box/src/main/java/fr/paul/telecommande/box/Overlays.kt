@@ -51,7 +51,13 @@ class Overlays(private val ctx: Context) {
 
     /** Dernière fenêtre ajoutée (vérifications visuelles uniquement). */
     var lastRootForTest: View? = null; private set
-    private fun add(v: View, p: WindowManager.LayoutParams) { noClip(v); lastRootForTest = v; runCatching { wm.addView(v, p) } }
+    /** Fenêtres plein écran qui prennent la main (l'appli derrière perd le focus) : notées dans le journal. */
+    private val named = java.util.WeakHashMap<View, String>()
+    private fun add(v: View, p: WindowManager.LayoutParams, name: String? = null) {
+        noClip(v); lastRootForTest = v
+        val ok = runCatching { wm.addView(v, p) }.isSuccess
+        if (name != null) { named[v] = name; BoxLog.log("FENÊTRE", "Affichée : $name" + if (ok) "" else " (refusée par Android)") }
+    }
 
     /** Les cartes et boutons grossissent quand ils ont le focus : on ne les rogne pas sur les bords. */
     private fun noClip(v: View) {
@@ -60,7 +66,11 @@ class Overlays(private val ctx: Context) {
             for (i in 0 until v.childCount) noClip(v.getChildAt(i))
         }
     }
-    private fun remove(v: View?) { if (v != null) runCatching { wm.removeView(v) } }
+    private fun remove(v: View?) {
+        if (v == null) return
+        runCatching { wm.removeView(v) }
+        named.remove(v)?.let { BoxLog.log("FENÊTRE", "Fermée : $it") }
+    }
 
     private fun card(padH: Int = 44, padV: Int = 36) = BoxUi.card(ctx, padH, padV)
 
@@ -99,7 +109,7 @@ class Overlays(private val ctx: Context) {
         root.addView(c)
         root.isFocusable = true
         root.setOnKeyListener { _, code, e -> if (code == KeyEvent.KEYCODE_BACK && e.action == KeyEvent.ACTION_UP) { hideBlock(); true } else false }
-        add(root, params(focusable = true, fullscreen = true))
+        add(root, params(focusable = true, fullscreen = true), "écran de blocage")
         block = root
         first?.requestFocus()
     }
@@ -257,7 +267,7 @@ class Overlays(private val ctx: Context) {
                 else -> false
             }
         }
-        add(root, params(focusable = true, fullscreen = true))
+        add(root, params(focusable = true, fullscreen = true), "pavé du code parent")
         pin = root
         refresh()
         firstBtn?.requestFocus()
@@ -429,7 +439,7 @@ class Overlays(private val ctx: Context) {
             if (cancelable && e.action == KeyEvent.ACTION_UP) { remove(root); who = null }
             true
         }
-        add(root, params(focusable = true, fullscreen = true))
+        add(root, params(focusable = true, fullscreen = true), "« Qui regarde ? »")
         who = root
         first?.requestFocus()
     }
@@ -448,7 +458,7 @@ class Overlays(private val ctx: Context) {
         val ok = button("J'arrive !", true) { remove(root); message = null; onOk() }
         c.addView(ok, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(30) })
         root.addView(c)
-        add(root, params(focusable = true, fullscreen = true))
+        add(root, params(focusable = true, fullscreen = true), "message")
         message = root
         ok.requestFocus()
     }
@@ -484,7 +494,7 @@ class Overlays(private val ctx: Context) {
         btns.addView(button("J'ai une question", false) { close(); onQuestion() }, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(16) })
         c.addView(btns, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(26) })
         root.addView(c)
-        add(root, params(focusable = true, fullscreen = true))
+        add(root, params(focusable = true, fullscreen = true), "contrat")
         contract = root
         ok.requestFocus()
     }
@@ -519,7 +529,7 @@ class Overlays(private val ctx: Context) {
         val yes = button("Oui, je regarde", true) { main.removeCallbacksAndMessages(root); remove(root); still = null; onYes() }
         c.addView(yes, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(28) })
         root.addView(c)
-        add(root, params(focusable = true, fullscreen = true))
+        add(root, params(focusable = true, fullscreen = true), "« Tu es toujours là ? »")
         still = root
         yes.requestFocus()
         var n = seconds

@@ -40,10 +40,19 @@ class BoxClient(private val context: Context, private val host: String, private 
     private fun exchange(s: SSLSocket, cmd: String, params: JSONObject): JSONObject {
         val id = UUID.randomUUID().toString().take(8)
         val msg = JSONObject(params.toString()).put("id", id).put("cmd", cmd)
-        BoxProtocol.write(s.outputStream, msg)
-        val res = BoxProtocol.LineReader(s.inputStream, BoxProtocol.MAX_TRUSTED_LINE).next() ?: throw RemoteException("La box a fermé la connexion")
-        if (!res.optBoolean("ok")) throw RemoteException(res.optString("error", "Refusé par la box"))
-        return res
+        val t0 = System.currentTimeMillis()
+        try {
+            BoxProtocol.write(s.outputStream, msg)
+            val res = BoxProtocol.LineReader(s.inputStream, BoxProtocol.MAX_TRUSTED_LINE).next() ?: throw RemoteException("La box a fermé la connexion")
+            if (!res.optBoolean("ok")) throw RemoteException(res.optString("error", "Refusé par la box"))
+            if (cmd !in QUIET) DiagLog.log("BOX→", "$cmd" + (params.optString("action").takeIf { it.isNotBlank() && cmd != "type_text" }?.let { " $it" } ?: "") +
+                " : ok (${System.currentTimeMillis() - t0} ms)")
+            return res
+        } catch (e: Exception) {
+            // Les échecs sont toujours notés, même pour les commandes de lecture
+            DiagLog.log("BOX→", "$cmd : ÉCHEC après ${System.currentTimeMillis() - t0} ms · ${e.javaClass.simpleName} ${e.message.orEmpty().take(160)}")
+            throw e
+        }
     }
 
     suspend fun call(cmd: String, params: JSONObject = JSONObject()): JSONObject = withContext(Dispatchers.IO) {
@@ -101,6 +110,9 @@ class BoxClient(private val context: Context, private val host: String, private 
     }
 
     companion object {
+        /** Lectures fréquentes et souris : seuls leurs échecs sont notés. */
+        private val QUIET = setOf("status", "usage", "apps", "pointer", "pointer_scroll", "diag", "dev_events", "dev_screen", "get_rules",
+            "pin_pending", "programs", "requests", "box_log", "subscribe")
         /**
          * Toujours l'empreinte enregistrée à jour : un écran ouvert avant un nouvel appairage garde sinon l'ancienne
          * en mémoire, et la box est refusée (« ne présente pas l'identité attendue ») alors que l'appairage est bon.

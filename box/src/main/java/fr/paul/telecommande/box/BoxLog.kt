@@ -14,7 +14,7 @@ import java.util.concurrent.Executors
  * Reste sur la box ; le téléphone appairé le récupère seulement quand on exporte son journal. Rien de tapé n'y figure.
  */
 object BoxLog {
-    private const val MAX_BYTES = 400_000L
+    private const val MAX_BYTES = 1_000_000L
     private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "boxlog").apply { isDaemon = true } }
     private val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.FRANCE)
     @Volatile private var dir: File? = null
