@@ -68,19 +68,23 @@ class GuardService : AccessibilityService() {
         overlays = Overlays(this)
         overlays.onPinRequest = { id, title -> if (::server.isInitialized) server.push(JSONObject().put("event", "pin_request").put("id", id).put("title", title)) }
         overlays.onPinClosed = { id -> if (::server.isInitialized) server.push(JSONObject().put("event", "pin_closed").put("id", id)) }
+        val t0 = SystemClock.elapsedRealtime()
         store = BoxStore.get(this)
+        val tStore = SystemClock.elapsedRealtime() - t0
         // Démarrage de la box : on redemande « Qui regarde ? »
         if (store.isNewBoot(System.currentTimeMillis() - SystemClock.elapsedRealtime())) store.setActiveProfile(null)
-        runCatching {
+        // Diagnostics du démarrage (identité, écrans des Paramètres…) sur un fil à part : ils parcourent les applis
+        // installées et pouvaient retarder de près d'une minute la remise en route de la protection après un plantage.
+        Thread({ runCatching {
             val meta = getSharedPreferences("box_meta", Context.MODE_PRIVATE)
             val fp = fr.paul.telecommande.shared.BoxProtocol.fingerprint(store.identity().second)
             val before = meta.getString("fp", null)
-            if (before != null && before != fp) addDiag("identity", "Identité de la box changée (${store.startupInfo}) : réappairage du téléphone nécessaire")
+            if (before != null && before != fp) main.post { addDiag("identity", "Identité de la box changée (${store.startupInfo}) : réappairage du téléphone nécessaire") }
             meta.edit().putString("fp", fp).apply()
-            addDiag("start", "Démarrage : ${store.startupInfo}, ${store.phones().size} téléphone(s) appairé(s)")
-            meta.getString("accessibilityOpen", null)?.let { addDiag("setup", "Bouton Activer : écran ouvert = $it") }
+            val startTxt = "Démarrage : ${store.startupInfo}, ${store.phones().size} téléphone(s) appairé(s)"; main.post { addDiag("start", startTxt) }
+            meta.getString("accessibilityOpen", null)?.let { v -> main.post { addDiag("setup", "Bouton Activer : écran ouvert = $v") } }
             meta.all.filterKeys { it.startsWith("special_") }.forEach { (k, v) -> BoxLog.log("CONFIG", "${k.removePrefix("special_")} : écran ouvert = $v") }
-            meta.all.filterKeys { it.startsWith("special_") }.forEach { (k, v) -> addDiag("setup", "${k.removePrefix("special_")} : écran ouvert = $v") }
+            meta.all.filterKeys { it.startsWith("special_") }.forEach { (k, v) -> main.post { addDiag("setup", "${k.removePrefix("special_")} : écran ouvert = $v") } }
             // Écrans d'accès spéciaux présents dans les Paramètres de la box (pour savoir si Free les a retirés ou seulement cachés)
             runCatching {
                 val pm = packageManager
@@ -91,9 +95,10 @@ class GuardService : AccessibilityService() {
                 }
                 val std = listOf("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS", android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
                     .joinToString { act -> act.substringAfterLast('.') + "=" + (android.content.Intent(act).resolveActivity(pm)?.className?.substringAfterLast('.') ?: "absent") }
-                addDiag("setup", "Accès spéciaux : $std ; écrans trouvés : ${found.distinct().joinToString().ifEmpty { "aucun" }}")
+                val txt = "Accès spéciaux : $std ; écrans trouvés : ${found.distinct().joinToString().ifEmpty { "aucun" }}"
+                main.post { addDiag("setup", txt) }
             }
-        }
+        } }, "box-diag-start").start()
         // Fin d'épisode en cours avant un redémarrage / une mise à jour : on reprend la même échéance (pas de temps en plus)
         store.graceState().let { (until, gp) ->
             if (until > System.currentTimeMillis()) { graceUntil = until; gracePkg = gp; watchContent(true) } else if (until != 0L) { store.setGraceState(0, null) }
@@ -113,6 +118,7 @@ class GuardService : AccessibilityService() {
             } }
             log.purgeBefore(System.currentTimeMillis() - 90L * 24 * 3600_000)
         }.start()
+        BoxLog.log("SERVICE", "Protection prête en ${SystemClock.elapsedRealtime() - t0} ms (stockage chiffré : $tStore ms)")
         main.removeCallbacks(tick)
         main.post(tick)
         main.postDelayed({ catchUpForeground() }, 800)
