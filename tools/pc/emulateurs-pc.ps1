@@ -51,7 +51,7 @@ $Adb = "$Sdk\platform-tools\adb.exe"; $Emu = "$Sdk\emulator\emulator.exe"
 function Adb {
   param([Parameter(ValueFromRemainingArguments)]$a)
   $args2 = ($a | ForEach-Object { if ("$_" -match '\s') { '"' + $_ + '"' } else { "$_" } }) -join ' '
-  & cmd.exe /d /c "`"$Adb`" $args2 2>nul"
+  & cmd.exe /d /s /c "`"`"$Adb`" $args2 2>nul`""   # /s : cmd retire seulement les guillemets extérieurs
 }
 
 if ($Arreter) {
