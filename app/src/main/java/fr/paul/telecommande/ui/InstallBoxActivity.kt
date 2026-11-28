@@ -213,12 +213,12 @@ class InstallBoxActivity : AppCompatActivity(), PairingUi {
         )),
         Step("Activer la protection", listOf(
             Sub("openbox", "Ouvrir l'appli Box sur la TV",
-                "Revenez à l'accueil de la TV, allez dans « Applications », puis ouvrez « Entente TV » avec OK. Cette ligne se coche toute seule.",
+                "Revenez à l'accueil de la TV, allez dans « Applications », puis ouvrez « Contrat parental TV » avec OK. Cette ligne se coche toute seule.",
                 "Aller à l'accueil de la TV", { tv?.send(RemoteKey.HOME) },
                 manualLabel = "L'appli Box est ouverte",
                 detect = { tvApp == BOX || boxUp }),
             Sub("protect", "Activer la protection",
-                "Sur la TV : « Activer », choisissez « Entente TV » puis activez-la.",
+                "Sur la TV : « Activer », choisissez « Contrat parental TV » puis activez-la.",
                 manualLabel = "C'est activé",
                 detect = { boxUp })
         )),

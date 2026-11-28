@@ -42,12 +42,12 @@ else ko "Démarrage des émulateurs"; exit 1; fi
 timeout 180 adb -s $PH install -r -g "$APK_PHONE" >/dev/null 2>&1 && ok "Installation appli téléphone" || ko "Installation appli téléphone"
 timeout 180 adb -s $TV install -r -g "$APK_BOX" >/dev/null 2>&1 && ok "Installation appli Box (TV)" || ko "Installation appli Box (TV)"
 
-# ---------- Nom « Entente » et icône adaptative (Téléphone 2.6.10 / TV 1.4.60) ----------
+# ---------- Nom « Contrat parental » et icône adaptative (Téléphone 2.6.10 / TV 1.4.60) ----------
 AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)
 if [ -n "$AAPT" ]; then
   bp=$(timeout 60 "$AAPT" dump badging "$APK_PHONE" 2>/dev/null); bt=$(timeout 60 "$AAPT" dump badging "$APK_BOX" 2>/dev/null)
-  [[ $bp == *"application-label:'Entente'"* ]] && ok "Nom de l'appli téléphone" "Entente" || ko "Nom de l'appli téléphone" "attendu : Entente"
-  [[ $bt == *"application-label:'Entente TV'"* ]] && ok "Nom de l'appli Box" "Entente TV" || ko "Nom de l'appli Box" "attendu : Entente TV"
+  [[ $bp == *"application-label:'Contrat parental'"* ]] && ok "Nom de l'appli téléphone" "Contrat parental" || ko "Nom de l'appli téléphone" "attendu : Contrat parental"
+  [[ $bt == *"application-label:'Contrat parental TV'"* ]] && ok "Nom de l'appli Box" "Contrat parental TV" || ko "Nom de l'appli Box" "attendu : Contrat parental TV"
   [[ $bp == *"anydpi-v26/ic_launcher.xml"* ]] && ok "Icône adaptative téléphone" "Android 8+" || ko "Icône adaptative téléphone" "icône adaptative absente"
   [[ $bt == *"anydpi-v26/ic_launcher.xml"* ]] && ok "Icône adaptative Box" "Android 8+" || ko "Icône adaptative Box" "icône adaptative absente"
 else info "Nom et icône" "aapt introuvable sur le banc"; fi

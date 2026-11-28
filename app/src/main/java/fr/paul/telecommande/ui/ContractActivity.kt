@@ -138,7 +138,7 @@ class ContractActivity : AppCompatActivity() {
         val top = LinearLayout(c).apply { gravity = Gravity.CENTER_VERTICAL }
         top.addView(Premium.heroRound(c, R.drawable.ic_back, "Retour") { back() }, LinearLayout.LayoutParams(Ui.dp(c, 44), Ui.dp(c, 44)))
         val (n, total) = if (editing) index + 1 to steps.size else index to steps.size - 1
-        top.addView(Premium.heroText(c, if (s is Step.Intro) "Contrat parental" else "Étape $n sur $total", 13.5f, soft = true).apply { gravity = Gravity.CENTER },
+        top.addView(Premium.heroText(c, if (s is Step.Intro) "Son contrat" else "Étape $n sur $total", 13.5f, soft = true).apply { gravity = Gravity.CENTER },
             LinearLayout.LayoutParams(0, -2, 1f))
         top.addView(View(c), LinearLayout.LayoutParams(Ui.dp(c, 44), 1))
         h.addView(top)

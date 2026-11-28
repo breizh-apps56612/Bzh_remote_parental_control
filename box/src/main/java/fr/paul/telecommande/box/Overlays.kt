@@ -151,7 +151,7 @@ class Overlays(private val ctx: Context) {
         c.addView(text(codeText.chunked(3).joinToString("  "), 64f, bold = true).apply { letterSpacing = 0.08f; setTextColor(BoxUi.INK) },
             LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(14); bottomMargin = dp(8) })
         c.minimumWidth = dp(620)
-        c.addView(text("Saisissez ce code dans l'appli Entente du téléphone.\nNe le communiquez à personne d'autre.", 16f, muted), LinearLayout.LayoutParams(-1, -2))
+        c.addView(text("Saisissez ce code dans l'appli Contrat parental du téléphone.\nNe le communiquez à personne d'autre.", 16f, muted), LinearLayout.LayoutParams(-1, -2))
         add(c, params(focusable = false, fullscreen = false))
         code = c
         main.postDelayed({ if (code === c) { remove(c); code = null } }, durationMs)

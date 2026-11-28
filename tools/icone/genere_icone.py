@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Génère l'icône « Entente » (téléphone + Box) et la bannière Android TV, en vecteurs Android + aperçus SVG.
+"""Génère l'icône « Contrat parental » (téléphone + Box) et la bannière Android TV, en vecteurs Android + aperçus SVG.
 
 Emblème : un pavé de télécommande blanc (repères haut/bas/gauche/droite) au centre duquel deux cercles,
 l'un indigo, l'autre sarcelle, se chevauchent : le parent et l'enfant qui se mettent d'accord.
@@ -123,8 +123,10 @@ for mod in ("app", "box"):
 # ---------- Bannière Android TV 320×180 ----------
 ban_emb = emblem(64, 90, 36)
 tx = 116
-title_d, _ = text_path("Entente", tx, 96, 38)
-sub_d, _ = text_path("TV · temps d'écran en famille", tx, 120, 11.5, "app/src/main/res/font/sora_semibold.ttf")
+l1, _ = text_path("Contrat", tx, 78, 30)
+l2, _ = text_path("parental", tx, 110, 30)
+title_d = l1 + l2
+sub_d, _ = text_path("TV · temps d'écran en famille", tx, 134, 11.5, "app/src/main/res/font/sora_semibold.ttf")
 ban_body = (lambda bg: f'{bg}\n    ' + vec_paths(ban_emb)
             + f'\n    <path android:pathData="{title_d}" android:fillColor="#FFFFFF"/>'
             + f'\n    <path android:pathData="{sub_d}" android:fillColor="#FFFFFF" android:fillAlpha="0.82"/>')

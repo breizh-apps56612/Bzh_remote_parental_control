@@ -108,7 +108,7 @@ object DiagLog {
     /** Regroupe le journal dans un fichier texte et ouvre le menu de partage d'Android. */
     private const val CLAUDE_PKG = "com.anthropic.claude"
 
-    private val CLAUDE_PROMPT = """Voici le journal de diagnostic de mon application « Entente » (télécommande Android pour box Android TV).
+    private val CLAUDE_PROMPT = """Voici le journal de diagnostic de mon application « Contrat parental » (télécommande Android pour box Android TV).
 Explique-moi en termes simples ce qui se passe et ce que je dois faire pour régler le problème.
 Repères : ATV→ = envoyé à la TV, ATV← = reçu de la TV, APK = envoi de l'appli Box par le téléphone, BT = souris Bluetooth, PARENTAL = contrôle parental, BLOQUÉ = action refusée par sécurité. À la fin : le journal de la TV (APPLI, CLIC, ÉCRAN = nombre de textes lus, contenu masqué, LECTURE, PROGRAMME, BLOCAGE).
 Le problème que je rencontre : """
@@ -162,7 +162,7 @@ Le problème que je rencontre : """
             val file = File(out, name)
             out.listFiles()?.forEach { if (it != file) it.delete() }
             file.writeText(buildString {
-                append("Journal de diagnostic Entente\n")
+                append("Journal de diagnostic Contrat parental\n")
                 append("Téléphone : ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}\n")
                 append(header(a))
                 append("\n========== Journal du téléphone ==========\n")
