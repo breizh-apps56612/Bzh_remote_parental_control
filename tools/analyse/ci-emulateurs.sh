@@ -74,6 +74,18 @@ if toucher "Réglages" "$x"; then
   timeout 20 adb -s $PH shell input keyevent KEYCODE_BACK
 else info "Réglages : onglet non atteint par le banc (vérifié par le test MenusTest du build)"; fi
 
+# ---------- 2c. Thème sombre du téléphone (Téléphone 2.6.7 : la télécommande suit le thème) ----------
+# Les couleurs de l'écran Télécommande elles-mêmes sont mesurées par RemoteTest (build) en clair et en sombre.
+if timeout 20 adb -s $PH shell cmd uimode night yes >/dev/null 2>&1; then
+  timeout 20 adb -s $PH shell am force-stop $PKG_PH
+  timeout 60 adb -s $PH shell monkey -p $PKG_PH -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+  sleep 6; cap $PH 02c-telephone-theme-sombre
+  vivant $PH $PKG_PH && ok "Thème sombre du téléphone : l'appli s'ouvre" "capture 02c" || ko "Thème sombre du téléphone : l'appli s'ouvre" "appli arrêtée"
+  timeout 20 adb -s $PH shell cmd uimode night no >/dev/null 2>&1
+  timeout 20 adb -s $PH shell am force-stop $PKG_PH
+  timeout 60 adb -s $PH shell monkey -p $PKG_PH -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 4
+else info "Thème sombre : commande uimode indisponible sur cet émulateur"; fi
+
 # ---------- 3. Sécurité du serveur de la Box (port 7363) ----------
 timeout 20 adb -s $TV forward tcp:7363 tcp:7363 >/dev/null   # 127.0.0.1:7363 ici : vu par la TV comme venant de 127.0.0.1
 timeout 20 adb -s $TV emu redir add tcp:7364:7363 >/dev/null  # 127.0.0.1:7364 ici : vu par la TV comme venant de 10.0.2.2 (un autre appareil)

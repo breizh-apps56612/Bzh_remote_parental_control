@@ -55,4 +55,9 @@
     <color name="indigo_soft">#EEEDFF</color>
     <color name="indigo_ink">#1B1860</color>
     <color name="tile">#F2F3F8</color>
+    <!-- Télécommande « Perle » (thème clair) -->
+    <color name="remote_bg_mid">#FAFAFD</color>
+    <color name="remote_bg_end">#EBEDF8</color>
+    <color name="pad_sheen">#99FFFFFF</color>
+    <color name="remote_shadow">#FF2B2A8C</color>
 </resources>

@@ -213,7 +213,7 @@ class TouchpadView @JvmOverloads constructor(context: Context, attrs: AttributeS
             ContextCompat.getColor(context, R.color.accent_soft), 0x00000000, android.graphics.Shader.TileMode.CLAMP)
         canvas.drawRoundRect(rect, r, r, glowPaint)
         // reflet nacré en haut du pavé
-        sheenPaint.shader = android.graphics.LinearGradient(0f, 0f, 0f, height * 0.35f, 0x99FFFFFF.toInt(), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+        sheenPaint.shader = android.graphics.LinearGradient(0f, 0f, 0f, height * 0.35f, ContextCompat.getColor(context, R.color.pad_sheen), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
         canvas.drawRoundRect(rect, r, r, sheenPaint)
         rect.inset(strokePaint.strokeWidth / 2, strokePaint.strokeWidth / 2)
         canvas.drawRoundRect(rect, r, r, strokePaint)

@@ -20,7 +20,7 @@
     <style name="Theme.Telecommande.Remote" parent="Theme.Telecommande" />
 
     <!--
-      Télécommande « Perle » : un volet clair et nacré qui monte du bas et redescend
+      Télécommande « Perle » : un volet nacré (clair ou sombre selon le thème du téléphone) qui monte du bas et redescend
       (poignée, pastille « TÉLÉCOMMANDE », dock flottant) pour ne pas la confondre avec les écrans de l'appli.
     -->
     <style name="Theme.Telecommande.RemoteSheet" parent="Theme.Telecommande">

@@ -49,4 +49,9 @@
     <color name="indigo_soft">#23224A</color>
     <color name="indigo_ink">#DCDBFF</color>
     <color name="tile">#15172B</color>
+    <!-- Télécommande « Perle » (thème sombre) : nuit bleutée, reflet très léger sur le pavé -->
+    <color name="remote_bg_mid">#0E1022</color>
+    <color name="remote_bg_end">#12142B</color>
+    <color name="pad_sheen">#14FFFFFF</color>
+    <color name="remote_shadow">#FF000000</color>
 </resources>

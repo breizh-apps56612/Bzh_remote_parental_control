@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Télécommande « Perle » : fond nacré clair, halos aurore discrets en haut et sous le dock -->
+<!-- Télécommande « Perle » : fond nacré (clair ou nuit selon le thème du téléphone), halos aurore discrets en haut et sous le dock -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item><shape><gradient android:angle="270" android:startColor="@color/bg" android:centerColor="#FAFAFD" android:endColor="#EBEDF8" /></shape></item>
+    <item><shape><gradient android:angle="270" android:startColor="@color/bg" android:centerColor="@color/remote_bg_mid" android:endColor="@color/remote_bg_end" /></shape></item>
     <item android:gravity="top|start" android:height="420dp" android:width="420dp" android:top="-170dp" android:left="-140dp">
         <shape android:shape="oval"><gradient android:type="radial" android:gradientRadius="210dp" android:startColor="#2E4B48E0" android:endColor="#004B48E0" /></shape>
     </item>

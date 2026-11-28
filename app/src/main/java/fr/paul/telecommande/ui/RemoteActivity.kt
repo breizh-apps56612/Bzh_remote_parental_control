@@ -126,12 +126,6 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
     /** Dernier appui sur le retour du téléphone (le second, juste après, ferme la télécommande). */
     private var backAt = 0L
 
-    /** La télécommande est toujours claire (thème « Perle »), même si le téléphone est en thème sombre. */
-    override fun attachBaseContext(newBase: android.content.Context) {
-        delegate.localNightMode = androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO
-        super.attachBaseContext(newBase)
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_remote)
@@ -229,7 +223,8 @@ class RemoteActivity : AppCompatActivity(), PairingUi {
      * sous le doigt, et arrivée en cascade (en-tête, carte, pavé, dock) à l'ouverture du volet.
      */
     private fun premiumLook() {
-        val tint = 0xFF2B2A8C.toInt()
+        // Ombres teintées d'indigo en thème clair, noires en thème sombre (la télécommande suit le thème du téléphone)
+        val tint = androidx.core.content.ContextCompat.getColor(this, R.color.remote_shadow)
         fun lift(id: Int, elevDp: Float) = findViewById<View>(id).apply {
             elevation = elevDp * d
             if (Build.VERSION.SDK_INT >= 28) { outlineSpotShadowColor = tint; outlineAmbientShadowColor = tint }

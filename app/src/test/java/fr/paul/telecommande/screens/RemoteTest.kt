@@ -150,6 +150,57 @@ class RemoteTest {
         assertEquals(n, tv.keys.size)
     }
 
+    /** Rendu de l'écran en image, pour mesurer les couleurs réellement affichées. */
+    private fun render(a: RemoteActivity): Bitmap {
+        val root = a.window.decorView
+        val bmp = Bitmap.createBitmap(1080, 2400, Bitmap.Config.ARGB_8888)
+        root.draw(Canvas(bmp))
+        return bmp
+    }
+
+    private fun luminance(c: Int): Double =
+        (0.2126 * android.graphics.Color.red(c) + 0.7152 * android.graphics.Color.green(c) + 0.0722 * android.graphics.Color.blue(c)) / 255.0
+
+    /** Fond de l'écran (bord gauche, à mi-hauteur) et fond du pavé tactile (zone sans dessin). */
+    private fun themeSample(a: RemoteActivity): Pair<Double, Double> {
+        val bmp = render(a)
+        val pad = a.findViewById<TouchpadView>(R.id.touchpad)
+        val p = IntArray(2); pad.getLocationInWindow(p)
+        fun avg(x0: Int, y0: Int, n: Int = 24): Double {
+            var t = 0.0; var k = 0
+            for (x in x0 until x0 + n step 3) for (y in y0 until y0 + n step 3)
+                if (x in 0 until bmp.width && y in 0 until bmp.height) { t += luminance(bmp.getPixel(x, y)); k++ }
+            return t / k
+        }
+        val bg = avg(2, 1190, 8)
+        val padLum = avg(p[0] + (pad.width * 0.25).toInt(), p[1] + (pad.height * 0.3).toInt(), 40)
+        return bg to padLum
+    }
+
+    @Test fun lightThemeGivesALightRemote() {
+        val (bg, pad) = themeSample(launch())
+        assertTrue("fond trop sombre en thème clair : $bg", bg > 0.75)
+        assertTrue("pavé trop sombre en thème clair : $pad", pad > 0.75)
+    }
+
+    @Test @Config(qualifiers = "w412dp-h915dp-night-xxhdpi")
+    fun darkThemeGivesADarkRemote() {
+        val a = launch()
+        val (bg, pad) = themeSample(a)
+        assertTrue("fond trop clair en thème sombre : $bg", bg < 0.2)
+        assertTrue("pavé trop clair en thème sombre : $pad", pad < 0.25)
+        // Les textes restent lisibles : nom de la TV en clair sur fond sombre
+        val name = a.findViewById<android.widget.TextView>(R.id.deviceName)
+        assertTrue("nom de la TV illisible en thème sombre", luminance(name.currentTextColor) > 0.7)
+        // Les touches fonctionnent toujours
+        a.findViewById<View>(R.id.btnHome).performClick(); idle()
+        assertEquals(listOf(RemoteKey.HOME), tv.keys)
+        if (System.getenv("SCREENS") == "1") {
+            val out = File(System.getenv("SCREENS_DIR") ?: "build/screens").apply { mkdirs() }
+            File(out, "00c-telecommande-sombre.png").outputStream().use { render(a).compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+    }
+
     @Test fun screenshots() {
         org.junit.Assume.assumeTrue(System.getenv("SCREENS") == "1")
         val out = File(System.getenv("SCREENS_DIR") ?: "build/screens").apply { mkdirs() }
