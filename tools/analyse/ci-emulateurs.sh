@@ -143,7 +143,10 @@ except Exception as e: print("NON " + str(e)[:80])')
     fi; sleep 0.8; done; }
   # Clavier virtuel de l'émulateur TV (pour les appuis bruts) : adb root, puis le périphérique qui a les flèches
   timeout 30 adb -s $TV root >/dev/null 2>&1; sleep 3; timeout 30 adb -s $TV wait-for-device
-  CLAVIER=$(timeout 20 adb -s $TV shell getevent -pl 2>/dev/null | tr -d '\r' | awk '/^add device/{d=$4} /KEY_UP|KEY_RIGHT/{if(d!=""){print d; exit}}')
+  timeout 20 adb -s $TV shell getevent -pl 2>/dev/null | tr -d '\r' > "$OUT/journaux/tv-peripheriques.txt"
+  timeout 20 adb -s $TV shell id 2>/dev/null | tr -d '\r' >> "$OUT/journaux/tv-peripheriques.txt"
+  # Le clavier de l'émulateur (« qwerty2 ») porte les flèches de la télécommande
+  CLAVIER=$(awk '/^add device/{d=$4} /name:.*qwerty/{print d; exit}' "$OUT/journaux/tv-peripheriques.txt")
   info "Télécommande du banc" "${CLAVIER:+appuis bruts sur $CLAVIER}${CLAVIER:-console de l émulateur}"
   pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
 try:
@@ -158,7 +161,7 @@ except Exception as e: print("erreur " + str(e)[:80])'; }
   sleep 1; b=$(pastille); cap $TV 07-tv-pastille-selection
   # Relevé : ce que la Box a vu des flèches (journal Box) et l'arbre de l'écran TV (émulateur, aucune donnée personnelle)
   timeout 90 python3 -I "$HERE/boxcli.py" box_log '{"max":20000}' 2>/dev/null | python3 -I -c 'import json,sys
-try: print("\n".join(l for l in json.loads(sys.stdin.read()).get("log","").splitlines() if "PASTILLE" in l or "PROFIL" in l or "TOUCHE" in l))
+try: print("\n".join(l for l in json.loads(sys.stdin.read()).get("log","").splitlines() if any(m in l for m in ("PASTILLE", "PROFIL", "TOUCHE", "SERVICE"))))
 except Exception as e: print("journal illisible", e)' > "$OUT/journaux/pastille.txt"
   timeout 30 adb -s $TV shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; timeout 20 adb -s $TV exec-out cat /sdcard/ui.xml > "$OUT/journaux/ecran-tv-accueil.xml" 2>/dev/null
   info "Relevé pastille" "$(grep -E "PASTILLE|TOUCHE" "$OUT/journaux/pastille.txt" | tail -3 | cut -c1-200 | tr '\n|' '  ')"
