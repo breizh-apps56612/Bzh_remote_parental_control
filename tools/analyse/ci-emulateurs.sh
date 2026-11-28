@@ -134,8 +134,17 @@ except Exception as e: print("NON " + str(e)[:80])')
   touche() { for k in "$@"; do timeout 20 adb -s $TV shell input keyevent KEYCODE_$k; sleep 0.8; done; }
   # Vraie télécommande : appuis envoyés par la console de l'émulateur (clavier virtuel). Les touches « adb input »
   # sont simulées et Android ne les montre pas au service de la Box, contrairement à une vraie télécommande.
-  telecommande() { local c; for k in "$@"; do case $k in DPAD_UP) c=KEY_UP;; DPAD_DOWN) c=KEY_DOWN;; DPAD_LEFT) c=KEY_LEFT;; DPAD_RIGHT) c=KEY_RIGHT;; *) c=KEY_ENTER;; esac
-    timeout 20 adb -s $TV emu event send EV_KEY:$c:1 EV_SYN:0:0 >/dev/null; sleep 0.1; timeout 20 adb -s $TV emu event send EV_KEY:$c:0 EV_SYN:0:0 >/dev/null; sleep 0.8; done; }
+  telecommande() { local c n; for k in "$@"; do case $k in DPAD_UP) c=KEY_UP; n=103;; DPAD_DOWN) c=KEY_DOWN; n=108;; DPAD_LEFT) c=KEY_LEFT; n=105;; DPAD_RIGHT) c=KEY_RIGHT; n=106;; *) c=KEY_ENTER; n=28;; esac
+    if [ -n "${CLAVIER:-}" ]; then   # appui brut sur le clavier virtuel de l'émulateur (droits root)
+      timeout 20 adb -s $TV shell "sendevent $CLAVIER 1 $n 1; sendevent $CLAVIER 0 0 0; sendevent $CLAVIER 1 $n 0; sendevent $CLAVIER 0 0 0" >/dev/null 2>&1
+    else
+      timeout 20 adb -s $TV emu event send EV_KEY:$c:1 EV_SYN:0:0 >> "$OUT/journaux/console-touches.txt" 2>&1; sleep 0.1
+      timeout 20 adb -s $TV emu event send EV_KEY:$c:0 EV_SYN:0:0 >> "$OUT/journaux/console-touches.txt" 2>&1
+    fi; sleep 0.8; done; }
+  # Clavier virtuel de l'émulateur TV (pour les appuis bruts) : adb root, puis le périphérique qui a les flèches
+  timeout 30 adb -s $TV root >/dev/null 2>&1; sleep 3; timeout 30 adb -s $TV wait-for-device
+  CLAVIER=$(timeout 20 adb -s $TV shell getevent -pl 2>/dev/null | tr -d '\r' | awk '/^add device/{d=$4} /KEY_UP|KEY_RIGHT/{if(d!=""){print d; exit}}')
+  info "Télécommande du banc" "${CLAVIER:+appuis bruts sur $CLAVIER}${CLAVIER:-console de l émulateur}"
   pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
 try:
     d=json.loads(sys.stdin.read()); b=d.get("badge") or {}; p=d.get("profile") or {}
