@@ -103,6 +103,12 @@ try:
     print(("OUI " if ok else "NON ") + str(len(s) if isinstance(s, list) else "absent"))
 except Exception as e: print("NON " + str(e)[:80])')
   [[ $r == OUI* ]] && ok "Activité : détail des séances envoyé par la TV" "${r#OUI } séance(s)" || ko "Activité : détail des séances envoyé par la TV" "$r"
+  # Code parent refusé (TV, téléphone, validation) : toujours affiché sur la TV (Box 1.4.57)
+  sortie=$(TV=$TV OUT="$OUT" timeout 240 python3 -I "$HERE/test_code_parent.py" 2>&1); echo "$sortie" > "$OUT/journaux/test-code-parent.txt"
+  while IFS='|' read -r etat nom detail; do
+    case "$etat" in OK) ok "$nom" "$detail" ;; KO) ko "$nom" "$detail" ;; INFO) info "$nom" "$detail" ;; esac
+  done <<< "$sortie"
+  grep -qE '^(OK|KO)\|' <<< "$sortie" || ko "Tests du code parent" "le script n'a rien rendu : $(tail -c 150 <<< "$sortie" | tr '\n' ' ')"
 else
   info "Appairage non testé" "code illisible sur la capture (lecture automatique), voir 02-tv-code-appairage.png"
 fi
