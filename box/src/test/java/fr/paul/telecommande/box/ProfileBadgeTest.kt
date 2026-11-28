@@ -78,10 +78,20 @@ class ProfileBadgeTest {
         assertNull(ProfileBadge.homeSpot(listOf(Node("", 0, 0, 1920, 1080, false), Node("Pause", 900, 900, 1000, 980, true)), 1920, h, 40, 26))
     }
 
-    @Test fun upOrRightThatDoesNotMoveAtTheTopReachesTheBadge() {
-        assertTrue(ProfileBadge.reachesBadge(intArrayOf(1660, 40, 1710, 90), intArrayOf(1660, 40, 1710, 90), h))
-        assertFalse(ProfileBadge.reachesBadge(intArrayOf(1660, 40, 1710, 90), intArrayOf(1580, 40, 1620, 80), h))  // le focus a bougé
-        assertFalse(ProfileBadge.reachesBadge(intArrayOf(300, 620, 450, 700), intArrayOf(300, 620, 450, 700), h))  // bas de l'écran
+    @Test fun rightOnTheLastIconOfTheTopRowReachesTheBadge() {
+        val menu = freeboxMenu()
+        assertTrue(ProfileBadge.lastOfTopRow(intArrayOf(1660, 40, 1710, 90), menu, h))    // réglages : plus rien à droite
+        assertFalse(ProfileBadge.lastOfTopRow(intArrayOf(1580, 40, 1620, 80), menu, h))   // notifications : les réglages sont à droite
+        assertFalse(ProfileBadge.lastOfTopRow(intArrayOf(900, 620, 1050, 700), menu, h))  // rangée d'applis, plus bas
+        assertFalse(ProfileBadge.lastOfTopRow(null, menu, h))
+        // Émulateur Android TV : « Settings » grossit quand il est sélectionné (de 1636..1732 à 1632..1736)
+        assertTrue(ProfileBadge.lastOfTopRow(intArrayOf(1632, 120, 1736, 224), listOf(Node("", 1560, 140, 1616, 204, true), Node("Settings", 1632, 120, 1736, 224, true)), h))
+    }
+
+    @Test fun upThatDoesNotMoveAtTheTopReachesTheBadge() {
+        assertTrue(ProfileBadge.reachesBadge(intArrayOf(1636, 124, 1732, 220), intArrayOf(1632, 120, 1736, 224), h))  // il a juste grossi
+        assertFalse(ProfileBadge.reachesBadge(intArrayOf(1660, 40, 1710, 90), intArrayOf(1580, 40, 1620, 80), h))      // le focus a bougé
+        assertFalse(ProfileBadge.reachesBadge(intArrayOf(300, 620, 450, 700), intArrayOf(300, 620, 450, 700), h))      // bas de l'écran
         assertFalse(ProfileBadge.reachesBadge(null, null, h))
     }
 }

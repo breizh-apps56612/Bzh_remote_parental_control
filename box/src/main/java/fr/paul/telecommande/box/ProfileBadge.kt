@@ -56,9 +56,27 @@ object ProfileBadge {
         return Spot((left - gap - size / 2).coerceAtLeast(size), cy.coerceAtLeast(size / 2 + 4))
     }
 
-    /** Flèche haut ou droite sans effet (focus immobile) en haut de l'écran : l'enfant cherche la pastille. */
-    fun reachesBadge(before: IntArray?, after: IntArray?, screenH: Int): Boolean =
-        before != null && after != null && before.contentEquals(after) && before[1] < screenH * 0.35
+    /**
+     * Flèche droite sur le dernier élément sélectionnable de la ligne du haut (réglages, horloge…) : rien d'autre
+     * à droite, la flèche va donc sur la pastille. [focus] = gauche, haut, droite, bas de l'élément sélectionné.
+     */
+    fun lastOfTopRow(focus: IntArray?, nodes: List<Node>, screenH: Int): Boolean {
+        if (focus == null || focus[2] <= focus[0]) return false
+        val cy = (focus[1] + focus[3]) / 2
+        if (cy > screenH * 0.3) return false
+        val tol = maxOf((focus[3] - focus[1]) / 2, screenH / 30)
+        val fcx = (focus[0] + focus[2]) / 2
+        return nodes.none { it.focusable && it.right > it.left && kotlin.math.abs(it.centerY - cy) <= tol && (it.left + it.right) / 2 > fcx + 8 &&
+            !(it.left <= focus[0] + 4 && it.right >= focus[2] - 4) }   // un conteneur qui englobe le focus ne compte pas
+    }
+
+    /** Flèche haut sans effet en haut de l'écran (le focus reste à peu près au même endroit, même s'il grossit). */
+    fun reachesBadge(before: IntArray?, after: IntArray?, screenH: Int): Boolean {
+        if (before == null || after == null) return false
+        val tol = maxOf((before[2] - before[0]) / 3, 24)
+        return kotlin.math.abs((before[0] + before[2]) / 2 - (after[0] + after[2]) / 2) <= tol &&
+            kotlin.math.abs((before[1] + before[3]) / 2 - (after[1] + after[3]) / 2) <= tol && before[1] < screenH * 0.3
+    }
 
     /** L'élément qui a le focus est-il le dernier du bandeau (l'avatar) ? Alors flèche droite va sur la pastille. */
     fun focusAtEnd(focusLeft: Int, focusTop: Int, focusRight: Int, focusBottom: Int, end: Node): Boolean {

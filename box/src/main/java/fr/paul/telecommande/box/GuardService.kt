@@ -662,11 +662,16 @@ class GuardService : AccessibilityService() {
             ProfileBadge.focusAtEnd(before[0], before[1], before[2], before[3], end)) {
             swallowUpKey = k; selectBadge("flèche droite depuis l'avatar d'Oqee"); return true
         }
-        // Toutes les box : haut ou droite sans effet en haut de l'écran (le focus ne bouge plus) → la pastille
-        main.postDelayed({
-            if (badgeEnd != null && !badgeSelected && ProfileBadge.reachesBadge(before, focusRect(), resources.displayMetrics.heightPixels))
-                selectBadge("haut / droite en haut de l'accueil")
-        }, 300)
+        val screenH = resources.displayMetrics.heightPixels
+        // Toutes les box : flèche droite sur le dernier élément de la ligne du haut (réglages, horloge…) → la pastille
+        if (k == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && ProfileBadge.lastOfTopRow(before, runCatching { screenNodes() }.getOrNull().orEmpty(), screenH)) {
+            swallowUpKey = k; selectBadge("flèche droite au bout de la ligne du haut"); return true
+        }
+        // Flèche haut sans effet tout en haut de l'écran : la pastille aussi
+        if (k == android.view.KeyEvent.KEYCODE_DPAD_UP) main.postDelayed({
+            if (badgeEnd != null && !badgeSelected && ProfileBadge.reachesBadge(before, focusRect(), screenH))
+                selectBadge("flèche haut tout en haut de l'accueil")
+        }, 450)
         return null
     }
 
