@@ -664,7 +664,11 @@ class GuardService : AccessibilityService() {
         }
         val screenH = resources.displayMetrics.heightPixels
         // Toutes les box : flèche droite sur le dernier élément de la ligne du haut (réglages, horloge…) → la pastille
-        if (k == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && ProfileBadge.lastOfTopRow(before, runCatching { screenNodes() }.getOrNull().orEmpty(), screenH)) {
+        val lastTop = k == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && ProfileBadge.lastOfTopRow(before, runCatching { screenNodes() }.getOrNull().orEmpty(), screenH)
+        if (before != null && (before[1] + before[3]) / 2 < screenH * 0.3)
+            BoxLog.change("PASTILLE", "${android.view.KeyEvent.keyCodeToString(k)} · focus ${before.joinToString(",")} · bout de ligne : $lastTop")
+        else if (before == null) BoxLog.change("PASTILLE", "${android.view.KeyEvent.keyCodeToString(k)} · aucun focus lisible")
+        if (lastTop) {
             swallowUpKey = k; selectBadge("flèche droite au bout de la ligne du haut"); return true
         }
         // Flèche haut sans effet tout en haut de l'écran : la pastille aussi
