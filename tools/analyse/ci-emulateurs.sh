@@ -146,7 +146,7 @@ except Exception as e: print("NON " + str(e)[:80])')
   timeout 20 adb -s $TV shell getevent -pl 2>/dev/null | tr -d '\r' > "$OUT/journaux/tv-peripheriques.txt"
   timeout 20 adb -s $TV shell id 2>/dev/null | tr -d '\r' >> "$OUT/journaux/tv-peripheriques.txt"
   # Le clavier de l'émulateur (« qwerty2 ») porte les flèches de la télécommande
-  CLAVIER=$(awk '/^add device/{d=$4} /name:.*qwerty/{print d; exit}' "$OUT/journaux/tv-peripheriques.txt")
+  CLAVIER=$(awk '/^add device/{d=$4} /name:.*(qwerty|[Kk]eyboard)/{print d; exit}' "$OUT/journaux/tv-peripheriques.txt")
   info "Télécommande du banc" "${CLAVIER:+appuis bruts sur $CLAVIER}${CLAVIER:-console de l émulateur}"
   pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
 try:
