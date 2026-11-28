@@ -166,13 +166,17 @@ except Exception as e: print("erreur " + str(e)[:80])'; }
   avant=${b#*profil=}; avant=${avant%% |*}
   telecommande DPAD_CENTER; sleep 2; b=$(pastille); cap $TV 08-tv-changer-profil
   [[ $b == *who* ]] && ok "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:140}" || ko "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:160}"
+  telecommande DPAD_RIGHT DPAD_CENTER; sleep 3; b=$(pastille); cap $TV 09-tv-autre-profil
   # Relevé : ce que la Box a vu des flèches (journal Box) et l'arbre de l'écran TV (émulateur, aucune donnée personnelle)
   timeout 90 python3 -I "$HERE/boxcli.py" box_log '{"max":20000}' 2>/dev/null | python3 -I -c 'import json,sys
 try: print("\n".join(l for l in json.loads(sys.stdin.read()).get("log","").splitlines() if any(m in l for m in ("PASTILLE", "PROFIL", "TOUCHE", "SERVICE"))))
 except Exception as e: print("journal illisible", e)' > "$OUT/journaux/pastille.txt"
   timeout 30 adb -s $TV shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; timeout 20 adb -s $TV exec-out cat /sdcard/ui.xml > "$OUT/journaux/ecran-tv-accueil.xml" 2>/dev/null
-  info "Relevé pastille" "$(grep -E "PASTILLE|TOUCHE" "$OUT/journaux/pastille.txt" | tail -3 | cut -c1-200 | tr '\n|' '  ')"
-  telecommande DPAD_RIGHT DPAD_CENTER; sleep 3; b=$(pastille); cap $TV 09-tv-autre-profil
+  info "Relevé pastille" "$(grep -E "PASTILLE|TOUCHE" "$OUT/journaux/pastille.txt" | tail -4 | cut -c1-200 | tr '\n|' '  ')"
+  if [[ $b == *who* && $b != *pin* ]]; then   # relevé : les mêmes touches envoyées autrement sont-elles prises ?
+    touche DPAD_RIGHT DPAD_CENTER; sleep 3; b2=$(pastille); cap $TV 09b-tv-autre-profil-adb
+    info "Qui regarde ? : touches simulées adb" "${b2:0:140}"
+  fi
   apres=${b#*profil=}; apres=${apres%% |*}
   # Un code parental existe : passer d'un enfant à l'autre le demande (règle de sécurité), sinon le profil change tout de suite
   if [[ $b == *pin* ]]; then ok "Autre profil choisi depuis la TV" "code parental demandé (normal : un code existe)"; telecommande DPAD_LEFT; touche BACK
