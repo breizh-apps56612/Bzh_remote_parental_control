@@ -652,7 +652,9 @@ class GuardService : AccessibilityService() {
                 android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
                     swallowUpKey = k; badgeSelected = false; updateBadge(); return true
                 }
-                android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { swallowUpKey = k; return true }
+                android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {   // déjà au bout : la pastille reste sélectionnée 10 s de plus
+                    swallowUpKey = k; main.removeCallbacks(badgeIdle); main.postDelayed(badgeIdle, 10_000); return true
+                }
                 else -> { badgeSelected = false; updateBadge(); return null }
             }
         }

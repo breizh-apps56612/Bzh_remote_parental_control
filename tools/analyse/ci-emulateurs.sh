@@ -162,16 +162,16 @@ except Exception as e: print("erreur " + str(e)[:80])'; }
   [[ $b == *visible* && $b == *home* && $b != *"profil=aucun"* ]] && ok "Pastille de profil sur l'accueil de la box" "${b:0:140}" || ko "Pastille de profil sur l'accueil de la box" "${b:0:160}"
   telecommande DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT
   sleep 1; b=$(pastille); cap $TV 07-tv-pastille-selection
+  [[ $b == *selected* ]] && ok "Pastille atteinte à la télécommande (haut puis droite)" "${b:0:140}" || ko "Pastille atteinte à la télécommande (haut puis droite)" "${b:0:160}"
+  avant=${b#*profil=}; avant=${avant%% |*}
+  telecommande DPAD_CENTER; sleep 2; b=$(pastille); cap $TV 08-tv-changer-profil
+  [[ $b == *who* ]] && ok "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:140}" || ko "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:160}"
   # Relevé : ce que la Box a vu des flèches (journal Box) et l'arbre de l'écran TV (émulateur, aucune donnée personnelle)
   timeout 90 python3 -I "$HERE/boxcli.py" box_log '{"max":20000}' 2>/dev/null | python3 -I -c 'import json,sys
 try: print("\n".join(l for l in json.loads(sys.stdin.read()).get("log","").splitlines() if any(m in l for m in ("PASTILLE", "PROFIL", "TOUCHE", "SERVICE"))))
 except Exception as e: print("journal illisible", e)' > "$OUT/journaux/pastille.txt"
   timeout 30 adb -s $TV shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; timeout 20 adb -s $TV exec-out cat /sdcard/ui.xml > "$OUT/journaux/ecran-tv-accueil.xml" 2>/dev/null
   info "Relevé pastille" "$(grep -E "PASTILLE|TOUCHE" "$OUT/journaux/pastille.txt" | tail -3 | cut -c1-200 | tr '\n|' '  ')"
-  [[ $b == *selected* ]] && ok "Pastille atteinte à la télécommande (haut puis droite)" "${b:0:140}" || ko "Pastille atteinte à la télécommande (haut puis droite)" "${b:0:160}"
-  avant=${b#*profil=}; avant=${avant%% |*}
-  telecommande DPAD_CENTER; sleep 2; b=$(pastille); cap $TV 08-tv-changer-profil
-  [[ $b == *who* ]] && ok "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:140}" || ko "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:160}"
   telecommande DPAD_RIGHT DPAD_CENTER; sleep 3; b=$(pastille)
   apres=${b#*profil=}; apres=${apres%% |*}
   [[ $b != *who* && $apres != aucun && $apres != "$avant" ]] && ok "Profil changé depuis la TV" "$avant → $apres" "${b:0:140}" || ko "Profil changé depuis la TV" "${b:0:160}"
