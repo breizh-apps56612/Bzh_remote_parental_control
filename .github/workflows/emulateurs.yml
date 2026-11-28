@@ -47,7 +47,7 @@ jobs:
       github.repository_owner == 'breizh-apps56612' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 95
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -76,7 +76,7 @@ jobs:
 
       # Stress test : « Run workflow » avec stress = oui, branche stress/…, ou [stress] dans le message du commit
       - name: Banc d'essai
-        timeout-minutes: ${{ (inputs.stress == 'oui' || startsWith(github.ref_name, 'stress/') || contains(github.event.head_commit.message, '[stress]')) && 60 || 25 }}
+        timeout-minutes: ${{ (inputs.stress == 'oui' || startsWith(github.ref_name, 'stress/') || contains(github.event.head_commit.message, '[stress]')) && 75 || 25 }}
         env:
           APK_PHONE: app/build/outputs/apk/release/app-release.apk
           APK_BOX: box/build/outputs/apk/release/box-release.apk

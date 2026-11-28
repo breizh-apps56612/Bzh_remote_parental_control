@@ -81,19 +81,28 @@ else info "S9 Coupure réseau" "mode avion indisponible sur cet émulateur"; fi
 
 # --- S10. Plantages répétés de la Box (5 fois) : Android doit la relancer seul ---
 plantages_tv plantages-tv-stress-1.txt "Aucun plantage de la TV pendant S1 à S9"
-ROOT=0; timeout 30 adb -s $TV root >/dev/null 2>&1 && sleep 4 && timeout 20 adb -s $TV wait-for-device && \
-  [ "$(timeout 20 adb -s $TV shell id -u 2>/dev/null | tr -d '\r')" = 0 ] && ROOT=1
+ROOT=0; r=$(timeout 30 adb -s $TV root 2>&1 | tr -d '\r' | head -1); sleep 5; timeout 30 adb -s $TV wait-for-device >/dev/null 2>&1
+[ "$(timeout 20 adb -s $TV shell id -u 2>/dev/null | tr -d '\r')" = 0 ] && ROOT=1
+info "S10 Accès administrateur sur la TV" "$([ $ROOT = 1 ] && echo oui || echo "non : ${r:0:80}")"
 remettre_ports
-pire=0; rates=0
+# Délai mesuré à chaque fois : nouveau processus, puis serveur de la Box qui répond. Android espace les relances
+# après des plantages rapprochés (1 s, 4 s, 16 s…) : on note chaque délai et l'état « Crashed services » d'Android.
+delais=""; rates=0; premier=""
 for i in 1 2 3 4 5; do
-  p=$(box_pid)
+  p=$(box_pid); t0=$SECONDS
   if [ $ROOT = 1 ] && [ -n "$p" ]; then timeout 20 adb -s $TV shell kill -9 "$p"; else timeout 20 adb -s $TV shell am crash $PKG_TV >/dev/null 2>&1; fi
-  sleep 2
-  if attendre_box 120; then [ $ATTENTE -gt $pire ] && pire=$ATTENTE; else rates=$((rates+1)); fi
+  # attendre que l'ancien processus ait vraiment disparu (sinon on mesurerait « 0 s » à tort)
+  for j in $(seq 1 20); do q=$(box_pid); [ "$q" != "$p" ] && break; sleep 0.5; done
+  if attendre_box 240; then d=$((SECONDS - t0)); else d="> 240"; rates=$((rates+1)); fi
+  [ -z "$premier" ] && premier=$d
+  etat=$(timeout 30 adb -s $TV shell dumpsys accessibility 2>/dev/null | grep -iE "crashed" | head -2 | tr -s ' \r\n' ' ' | cut -c1-120)
+  delais="$delais $d s ;"; info "S10 Plantage $i : retour de la Box" "$d s (pid $p → $(box_pid)) — ${etat:-rien}"
+  timeout 20 adb -s $TV shell input keyevent KEYCODE_BACK >/dev/null 2>&1   # ferme un éventuel « l'appli s'est arrêtée »
 done
-[ $rates = 0 ] && ok "S10 5 plantages forcés de la Box : relancée à chaque fois" "pire délai ${pire} s ($([ $ROOT = 1 ] && echo kill -9 || echo am crash))" \
-  || ko "S10 5 plantages forcés de la Box : relancée à chaque fois" "$rates fois sur 5 sans retour en 120 s"
-[ $pire -le 60 ] && ok "S10 Retour de la Box en moins d'une minute" "${pire} s" || ko "S10 Retour de la Box en moins d'une minute" "${pire} s"
+[ $rates = 0 ] && ok "S10 5 plantages forcés de la Box : relancée à chaque fois" "délais :${delais} ($([ $ROOT = 1 ] && echo kill -9 || echo am crash))" \
+  || ko "S10 5 plantages forcés de la Box : relancée à chaque fois" "$rates fois sur 5 sans retour en 4 min — délais :${delais}"
+[[ $premier =~ ^[0-9]+$ ]] && [ "$premier" -le 30 ] && ok "S10 Premier plantage : protection revenue en moins de 30 s" "$premier s" \
+  || ko "S10 Premier plantage : protection revenue en moins de 30 s" "$premier s"
 service_lie && ok "S10 Service de protection toujours lié" || ko "S10 Service de protection toujours lié" "GuardService absent de dumpsys accessibility"
 timeout 20 adb -s $TV logcat -b crash -c 2>/dev/null   # plantages volontaires : on ne les compte pas ensuite
 
@@ -123,8 +132,8 @@ else info "S11 Changement d'heure" "pas d'accès administrateur sur l'émulateur
 timeout 20 adb -s $TV shell monkey -p $PKG_TV -c android.intent.category.LEANBACK_LAUNCHER 1 >/dev/null 2>&1; sleep 3
 timeout 420 adb -s $TV shell monkey -p $PKG_TV -s 1717 --throttle 100 --pct-syskeys 0 --pct-appswitch 0 -v 1500 > "$OUT/journaux/monkey-tv.txt" 2>&1
 cap $TV s12-tv-apres-monkey
-if grep -qE "CRASH|ANR in|Monkey aborted" "$OUT/journaux/monkey-tv.txt"; then ko "S12 1500 appuis au hasard sur la TV" "voir journaux/monkey-tv.txt"
-else ok "S12 1500 appuis au hasard sur la TV" "graine 1717"; fi
+if grep -qE "CRASH: fr\.paul|ANR in fr\.paul" "$OUT/journaux/monkey-tv.txt"; then ko "S12 1500 appuis au hasard sur la TV" "voir journaux/monkey-tv.txt"
+else ok "S12 1500 appuis au hasard sur la TV" "graine 1717$(grep -qE "ANR in|CRASH" "$OUT/journaux/monkey-tv.txt" && echo " (arrêt causé par le système de l'émulateur, pas par la Box)")"; fi
 for k in BACK BACK HOME; do timeout 20 adb -s $TV shell input keyevent KEYCODE_$k; sleep 1; done
 
 # --- S13. Téléphone : 3 × 1000 appuis au hasard avec rotations d'écran ---
@@ -133,7 +142,9 @@ for g in 11 22 33; do
   timeout 60 adb -s $PH shell monkey -p $PKG_PH -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1; sleep 2
   timeout 420 adb -s $PH shell monkey -p $PKG_PH -s $g --throttle 80 --pct-syskeys 0 --pct-appswitch 0 --pct-rotation 5 -v 1000 \
     > "$OUT/journaux/monkey-telephone-$g.txt" 2>&1
-  grep -qE "CRASH|ANR in|Monkey aborted" "$OUT/journaux/monkey-telephone-$g.txt" && rot_ko=$((rot_ko+1))
+  grep -qE "CRASH: fr\.paul|ANR in fr\.paul" "$OUT/journaux/monkey-telephone-$g.txt" && rot_ko=$((rot_ko+1))
+  a=$(grep -oE "ANR in [a-z.]+|CRASH: [a-z.]+" "$OUT/journaux/monkey-telephone-$g.txt" | grep -v fr.paul | head -1)
+  [ -n "$a" ] && info "S13 Série $g arrêtée par l'émulateur" "$a (pas l'appli Télécommande)"
 done
 [ $rot_ko = 0 ] && ok "S13 3000 appuis au hasard + rotations sur le téléphone" "graines 11, 22, 33" || ko "S13 3000 appuis au hasard + rotations sur le téléphone" "$rot_ko série(s) en échec, voir journaux/monkey-telephone-*.txt"
 timeout 20 adb -s $PH shell settings put system accelerometer_rotation 0 >/dev/null 2>&1
