@@ -136,7 +136,7 @@ except Exception as e: print("NON " + str(e)[:80])')
   # sont simulées et Android ne les montre pas au service de la Box, contrairement à une vraie télécommande.
   telecommande() { local c n; for k in "$@"; do case $k in DPAD_UP) c=KEY_UP; n=103;; DPAD_DOWN) c=KEY_DOWN; n=108;; DPAD_LEFT) c=KEY_LEFT; n=105;; DPAD_RIGHT) c=KEY_RIGHT; n=106;; *) c=KEY_ENTER; n=28;; esac
     if [ -n "${CLAVIER:-}" ]; then   # appui brut sur le clavier virtuel de l'émulateur (droits root)
-      timeout 20 adb -s $TV shell "sendevent $CLAVIER 1 $n 1; sendevent $CLAVIER 0 0 0; sendevent $CLAVIER 1 $n 0; sendevent $CLAVIER 0 0 0" >/dev/null 2>&1
+      timeout 20 adb -s $TV shell "sendevent $CLAVIER 1 $n 1; sendevent $CLAVIER 0 0 0; sendevent $CLAVIER 1 $n 0; sendevent $CLAVIER 0 0 0" >> "$OUT/journaux/console-touches.txt" 2>&1
     else
       timeout 20 adb -s $TV emu event send EV_KEY:$c:1 EV_SYN:0:0 >> "$OUT/journaux/console-touches.txt" 2>&1; sleep 0.1
       timeout 20 adb -s $TV emu event send EV_KEY:$c:0 EV_SYN:0:0 >> "$OUT/journaux/console-touches.txt" 2>&1
@@ -147,7 +147,8 @@ except Exception as e: print("NON " + str(e)[:80])')
   timeout 20 adb -s $TV shell id 2>/dev/null | tr -d '\r' >> "$OUT/journaux/tv-peripheriques.txt"
   # Le clavier de l'émulateur (« qwerty2 ») porte les flèches de la télécommande
   CLAVIER=$(awk '/^add device/{d=$4} /name:.*(qwerty|[Kk]eyboard)/{print d; exit}' "$OUT/journaux/tv-peripheriques.txt" | head -1)
-  info "Télécommande du banc" "${CLAVIER:+appuis bruts sur $CLAVIER}${CLAVIER:-console de l émulateur}"
+  timeout 20 adb -s $TV shell "ls -l ${CLAVIER:-/dev/input}; which sendevent" >> "$OUT/journaux/tv-peripheriques.txt" 2>&1
+  [ -n "$CLAVIER" ] && info "Télécommande du banc" "appuis bruts sur $CLAVIER" || info "Télécommande du banc" "console de l émulateur"
   pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
 try:
     d=json.loads(sys.stdin.read()); b=d.get("badge") or {}; p=d.get("profile") or {}
