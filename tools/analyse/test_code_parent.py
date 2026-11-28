@@ -44,9 +44,10 @@ def pad_ouvert():
     except Exception as e: return {"erreur": str(e)}
 
 regles = boxcli.call("get_rules").get("rules") or {}
-avant = regles.get("protectSettings", True)
+avant = (regles.get("protectSettings", True), regles.get("enabled", False))
 regles["pinHash"] = hashlib.sha256(b"telecommande-pin:1234").hexdigest()
 regles["protectSettings"] = True
+regles["enabled"] = True   # contrôle parental actif : sinon la TV ne protège rien
 r = boxcli.call("set_rules", rules=regles)
 if not r.get("ok"): ligne("KO", "Code parent de test posé sur la TV", r); sys.exit(0)
 
@@ -89,6 +90,6 @@ try:
     ok = "Code parent faux tapé sur la TV" in j and "9999" not in j
     ligne("OK" if ok else "KO", "Journal TV : refus noté sans les chiffres")
 finally:
-    regles["protectSettings"] = avant
+    regles["protectSettings"], regles["enabled"] = avant
     boxcli.call("set_rules", rules=regles)
     adb("shell", "input", "keyevent", "KEYCODE_HOME")
