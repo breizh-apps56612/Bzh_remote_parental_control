@@ -61,12 +61,15 @@ try:
     ligne("OK", "Pavé du code parent ouvert (réglages protégés)", p.get("title", ""))
     pid = p["pin"]
 
-    # 1) Code faux tapé sur la TV : bandeau « Code refusé » + message
-    touches("9", "9", "9", "9", "DPAD_DOWN", "DPAD_DOWN", "DPAD_DOWN", "DPAD_RIGHT", "DPAD_RIGHT", "DPAD_CENTER")
+    # 1) Code faux tapé avec les chiffres de la télécommande (focus sur la touche « 1 » du pavé), puis OK du pavé
+    touches("9", "9", "9", "9"); time.sleep(0.5)
+    t = textes_ecran()
+    ligne("OK" if "●●●●" in t else "KO", "Chiffres de la télécommande pris en compte", "" if "●●●●" in t else t[:120])
+    touches("DPAD_DOWN", "DPAD_DOWN", "DPAD_DOWN", "DPAD_RIGHT", "DPAD_RIGHT", "DPAD_CENTER")
     time.sleep(0.8)
     t = textes_ecran(capture("05-tv-code-faux"))
-    ok = "Code refusé" in t or "Code refuse" in t
-    ligne("OK" if ok else "KO", "Code faux sur la TV : « Code refusé » affiché", "message « Code incorrect » visible" if "incorrect" in t else t[:120])
+    ok = ("Code refusé" in t or "Code refuse" in t) and "incorrect" in t
+    ligne("OK" if ok else "KO", "Code faux sur la TV : « Code refusé » affiché", "bandeau + « Code incorrect »" if ok else t[:120])
 
     # 2) Code faux tapé sur le téléphone du parent pour cette demande
     r = boxcli.call("pin_failed", id=pid); time.sleep(1)
@@ -80,8 +83,12 @@ try:
     ok = r.get("ok") is False and ("Validation du téléphone refusée" in t or "Validation du" in t)
     ligne("OK" if ok else "KO", "Validation du téléphone refusée : affiché sur la TV", r)
 
-    # 4) Le bon code ferme toujours le pavé
-    touches("1", "2", "3", "4", "DPAD_CENTER"); time.sleep(1.5)
+    # 4) Le bon code, tapé sur le pavé à l'écran (focus sur OK) : 1 2 3 puis 4, puis OK
+    touches("DPAD_UP", "DPAD_UP", "DPAD_UP", "DPAD_LEFT", "DPAD_LEFT", "DPAD_CENTER",   # 1
+            "DPAD_RIGHT", "DPAD_CENTER", "DPAD_RIGHT", "DPAD_CENTER",                   # 2, 3
+            "DPAD_DOWN", "DPAD_LEFT", "DPAD_LEFT", "DPAD_CENTER",                       # 4
+            "DPAD_DOWN", "DPAD_DOWN", "DPAD_RIGHT", "DPAD_RIGHT", "DPAD_CENTER")       # OK
+    time.sleep(1.5)
     p = pad_ouvert()
     ligne("OK" if not p.get("pin") else "KO", "Bon code après refus : pavé fermé", "" if not p.get("pin") else p)
 

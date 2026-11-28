@@ -278,14 +278,24 @@ class Overlays(private val ctx: Context) {
         c.addView(grid, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(28) })
         root.addView(c)
         root.isFocusable = true
-        root.setOnKeyListener { _, code, e ->
-            if (e.action != KeyEvent.ACTION_UP) return@setOnKeyListener false
-            when (code) {
-                KeyEvent.KEYCODE_BACK -> { forgetApproval(id); close(); onCancel(); true }
-                in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> { if (entered.length < 8) entered.append(code - KeyEvent.KEYCODE_0); refresh(); true }
-                else -> false
+        // Touches chiffres et Retour de la télécommande : le focus est sur une touche du pavé, pas sur le fond,
+        // donc l'écouteur est posé sur chaque touche ET sur le fond (avant : les chiffres de la télécommande étaient ignorés).
+        val keys2 = View.OnKeyListener { _, code, e ->
+            val digit = code in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 || code in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9
+            if (code != KeyEvent.KEYCODE_BACK && !digit) return@OnKeyListener false
+            if (e.action != KeyEvent.ACTION_UP) return@OnKeyListener true
+            if (code == KeyEvent.KEYCODE_BACK) { forgetApproval(id); close(); onCancel() }
+            else {
+                val n = if (code >= KeyEvent.KEYCODE_NUMPAD_0) code - KeyEvent.KEYCODE_NUMPAD_0 else code - KeyEvent.KEYCODE_0
+                if (entered.length < 8) entered.append(n)
+                if (refused.visibility == View.VISIBLE) { main.removeCallbacks(restore); refused.visibility = View.GONE; dots.setTextColor(BoxUi.ACCENT) }
+                refresh()
             }
+            true
         }
+        root.setOnKeyListener(keys2)
+        for (i in 0 until grid.childCount) grid.getChildAt(i).setOnKeyListener(keys2)
+        left.getChildAt(left.childCount - 1)?.setOnKeyListener(keys2)   // « Annuler »
         add(root, params(focusable = true, fullscreen = true), "pavé du code parent")
         pin = root
         refresh()
