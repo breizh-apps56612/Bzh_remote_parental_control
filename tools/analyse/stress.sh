@@ -26,7 +26,12 @@ attendre_box() { # attendre_box <secondes max> → durée dans $ATTENTE ; 0 si l
   ATTENTE=$1; return 1
 }
 # Service de protection réellement lié (« Bound services »), pas seulement cité dans « Crashed services »
-service_lie() { timeout 30 adb -s $TV shell dumpsys accessibility 2>/dev/null | tr -d '\r' | grep -iE "bound services" | grep -q "GuardService"; }
+# (Android 11 : « Bound services » n'affiche que le libellé ; on exige donc : activé, au moins un service lié, absent des plantés)
+service_lie() {
+  local d; d=$(timeout 30 adb -s $TV shell dumpsys accessibility 2>/dev/null | tr -d '\r')
+  grep -iE "enabled services" <<< "$d" | grep -q "GuardService" && grep -qiE "bound services:\{ *Service" <<< "$d" \
+    && ! grep -iE "crashed services" <<< "$d" | grep -q "GuardService"
+}
 remettre_ports() {
   timeout 20 adb -s $TV forward tcp:7363 tcp:7363 >/dev/null 2>&1
   timeout 20 adb -s $TV emu redir del tcp:7364 >/dev/null 2>&1; timeout 20 adb -s $TV emu redir add tcp:7364:7363 >/dev/null 2>&1
