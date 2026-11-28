@@ -47,7 +47,14 @@ class PinApproveActivity : AppCompatActivity() {
             }
         }
 
-        fun withPin() = Ui.askPinCode(this, "${device.name} : $title", cancel = { if (!done) finish() }) { approve() }
+        // Code faux sur le téléphone : la TV affiche « Code refusé » (l'enfant voit que la demande n'est pas passée).
+        // Envoi hors de l'écran (l'activité se ferme juste après) ; une ancienne appli Box ignore simplement la commande.
+        val appCtx = applicationContext
+        fun tellTvRefused() = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            val r = runCatching { BoxClient.of(appCtx, device).call("pin_failed", JSONObject().put("id", id)) }
+            DiagLog.log("PARENTAL", "Code faux pour « $title » (demande $id) : ${if (r.isSuccess) "signalé à la TV" else "TV injoignable"}")
+        }
+        fun withPin() = Ui.askPinCode(this, "${device.name} : $title", cancel = { if (!done) finish() }, wrong = { tellTvRefused() }) { approve() }
 
         val canBio = ParentAuth.available(this)
 

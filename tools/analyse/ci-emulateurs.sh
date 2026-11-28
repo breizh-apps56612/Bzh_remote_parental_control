@@ -123,8 +123,14 @@ try:
     print(("OUI " if ok else "NON ") + str(len(s) if isinstance(s, list) else "absent"))
 except Exception as e: print("NON " + str(e)[:80])')
   [[ $r == OUI* ]] && ok "Activité : détail des séances envoyé par la TV" "${r#OUI } séance(s)" || ko "Activité : détail des séances envoyé par la TV" "$r"
+  # Code parent refusé (TV, téléphone, validation) : toujours affiché sur la TV (Box 1.4.58)
+  sortie=$(TV=$TV OUT="$OUT" timeout 240 python3 -I "$HERE/test_code_parent.py" 2>&1); echo "$sortie" > "$OUT/journaux/test-code-parent.txt"
+  while IFS='|' read -r etat nom detail; do
+    case "$etat" in OK) ok "$nom" "$detail" ;; KO) ko "$nom" "$detail" ;; INFO) info "$nom" "$detail" ;; esac
+  done <<< "$sortie"
+  grep -qE '^(OK|KO)\|' <<< "$sortie" || ko "Tests du code parent" "le script n'a rien rendu : $(tail -c 150 <<< "$sortie" | tr '\n' ' ')"
 
-  # Pastille de profil sur l'accueil de toutes les box + changement de profil sans l'appli (Box 1.4.57)
+  # Pastille de profil sur l'accueil de toutes les box + changement de profil sans l'appli (Box 1.4.58)
   touche() { for k in "$@"; do timeout 20 adb -s $TV shell input keyevent KEYCODE_$k; sleep 0.8; done; }
   pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
 try:

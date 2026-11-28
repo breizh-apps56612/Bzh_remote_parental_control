@@ -287,9 +287,9 @@ object Ui {
         val store = ParentalStore(a)
         if (!store.hasPin) { ok(); return }
         val fa = a as? androidx.fragment.app.FragmentActivity
-        if (fa == null || !ParentAuth.available(a)) { askPinCode(a, reason, cancel, ok); return }
+        if (fa == null || !ParentAuth.available(a)) { askPinCode(a, reason, cancel, ok = ok); return }
         ParentAuth.prompt(fa, "Code parent", reason, onOk = ok,
-            onCode = { askPinCode(a, reason, cancel, ok) },
+            onCode = { askPinCode(a, reason, cancel, ok = ok) },
             onNewFingerprint = {
                 askPinCode(a, "Une nouvelle empreinte a été ajoutée sur ce téléphone. Tapez le code parent une fois pour la confirmer.\n\n$reason", cancel) {
                     ParentAuth.reset(); ok()
@@ -298,7 +298,8 @@ object Ui {
     }
 
     /** Saisie du code parent au clavier (secours de l'empreinte), avec essais limités. */
-    fun askPinCode(a: Activity, reason: String, cancel: (() -> Unit)? = null, ok: () -> Unit) {
+    /** [wrong] : appelé quand le code tapé est refusé (code faux ou trop d'essais), avant [cancel]. */
+    fun askPinCode(a: Activity, reason: String, cancel: (() -> Unit)? = null, wrong: (() -> Unit)? = null, ok: () -> Unit) {
         val store = ParentalStore(a)
         if (!store.hasPin) { ok(); return }
         val input = EditText(a).apply {
@@ -312,11 +313,13 @@ object Ui {
                     fr.paul.telecommande.shared.PinThrottle.Result.Ok -> ok()
                     is fr.paul.telecommande.shared.PinThrottle.Result.Wrong -> {
                         toast(a, if (r.triesLeft <= 2) "Code incorrect. Encore ${r.triesLeft} essai${if (r.triesLeft > 1) "s" else ""} avant une pause." else "Code incorrect")
+                        wrong?.invoke()
                         cancel?.invoke()
                     }
                     is fr.paul.telecommande.shared.PinThrottle.Result.Locked -> {
                         if (r.fails > 0) fr.paul.telecommande.core.DiagLog.log("PARENTAL", "${r.fails} codes parent faux sur le téléphone : pause de ${fr.paul.telecommande.shared.RulesEngine.fmt(r.ms)}")
                         toast(a, "Trop d'essais. Réessayez dans ${fr.paul.telecommande.shared.RulesEngine.fmt(r.ms)}, ou utilisez l'empreinte.")
+                        wrong?.invoke()
                         cancel?.invoke()
                     }
                 }
