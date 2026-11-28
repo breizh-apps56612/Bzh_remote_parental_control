@@ -21,7 +21,7 @@ object PhoneUpdate {
                 if (r == null) { if (force) Ui.toast(a, "L'appli est à jour"); return@runOnUiThread }
                 shownThisRun = true
                 AlertDialog.Builder(a).setTitle("Mise à jour disponible")
-                    .setMessage("Télécommande ${r.versionName} est disponible." + (if (r.notes.isNotBlank()) "\n\n${r.notes}" else "") +
+                    .setMessage("Entente ${r.versionName} est disponible." + (if (r.notes.isNotBlank()) "\n\n${r.notes}" else "") +
                         "\n\nVos appareils et réglages sont conservés.")
                     .setPositiveButton("Mettre à jour") { _, _ -> start(a, up, r) }
                     .setNegativeButton("Plus tard", null).show()
@@ -32,7 +32,7 @@ object PhoneUpdate {
     private fun start(a: Activity, up: Updater, r: Updater.Release) {
         if (!up.canInstall()) {
             AlertDialog.Builder(a).setTitle("Autorisation nécessaire (une seule fois)")
-                .setMessage("Autorisez « Télécommande » à installer ses mises à jour, puis revenez dans l'appli.")
+                .setMessage("Autorisez « Entente » à installer ses mises à jour, puis revenez dans l'appli.")
                 .setPositiveButton("Ouvrir le réglage") { _, _ -> up.openInstallPermission(a); shownThisRun = false }
                 .setNegativeButton("Plus tard", null).show()
             return

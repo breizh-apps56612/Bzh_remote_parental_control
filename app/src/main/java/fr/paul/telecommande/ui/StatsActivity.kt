@@ -192,7 +192,7 @@ class StatsActivity : AppCompatActivity() {
         }, Ui.lp(c, 16))
         if (Build.VERSION.SDK_INT >= 23) root.addView(Ui.button(c, "Éviter les coupures du suivi (batterie)") {
             runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-            Ui.toast(c, "Choisissez « Télécommande » puis « Ne pas optimiser »")
+            Ui.toast(c, "Choisissez « Entente » puis « Ne pas optimiser »")
         }, Ui.lp(c, 10))
 
         val since = db.firstRecord(device.id)

@@ -75,7 +75,7 @@ object AdminMenu {
             root.addView(g, Ui.lp(c, 6))
         }
         val version = runCatching { c.packageManager.getPackageInfo(c.packageName, 0).versionName }.getOrNull() ?: "?"
-        root.addView(Ui.text(c, "Télécommande $version · " + (device?.let { "${it.name} (${it.type.label.substringBefore(" (")}${if (it.host.isNotBlank()) " · " + it.host else ""})" } ?: "aucun appareil"), 12.5f, muted = true)
+        root.addView(Ui.text(c, "Entente $version · " + (device?.let { "${it.name} (${it.type.label.substringBefore(" (")}${if (it.host.isNotBlank()) " · " + it.host else ""})" } ?: "aucun appareil"), 12.5f, muted = true)
             .apply { setPadding(Ui.dp(c, 6), 0, Ui.dp(c, 6), 0) })
 
         // ----- Journaux -----

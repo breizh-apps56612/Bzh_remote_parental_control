@@ -169,7 +169,7 @@ class Server(private val guard: GuardService) {
                         cmd == "pair_spake" -> pairSpake(req, clientFp, boxFp).also { spake = it.second }.first
                         cmd == "pair_spake_confirm" -> pairSpakeConfirm(req, spake, clientFp).also { spake = null }
                         // Ancien appairage (preuve HMAC) : le code pouvait être retrouvé hors ligne par une fausse box.
-                        cmd == "pair_confirm" -> err("Mettez à jour l'appli Télécommande du téléphone : l'appairage a été rendu plus sûr.")
+                        cmd == "pair_confirm" -> err("Mettez à jour l'appli Entente du téléphone : l'appairage a été rendu plus sûr.")
                         !trusted -> err("Téléphone non appairé")
                         cmd == "subscribe" -> {
                             c.soTimeout = 0

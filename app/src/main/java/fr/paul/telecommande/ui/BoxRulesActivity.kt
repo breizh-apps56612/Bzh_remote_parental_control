@@ -190,7 +190,7 @@ class BoxRulesActivity : AppCompatActivity() {
         // ===== Qui regarde ? =====
         root.addView(section("Qui regarde ?"), Ui.lp(c, 26))
         root.addView(Ui.text(c, "Chaque profil a son propre temps. À l'allumage, la TV demande qui regarde, ou applique un profil par défaut " +
-            "(changeable sur la TV : appli Télécommande Box > « Changer de profil »).", 13f, muted = true).apply {
+            "(changeable sur la TV : appli Entente TV > « Changer de profil »).", 13f, muted = true).apply {
             setPadding(Ui.dp(c, 6), 0, Ui.dp(c, 6), 0) }, Ui.lp(c, 4))
         val prof = Ui.group(c)
         if (rules.profiles.isNotEmpty()) {

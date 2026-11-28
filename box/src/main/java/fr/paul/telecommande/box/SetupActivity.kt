@@ -76,7 +76,7 @@ class SetupActivity : Activity() {
         changeProfileButton = null
         val store = BoxStore.get(this)
         val guard = GuardService.enabled(this)
-        root.addView(BoxUi.label(this, "Télécommande Box"))
+        root.addView(BoxUi.label(this, "Entente TV"))
         root.addView(text(if (guard) "La TV est protégée" else "Activez la protection", 40f, bold = true), LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(6) })
         root.addView(LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -87,7 +87,7 @@ class SetupActivity : Activity() {
         }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(8); bottomMargin = dp(12) })
 
         step("1", "Activer la protection",
-            "Paramètres > Accessibilité > Télécommande Box > Activer. Sert uniquement à savoir quelle appli est ouverte et à afficher l'écran « Temps écoulé ».",
+            "Paramètres > Accessibilité > Entente TV > Activer. Sert uniquement à savoir quelle appli est ouverte et à afficher l'écran « Temps écoulé ».",
             guard, if (guard) "Ouvrir" else "Activer") { openAccessibility() }
 
         step("↻", "Mises à jour",
@@ -96,7 +96,7 @@ class SetupActivity : Activity() {
 
         val phones = store.phones()
         step("2", "Appairer le téléphone du parent",
-            "Sur le téléphone : appli Télécommande > onglet Enfants > « Déjà installée : appairer ». Un code s'affichera ici. Adresse de la box : ${ip() ?: "inconnue"}",
+            "Sur le téléphone : appli Entente > onglet Enfants > « Déjà installée : appairer ». Un code s'affichera ici. Adresse de la box : ${ip() ?: "inconnue"}",
             phones.isNotEmpty(), null, null)
 
         whoWatchesCard(store)
@@ -258,7 +258,7 @@ class SetupActivity : Activity() {
     private fun showAccessibilityPath() {
         AlertDialog.Builder(this).setTitle("Activer la protection")
             .setMessage("Cette TV n'ouvre pas directement l'écran Accessibilité. Dans les Paramètres :\n\n" +
-                "1. Préférences de l'appareil › Accessibilité.\n2. Choisissez « Télécommande Box », puis Activer › OK.\n\n" +
+                "1. Préférences de l'appareil › Accessibilité.\n2. Choisissez « Entente TV », puis Activer › OK.\n\n" +
                 "Revenez ensuite dans cette appli : l'étape se cochera toute seule.")
             .setPositiveButton("Ouvrir les Paramètres") { _, _ ->
                 runCatching { startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -303,7 +303,7 @@ class SetupActivity : Activity() {
         BoxLog.init(this); BoxLog.log("CONFIG", "$line : " + (i?.component?.flattenToShortString() ?: i?.action ?: "aucun écran trouvé") + if (ok) " (ouvert)" else " (échec)")
         if (!ok || i?.component?.className?.contains("SpecialAppAccess", true) == true)
             AlertDialog.Builder(this).setTitle(line)
-                .setMessage("Dans les Paramètres de la TV : Applications › Accès spéciaux des applications › $line › « Télécommande Box » › Autoriser.\n\n" +
+                .setMessage("Dans les Paramètres de la TV : Applications › Accès spéciaux des applications › $line › « Entente TV » › Autoriser.\n\n" +
                     "Si cette ligne n'existe pas, la box ne la propose pas : la TV se fiera alors à la classification affichée à l'écran.")
                 .setPositiveButton("Compris", null).show()
     }

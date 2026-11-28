@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Télécommande Box</string>
+    <string name="app_name">Entente TV</string>
     <string name="admin_desc">Empêche la désinstallation du contrôle parental sans le parent.</string>
     <string name="a11y_desc">Contrôle parental de la TV : sert uniquement à savoir quelle appli est ouverte, à mesurer son temps d\'utilisation et à afficher l\'écran « Temps écoulé » quand une limite fixée par le parent est atteinte. Aucun contenu de l\'écran n\'est lu et aucune donnée ne quitte votre domicile.</string>
 </resources>

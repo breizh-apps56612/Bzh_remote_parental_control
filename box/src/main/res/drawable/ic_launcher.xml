@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Généré par tools/icone/genere_icone.py : ne pas modifier à la main -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M54,4C88,4 104,20 104,54C104,88 88,104 54,104C20,104 4,88 4,54C4,20 20,4 54,4z" android:fillColor="#4B48E0"/>
+    <path android:pathData="M23,54a31,31 0,1 1,62,0a31,31 0,1 1,-62,0z" android:fillColor="#FFFFFF" android:fillAlpha="1"/>
+    <path android:pathData="M50.032,33.3912L54,29.82L57.968,33.3912M50.032,74.6088L54,78.18L57.968,74.6088M33.3912,50.032L29.82,54L33.3912,57.968M74.6088,50.032L78.18,54L74.6088,57.968" android:strokeColor="#B9BBE3" android:strokeWidth="2.356" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"/>
+    <path android:pathData="M35.276,54a11.78,11.78 0,1 1,23.56,0a11.78,11.78 0,1 1,-23.56,0z" android:fillColor="#4B48E0" android:fillAlpha="0.92"/>
+    <path android:pathData="M49.164,54a11.78,11.78 0,1 1,23.56,0a11.78,11.78 0,1 1,-23.56,0z" android:fillColor="#0B8783" android:fillAlpha="0.85"/>
+</vector>

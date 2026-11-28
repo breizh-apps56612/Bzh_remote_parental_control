@@ -1,4 +1,6 @@
-# Télécommande
+# Entente
+
+*Anciennement « Télécommande ».* La télécommande de la TV et le temps d'écran de la famille, réglés d'un commun accord.
 
 **Une télécommande complète et un vrai contrôle parental pour les box et TV Android TV.**
 Gratuite, open source (GPL-3.0), sans compte, sans serveur, sans publicité.
@@ -23,6 +25,7 @@ Gratuite, open source (GPL-3.0), sans compte, sans serveur, sans publicité.
 - **Testé en direct sur émulateur** (téléphone 2.6.4 / TV 1.4.53) : les onglets Enfants et Activité n'affichent plus un message éphémère quand aucune box Android TV n'est ajoutée ; un volet explique quoi faire et mène à l'ajout de la box. Le contrôle parental d'une TV Android TV propose en tête « Installer l'appli Box » et « Déjà installée : appairer ». L'écran de la TV indique le bon chemin pour l'appairage (onglet Enfants), et l'Aide, la visite guidée parlent de listes, plus de tuiles. Dans les volets, une phrase d'explication s'écrit en minuscules, comme une note sous les listes d'iOS, au lieu d'un bloc en majuscules.
 - **Menus rangés** (téléphone 2.6.6) : chaque menu ne mélange plus des choses différentes. Le volet « Plus » de la télécommande ne contient que ce qu'on fait sur la TV (clavier, souris, applis, touches) et une seule entrée « Réglages et aide » (Réglages · En cas de souci). Dans l'onglet Enfants, « Les règles de la maison » sont séparées de « Cette TV » (santé, données, appairage). L'onglet Réglages ne contient que des actions, la note sur vos données est en bas.
 - **Activité en diagrammes précis** (téléphone 2.6.5 / TV 1.4.56) : un seul cadre, trois modes — *Journée* (chronologie, chaque séance à sa place, appli par appli), *Horaires* (minutes regardées dans chaque heure, empilées par appli) et *Semaine* (temps de chaque jour par appli, limite du contrat en pointillés). Toucher un bloc, une heure ou un jour affiche la valeur exacte (« YouTube · 18:30 → 18:55 · 25 min »). Chiffres clés et tableau par appli (temps, part) sous le diagramme. La TV envoie pour cela le détail de chaque séance ; avec une ancienne appli TV, l'affichage d'avant reste en place.
+- **Nouveau nom : Entente** (téléphone 2.6.10 / TV 1.4.60) : l'appli s'appelle désormais « Entente » sur le téléphone et « Entente TV » sur la box (accessibilité, mises à jour, appairage). Nouvelle icône adaptative (pavé blanc, deux cercles indigo et sarcelle qui se chevauchent, icône thémable Android 13+) et nouvelle bannière Android TV. Le nom du paquet ne change pas : les mises à jour s'installent par-dessus.
 
 - **Télécommande** : pavé tactile, clavier du téléphone, vraie souris (flèche affichée sur la TV), lancement des applis avec leurs icônes, volume, veille.
 - **Contrôle parental** (appli « Box » installée sur la TV, active même téléphone éteint) : temps par jour au total et par appli, horaires et jours autorisés, couvre-feu, profils « Qui regarde ? » (demandé à chaque allumage, ou profil par défaut changeable sur la TV), fin d'épisode avant de couper, demandes de temps depuis la TV, messages et récompenses, Paramètres et installations protégés.
@@ -107,8 +110,8 @@ Les autres appareils (Samsung, LG, Roku, IR…) gardent le pavé tactile avec de
 
 Module `box/`, installé **sur la TV**. Aucun mode développeur, aucun ordinateur :
 
-1. Installer « Télécommande Box » sur la TV (Play Store de la TV une fois publiée).
-2. L'ouvrir et activer **une** option : Paramètres > Accessibilité > Télécommande Box.
+1. Installer « Entente TV » sur la TV (Play Store de la TV une fois publiée).
+2. L'ouvrir et activer **une** option : Paramètres > Accessibilité > Entente TV.
 3. Dans l'appli du téléphone : la box > Temps d'écran > « Appairer l'appli Box » et saisir le code affiché sur la TV.
 
 Fonctions : mesure du temps par appli (même téléphone éteint), limites et horaires par appli (jours, plages), temps total, couvre-feu,

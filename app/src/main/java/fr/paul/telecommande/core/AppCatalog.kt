@@ -32,7 +32,7 @@ object AppCatalog {
         "com.google.android.tv" to "Chaînes TV", "com.android.tv" to "Chaînes TV", "fr.francetv.pluzz" to "france.tv",
         "fr.m6.m6replay.by" to "M6+", "fr.tf1.mytf1" to "TF1+", "com.google.android.videos" to "Google TV",
         "unknown" to "Appli non identifiée", "com.esaba.downloader" to "Downloader", "com.android.vending" to "Play Store",
-        "fr.paul.telecommande.box" to "Télécommande Box", "com.twitch.android.app" to "Twitch", "com.dazn" to "DAZN", "com.crunchyroll.crunchyroid" to "Crunchyroll"
+        "fr.paul.telecommande.box" to "Entente TV", "com.twitch.android.app" to "Twitch", "com.dazn" to "DAZN", "com.crunchyroll.crunchyroid" to "Crunchyroll"
     )
     private val video = setOf(
         "com.netflix.ninja", "com.amazon.amazonvideo.livingroom", "com.disney.disneyplus", "com.canal.android.canal",

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Télécommande</string>
+    <string name="app_name">Entente</string>
     <string name="add">Ajouter</string>
     <string name="scan">Rechercher sur le réseau</string>
     <string name="manual">Ajouter manuellement</string>

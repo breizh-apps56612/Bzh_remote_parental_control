@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Généré par tools/icone/genere_icone.py : ne pas modifier à la main -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M26,54a28,28 0,1 1,56,0a28,28 0,1 1,-56,0z" android:fillColor="#FFFFFF" android:fillAlpha="1"/>
+    <path android:pathData="M50.416,35.3856L54,32.16L57.584,35.3856M50.416,72.6144L54,75.84L57.584,72.6144M35.3856,50.416L32.16,54L35.3856,57.584M72.6144,50.416L75.84,54L72.6144,57.584" android:strokeColor="#FFFFFF" android:strokeWidth="2.128" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"/>
+    <path android:pathData="M38.9,54a9.5,9.5 0,1 1,19,0a9.5,9.5 0,1 1,-19,0zM50.1,54a9.5,9.5 0,1 1,19,0a9.5,9.5 0,1 1,-19,0z" android:fillColor="#FFFFFF" android:fillType="evenOdd"/>
+</vector>
