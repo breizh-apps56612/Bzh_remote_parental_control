@@ -1748,7 +1748,7 @@ class GuardService : AccessibilityService() {
             .put("profile", activeProfile(store.rules())?.toJson() ?: JSONObject.NULL)
             .put("profileUsage", profileUsage(now))
             .put("badge", JSONObject().put("visible", overlays.badgeVisible).put("selected", badgeSelected)
-                .put("home", badgeHome).put("who", overlays.whoVisible).put("homeApp", homePkg() ?: ""))
+                .put("home", badgeHome).put("who", overlays.whoVisible).put("pin", overlays.pinVisible).put("homeApp", homePkg() ?: ""))
     }
 
     /** Temps restant d'un profil aujourd'hui (ms), ou null s'il n'a pas de limite. */

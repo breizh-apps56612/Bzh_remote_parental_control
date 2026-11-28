@@ -154,7 +154,7 @@ print("\n".join(json.dumps(o) for o in out))' "$@" > "$f"
   pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
 try:
     d=json.loads(sys.stdin.read()); b=d.get("badge") or {}; p=d.get("profile") or {}
-    print(" ".join(k for k in ("visible","selected","home","who") if b.get(k)) + " | profil=" + str(p.get("name","aucun")) + " | accueil=" + str(b.get("homeApp","")))
+    print(" ".join(k for k in ("visible","selected","home","who","pin") if b.get(k)) + " | profil=" + str(p.get("name","aucun")) + " | accueil=" + str(b.get("homeApp","")))
 except Exception as e: print("erreur " + str(e)[:80])'; }
   cli set_rules '{"rules":{"enabled":true,"protectSettings":false,"stillThereMin":0,"version":9001,"profiles":[{"id":"leo","name":"Léo","emoji":"🦖"},{"id":"zoe","name":"Zoé","emoji":"🦄"}]}}' >/dev/null
   sleep 4; cap $TV 05-tv-qui-regarde; touche DPAD_CENTER; sleep 3
@@ -172,9 +172,12 @@ try: print("\n".join(l for l in json.loads(sys.stdin.read()).get("log","").split
 except Exception as e: print("journal illisible", e)' > "$OUT/journaux/pastille.txt"
   timeout 30 adb -s $TV shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; timeout 20 adb -s $TV exec-out cat /sdcard/ui.xml > "$OUT/journaux/ecran-tv-accueil.xml" 2>/dev/null
   info "Relevé pastille" "$(grep -E "PASTILLE|TOUCHE" "$OUT/journaux/pastille.txt" | tail -3 | cut -c1-200 | tr '\n|' '  ')"
-  telecommande DPAD_RIGHT DPAD_CENTER; sleep 3; b=$(pastille)
+  telecommande DPAD_RIGHT DPAD_CENTER; sleep 3; b=$(pastille); cap $TV 09-tv-autre-profil
   apres=${b#*profil=}; apres=${apres%% |*}
-  [[ $b != *who* && $apres != aucun && $apres != "$avant" ]] && ok "Profil changé depuis la TV" "$avant → $apres" "${b:0:140}" || ko "Profil changé depuis la TV" "${b:0:160}"
+  # Un code parental existe : passer d'un enfant à l'autre le demande (règle de sécurité), sinon le profil change tout de suite
+  if [[ $b == *pin* ]]; then ok "Autre profil choisi depuis la TV" "code parental demandé (normal : un code existe)"; telecommande DPAD_LEFT; touche BACK
+  elif [[ $b != *who* && $apres != aucun && $apres != "$avant" ]]; then ok "Autre profil choisi depuis la TV" "$avant → $apres"
+  else ko "Autre profil choisi depuis la TV" "${b:0:160}"; fi
   cli set_rules '{"rules":{"enabled":false,"version":9002}}' >/dev/null; sleep 2; touche HOME
 else
   ko "Appairage SPAKE2 avec le code affiché" "code illisible ou faux après 3 essais (voir captures 02-tv-code-appairage*.png) : tests appairés non faits"
