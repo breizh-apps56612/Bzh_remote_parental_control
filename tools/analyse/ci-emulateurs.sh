@@ -97,7 +97,7 @@ r=$(cli pair_start); info "Demande d'appairage" "${r:0:120}"
 sleep 4; cap $TV 02-tv-code-appairage
 code=""
 if command -v tesseract >/dev/null; then
-  code=$(tesseract "$OUT/captures/02-tv-code-appairage.png" - --psm 11 2>/dev/null | grep -oE '[0-9]{3} *[0-9]{3}' | head -1 | tr -d ' ')
+  code=$(tesseract "$OUT/captures/02-tv-code-appairage.png" - --psm 11 2>/dev/null | grep -oE '[0-9OoDIlS]{3} *[0-9OoDIlS]{3}' | grep -E '[0-9]' | head -1 | tr -d ' ' | tr 'OoDIlS' '000115')   # l'OCR lit parfois 0 → O, 1 → l
 fi
 if [ ${#code} = 6 ]; then
   faux=$(printf '%06d' $(( (10#$code + 1) % 1000000 )))
@@ -123,8 +123,14 @@ try:
     print(("OUI " if ok else "NON ") + str(len(s) if isinstance(s, list) else "absent"))
 except Exception as e: print("NON " + str(e)[:80])')
   [[ $r == OUI* ]] && ok "Activité : détail des séances envoyé par la TV" "${r#OUI } séance(s)" || ko "Activité : détail des séances envoyé par la TV" "$r"
+  # Code parent refusé (TV, téléphone, validation) : toujours affiché sur la TV (Box 1.4.58)
+  sortie=$(TV=$TV OUT="$OUT" timeout 240 python3 -I "$HERE/test_code_parent.py" 2>&1); echo "$sortie" > "$OUT/journaux/test-code-parent.txt"
+  while IFS='|' read -r etat nom detail; do
+    case "$etat" in OK) ok "$nom" "$detail" ;; KO) ko "$nom" "$detail" ;; INFO) info "$nom" "$detail" ;; esac
+  done <<< "$sortie"
+  grep -qE '^(OK|KO)\|' <<< "$sortie" || ko "Tests du code parent" "le script n'a rien rendu : $(tail -c 150 <<< "$sortie" | tr '\n' ' ')"
 
-  # Pastille de profil sur l'accueil de toutes les box + changement de profil sans l'appli (Box 1.4.57)
+  # Pastille de profil sur l'accueil de toutes les box + changement de profil sans l'appli (Box 1.4.58)
   touche() { for k in "$@"; do timeout 20 adb -s $TV shell input keyevent KEYCODE_$k; sleep 0.8; done; }
   pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
 try:
@@ -152,7 +158,8 @@ except Exception as e: print("journal illisible", e)' > "$OUT/journaux/pastille.
   [[ $b != *who* && $apres != aucun && $apres != "$avant" ]] && ok "Profil changé depuis la TV" "$avant → $apres" "${b:0:140}" || ko "Profil changé depuis la TV" "${b:0:160}"
   cli set_rules '{"rules":{"enabled":false,"version":9002}}' >/dev/null; sleep 2; touche HOME
 else
-  info "Appairage non testé" "code illisible sur la capture (lecture automatique), voir 02-tv-code-appairage.png"
+  # Sans appairage, tous les tests du téléphone parent sautent : c'est un échec, pas une simple info
+  ko "Appairage non testé" "code illisible sur la capture (lecture automatique), voir 02-tv-code-appairage.png"
 fi
 
 # Un autre appareil ouvre 12 connexions muettes : le téléphone du parent doit toujours passer

@@ -225,10 +225,17 @@ class Overlays(private val ctx: Context) {
         left.addView(BoxUi.badge(ctx, "🔒", false, 60f).apply { textSize = 22f })
         left.addView(text(title, 26f, bold = true).apply { maxWidth = dp(340) }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(14) })
         val dots = text("", 34f, bold = true).apply { setTextColor(BoxUi.ACCENT); letterSpacing = 0.3f }
-        val msg = text("Validez sur le téléphone du parent (empreinte ou code), ou tapez le code ici.", 15f, muted).apply { maxWidth = dp(320) }
+        val hint = "Validez sur le téléphone du parent (empreinte ou code), ou tapez le code ici."
+        val msg = text(hint, 15f, muted).apply { maxWidth = dp(320) }
+        // Bandeau rouge « Code refusé » : invisible tant qu'aucun code n'a été refusé (TV ou téléphone)
+        val refused = text("✕  Code refusé", 20f, Color.WHITE, bold = true).apply {
+            background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(BoxUi.DANGER) }
+            setPadding(dp(18), dp(8), dp(18), dp(8)); visibility = View.GONE
+        }
+        left.addView(refused, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(12) })
         left.addView(dots, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(10) })
         left.addView(msg)
-        fun close() { if (pinId == id) { remove(pin); pin = null; pinId = null; pinApprove = null; onPinClosed?.invoke(id) } }
+        fun close() { if (pinId == id) { remove(pin); pin = null; pinId = null; pinApprove = null; pinRefused = null; onPinClosed?.invoke(id) } }
         pinId = id; pinTitle = title
         pinApprove = { close(); onSuccess() }
         synchronized(approvals) {
@@ -240,14 +247,26 @@ class Overlays(private val ctx: Context) {
         // à droite : pavé numérique compact
         val grid = GridLayout(ctx).apply { columnCount = 3 }
         fun refresh() { dots.text = "●".repeat(entered.length).ifEmpty { "○ ○ ○ ○" } }
+        // Code refusé : bandeau rouge + message + secousse de la fenêtre, puis retour à l'état normal (le message reste)
+        val restore = Runnable { if (pinId == id) { refused.visibility = View.GONE; dots.setTextColor(BoxUi.ACCENT); refresh() } }
+        fun showRefused(text: String) {
+            entered.clear()
+            refused.visibility = View.VISIBLE
+            msg.text = text; msg.setTextColor(BoxUi.DANGER)
+            dots.setTextColor(BoxUi.DANGER); dots.text = "✕ ✕ ✕ ✕"
+            c.animate().cancel(); c.translationX = 0f
+            android.animation.ObjectAnimator.ofFloat(c, "translationX", 0f, -22f, 22f, -16f, 16f, -8f, 8f, 0f).setDuration(480).start()
+            main.removeCallbacks(restore); main.postDelayed(restore, 2500)
+        }
+        pinRefused = { t -> showRefused(t) }
         val keys = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK")
         var firstBtn: View? = null
         keys.forEach { k ->
             val b = button(k, k == "OK") {
                 when (k) {
                     "⌫" -> if (entered.isNotEmpty()) entered.setLength(entered.length - 1)
-                    "OK" -> { val error = check(entered.toString()); if (error == null) { forgetApproval(id); close(); onSuccess() } else { entered.clear(); msg.text = error; msg.setTextColor(BoxUi.DANGER) } }
-                    else -> if (entered.length < 8) entered.append(k)
+                    "OK" -> { val error = check(entered.toString()); if (error == null) { forgetApproval(id); close(); onSuccess() } else { showRefused(error); return@button } }
+                    else -> { if (entered.length < 8) entered.append(k); if (refused.visibility == View.VISIBLE) { main.removeCallbacks(restore); refused.visibility = View.GONE; dots.setTextColor(BoxUi.ACCENT) } }
                 }
                 refresh()
             }
@@ -259,14 +278,24 @@ class Overlays(private val ctx: Context) {
         c.addView(grid, LinearLayout.LayoutParams(-2, -2).apply { marginStart = dp(28) })
         root.addView(c)
         root.isFocusable = true
-        root.setOnKeyListener { _, code, e ->
-            if (e.action != KeyEvent.ACTION_UP) return@setOnKeyListener false
-            when (code) {
-                KeyEvent.KEYCODE_BACK -> { forgetApproval(id); close(); onCancel(); true }
-                in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> { if (entered.length < 8) entered.append(code - KeyEvent.KEYCODE_0); refresh(); true }
-                else -> false
+        // Touches chiffres et Retour de la télécommande : le focus est sur une touche du pavé, pas sur le fond,
+        // donc l'écouteur est posé sur chaque touche ET sur le fond (avant : les chiffres de la télécommande étaient ignorés).
+        val keys2 = View.OnKeyListener { _, code, e ->
+            val digit = code in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 || code in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9
+            if (code != KeyEvent.KEYCODE_BACK && !digit) return@OnKeyListener false
+            if (e.action != KeyEvent.ACTION_UP) return@OnKeyListener true
+            if (code == KeyEvent.KEYCODE_BACK) { forgetApproval(id); close(); onCancel() }
+            else {
+                val n = if (code >= KeyEvent.KEYCODE_NUMPAD_0) code - KeyEvent.KEYCODE_NUMPAD_0 else code - KeyEvent.KEYCODE_0
+                if (entered.length < 8) entered.append(n)
+                if (refused.visibility == View.VISIBLE) { main.removeCallbacks(restore); refused.visibility = View.GONE; dots.setTextColor(BoxUi.ACCENT) }
+                refresh()
             }
+            true
         }
+        root.setOnKeyListener(keys2)
+        for (i in 0 until grid.childCount) grid.getChildAt(i).setOnKeyListener(keys2)
+        left.getChildAt(left.childCount - 1)?.setOnKeyListener(keys2)   // « Annuler »
         add(root, params(focusable = true, fullscreen = true), "pavé du code parent")
         pin = root
         refresh()
@@ -275,6 +304,19 @@ class Overlays(private val ctx: Context) {
     }
 
     val pinVisible get() = pin != null
+
+    private var pinRefused: ((String) -> Unit)? = null
+
+    /**
+     * Affiche « Code refusé » sur le pavé ouvert (code faux tapé sur le téléphone du parent, validation refusée…).
+     * [id] vide = le pavé affiché, quel qu'il soit. Renvoie false si aucun pavé correspondant n'est à l'écran.
+     */
+    fun pinRefusedElsewhere(id: String, message: String): Boolean {
+        val shown = pinId ?: return false
+        if (id.isNotBlank() && id != shown) return false
+        ui { if (pinId == shown) pinRefused?.invoke(message) }
+        return true
+    }
 
     // ---------- Vraie souris : flèche dessinée par l'appli, déplacée depuis le téléphone ----------
 

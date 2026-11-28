@@ -1223,6 +1223,9 @@ class GuardService : AccessibilityService() {
         if (r == fr.paul.telecommande.shared.PinThrottle.Result.Ok) return null
         if (r is fr.paul.telecommande.shared.PinThrottle.Result.Locked && r.fails > 0)
             addDiag("pin", "${r.fails} codes parent faux sur la TV : pause de ${RulesEngine.fmt(r.ms)}")
+        // Jamais les chiffres tapés dans le journal : seulement le fait et les essais restants
+        if (r is fr.paul.telecommande.shared.PinThrottle.Result.Wrong)
+            addDiag("pin", "Code parent faux tapé sur la TV · encore ${r.triesLeft} essai(s) avant une pause")
         return fr.paul.telecommande.shared.PinThrottle.message(r)
     }
 
@@ -1665,7 +1668,16 @@ class GuardService : AccessibilityService() {
             // Le parent a validé depuis son téléphone (empreinte ou code) : la pause des codes faux sur la TV ne vise que l'enfant
             if (ok) store.pinThrottle.clear()
             addDiag("pin", (if (ok) "Code parent validé depuis le téléphone" else "Validation du téléphone refusée") + " ($phoneName) : ${overlays.lastApproveInfo}")
+            // Refus alors qu'un pavé est à l'écran : on le dit sur la TV au lieu de ne rien montrer
+            if (!ok) overlays.pinRefusedElsewhere("", "Validation du téléphone refusée : la demande a changé. Revalidez sur le téléphone ou tapez le code ici.")
             JSONObject().put("ok", ok).apply { if (!ok) put("error", "Demande annulée ou expirée sur la TV") }
+        }
+        "pin_failed" -> {
+            // Le parent a tapé un code faux sur son téléphone pour cette demande : la TV l'affiche
+            val shown = overlays.pinRefusedElsewhere(req.optString("id").take(64),
+                "Code refusé sur le téléphone du parent. Réessayez sur le téléphone ou tapez le code ici.")
+            addDiag("pin", "Code parent faux tapé sur le téléphone ($phoneName)" + if (shown) " · affiché sur la TV" else " · aucun pavé à l'écran")
+            JSONObject().put("ok", true).put("shown", shown)
         }
         "bonus" -> {
             val now = System.currentTimeMillis()
