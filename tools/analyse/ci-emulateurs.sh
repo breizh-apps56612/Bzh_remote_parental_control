@@ -91,6 +91,14 @@ if [ ${#code} = 6 ]; then
   faux=$(printf '%06d' $(( (10#$code + 1) % 1000000 )))
   r=$(cli pair "$faux"); [[ $r == *'"ok": false'* || $r != *'"ok": true'* ]] && ok "Mauvais code d'appairage refusé" || ko "Mauvais code d'appairage refusé" "$r"
   r=$(cli pair "$code")
+  # Lecture automatique du code parfois fausse (un chiffre mal lu) : nouveau code affiché, nouvelle lecture (2 essais de plus)
+  for essai in 2 3; do
+    [[ $r == *'"ok": true'* ]] && break
+    info "Code mal lu, nouvel essai" "essai $essai (lu : $code)"
+    sleep 5; cli pair_start >/dev/null; sleep 4; cap $TV 02-tv-code-appairage-$essai
+    code=$(tesseract "$OUT/captures/02-tv-code-appairage-$essai.png" - --psm $([ $essai = 2 ] && echo 6 || echo 11) 2>/dev/null | grep -oE '[0-9]{3} *[0-9]{3}' | head -1 | tr -d ' ')
+    [ ${#code} = 6 ] && r=$(cli pair "$code")
+  done
   if [[ $r == *'"ok": true'* && $r == *'"box_prouve_le_code": true'* ]]; then ok "Appairage SPAKE2 avec le code affiché"; else ko "Appairage SPAKE2 avec le code affiché" "$r"; fi
   r=$(cli status); [[ $r == *'"ok": true'* ]] && ok "Téléphone appairé accepté" || ko "Téléphone appairé accepté" "${r:0:160}"
   # Activité : la TV envoie le détail des séances [appli, début, fin] (diagrammes du téléphone, Box 1.4.56)
