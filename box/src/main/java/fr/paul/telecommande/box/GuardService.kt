@@ -152,7 +152,7 @@ class GuardService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
         devRecord(event)
-        if (isFreebox && event.packageName?.toString() in ProfileBadge.OQEE) scheduleBadge()
+        event.packageName?.toString()?.let { if (it in ProfileBadge.OQEE || it == homePkg()) scheduleBadge() }
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED || event.eventType == AccessibilityEvent.TYPE_ANNOUNCEMENT) {
             // Classification affichée quelques secondes (« 16+ · violence » au début d'une lecture) : on la garde 30 s
             if (progWatch && event.packageName?.toString() == current) harvest(event)
@@ -211,7 +211,7 @@ class GuardService : AccessibilityService() {
         if (pkg == current) return
         current?.let { exitReport(it, pkg) }
         current = pkg
-        if (isFreebox) scheduleBadge(600)
+        scheduleBadge(600)
         if (fr.paul.telecommande.shared.FilmApps.isFilmApp(pkg) && !progWatch) { progWatch = true; refreshEvents() }
         BoxLog.log("APPLI", "${label(pkg)} ($pkg)" + (className?.let { " · $it" } ?: ""))
         lastBlockPkg = null
@@ -539,18 +539,33 @@ class GuardService : AccessibilityService() {
             cancelable = store.activeProfile() != null) { pickProfile(it) }
     }
 
-    // ---------- Pastille de profil sur l'accueil Freebox (Oqee) ----------
+    // ---------- Pastille de profil : accueil de toutes les box, et bandeau d'Oqee sur la Freebox ----------
 
-    private val isFreebox = ProfileBadge.isFreebox(android.os.Build.MANUFACTURER, android.os.Build.MODEL)
-    /** Dernier élément du bandeau Oqee (l'avatar) quand la pastille est affichée, sinon null. */
+    /** Dernier élément du bandeau Oqee (l'avatar), ou centre de la pastille sur un accueil, quand elle est affichée. */
     @Volatile private var badgeEnd: ProfileBadge.Node? = null
+    /** true : pastille posée sur l'écran d'accueil de la box (pas dans le bandeau d'Oqee). */
+    private var badgeHome = false
     private var badgeSelected = false
     private var swallowUpKey = -1
     private val badgeCheck = Runnable { updateBadge() }
     private val badgeIdle = Runnable { if (badgeSelected) { badgeSelected = false; updateBadge() } }
+    private var homeCache: String? = null
+    private var homeAt = 0L
+
+    /** Appli d'accueil de la box (menu des applications), relue toutes les minutes. */
+    private fun homePkg(): String? {
+        val now = System.currentTimeMillis()
+        if (now - homeAt > 60_000L) {
+            homeAt = now
+            homeCache = runCatching {
+                packageManager.resolveActivity(android.content.Intent(android.content.Intent.ACTION_MAIN)
+                    .addCategory(android.content.Intent.CATEGORY_HOME), 0)?.activityInfo?.packageName
+            }.getOrNull()?.takeIf { it != "android" && it != packageName }
+        }
+        return homeCache
+    }
 
     private fun scheduleBadge(delayMs: Long = 350) {
-        if (!isFreebox) return
         main.removeCallbacks(badgeCheck); main.postDelayed(badgeCheck, delayMs)
     }
 
@@ -558,27 +573,34 @@ class GuardService : AccessibilityService() {
     private fun updateBadge() {
         val rules = store.rules()
         val interactive = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
-        if (!isFreebox || !interactive || current !in ProfileBadge.OQEE || rules.profiles.isEmpty() ||
-            overlays.blockVisible || overlays.whoVisible) { hideBadge(); return }
-        val end = runCatching { headerEnd() }.getOrNull() ?: run { hideBadge(); return }
-        badgeEnd = end
+        val home = homePkg()
+        if (!interactive || (current !in ProfileBadge.OQEE && current != home) || rules.profiles.isEmpty() ||
+            overlays.blockVisible || overlays.whoVisible || overlays.pinVisible) { hideBadge(); return }
+        val d = resources.displayMetrics.density
+        val size = (40 * d).toInt(); val gap = (26 * d).toInt()
+        val nodes = runCatching { screenNodes() }.getOrNull() ?: run { hideBadge(); return }
+        val end = if (current in ProfileBadge.OQEE) ProfileBadge.headerEnd(nodes, resources.displayMetrics.heightPixels) else null
+        val spot = if (end != null) ProfileBadge.Spot(end.right + gap + size / 2, end.centerY)
+            else if (current == home) ProfileBadge.homeSpot(nodes, resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels, size, gap)
+            else null
+        if (spot == null) { hideBadge(); return }
+        badgeHome = end == null
+        badgeEnd = end ?: ProfileBadge.Node("", spot.x - size / 2, spot.y - size / 2, spot.x + size / 2, spot.y + size / 2, false)
         val p = activeProfile(rules)
-        val size = (40 * resources.displayMetrics.density).toInt()
-        val gap = (26 * resources.displayMetrics.density).toInt()
-        overlays.showProfileBadge(p?.emoji ?: "👤", p?.name ?: "Qui regarde ?", end.right + gap + size / 2, end.centerY, badgeSelected)
+        overlays.showProfileBadge(p?.emoji ?: "👤", p?.name ?: "Qui regarde ?", spot.x, spot.y, badgeSelected)
     }
 
     private fun hideBadge() {
         if (badgeEnd == null && !overlays.badgeVisible) return
-        badgeEnd = null; badgeSelected = false
+        badgeEnd = null; badgeSelected = false; badgeHome = false
         overlays.hideProfileBadge()
     }
 
-    /** Éléments du haut de l'écran d'Oqee (texte + position), pour retrouver le bandeau et son avatar. */
-    private fun headerEnd(): ProfileBadge.Node? {
+    /** Éléments visibles de l'appli au premier plan (texte + position), pour placer la pastille. */
+    private fun screenNodes(): List<ProfileBadge.Node>? {
         val root = rootInActiveWindow ?: return null
-        if (root.packageName?.toString() !in ProfileBadge.OQEE) return null
-        val screenH = resources.displayMetrics.heightPixels
+        val pkg = root.packageName?.toString()
+        if (pkg !in ProfileBadge.OQEE && pkg != homePkg()) return null
         val nodes = ArrayList<ProfileBadge.Node>()
         val r = android.graphics.Rect()
         val stack = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>().apply { add(root) }
@@ -586,12 +608,23 @@ class GuardService : AccessibilityService() {
         while (stack.isNotEmpty() && visited < 800) {
             val n = stack.removeLast(); visited++
             n.getBoundsInScreen(r)
-            if (r.top > screenH * 0.3) continue          // seul le haut de l'écran nous intéresse
             if (n.isVisibleToUser) nodes += ProfileBadge.Node((n.text ?: n.contentDescription)?.toString().orEmpty(),
                 r.left, r.top, r.right, r.bottom, n.isFocusable || n.isClickable)
             for (i in 0 until n.childCount) n.getChild(i)?.let { stack.add(it) }
         }
-        return ProfileBadge.headerEnd(nodes, screenH)
+        return nodes
+    }
+
+    private fun focusRect(): IntArray? = runCatching {
+        findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT)?.let { f ->
+            val r = android.graphics.Rect().also { f.getBoundsInScreen(it) }; intArrayOf(r.left, r.top, r.right, r.bottom)
+        }
+    }.getOrNull()
+
+    private fun selectBadge(why: String) {
+        badgeSelected = true; updateBadge()
+        BoxLog.log("PROFIL", "Pastille sélectionnée ($why)")
+        main.removeCallbacks(badgeIdle); main.postDelayed(badgeIdle, 10_000)
     }
 
     /**
@@ -611,7 +644,7 @@ class GuardService : AccessibilityService() {
             when (k) {
                 android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> {
                     swallowUpKey = k; badgeSelected = false; hideBadge()
-                    BoxLog.log("PROFIL", "Pastille de l'accueil Freebox : changement de profil")
+                    BoxLog.log("PROFIL", "Pastille de l'accueil : changement de profil")
                     askWhoWatches()
                     return true
                 }
@@ -623,13 +656,18 @@ class GuardService : AccessibilityService() {
                 else -> { badgeSelected = false; updateBadge(); return null }
             }
         }
-        if (k != android.view.KeyEvent.KEYCODE_DPAD_RIGHT) return null
-        val f = runCatching { findFocus(android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull() ?: return null
-        val r = android.graphics.Rect().also { f.getBoundsInScreen(it) }
-        if (!ProfileBadge.focusAtEnd(r.left, r.top, r.right, r.bottom, end)) return null
-        swallowUpKey = k; badgeSelected = true; updateBadge()
-        main.removeCallbacks(badgeIdle); main.postDelayed(badgeIdle, 10_000)
-        return true
+        if (k != android.view.KeyEvent.KEYCODE_DPAD_RIGHT && k != android.view.KeyEvent.KEYCODE_DPAD_UP) return null
+        val before = focusRect()
+        if (!badgeHome && k == android.view.KeyEvent.KEYCODE_DPAD_RIGHT && before != null &&
+            ProfileBadge.focusAtEnd(before[0], before[1], before[2], before[3], end)) {
+            swallowUpKey = k; selectBadge("flèche droite depuis l'avatar d'Oqee"); return true
+        }
+        // Toutes les box : haut ou droite sans effet en haut de l'écran (le focus ne bouge plus) → la pastille
+        main.postDelayed({
+            if (badgeEnd != null && !badgeSelected && ProfileBadge.reachesBadge(before, focusRect(), resources.displayMetrics.heightPixels))
+                selectBadge("haut / droite en haut de l'accueil")
+        }, 300)
+        return null
     }
 
     private fun stillThereCheck(rules: BoxRules, now: Long, interactive: Boolean) {
@@ -651,13 +689,13 @@ class GuardService : AccessibilityService() {
         val pkg = if (interactive) current else null
         val allRules = store.rules()
         var profile = activeProfile(allRules)
-        // Pastille Freebox : réapparaît après « Qui regarde ? » ou un écran de blocage
-        if (isFreebox && (current in ProfileBadge.OQEE || badgeEnd != null) && !badgeSelected) scheduleBadge(500)
+        // Pastille de profil : réapparaît après « Qui regarde ? » ou un écran de blocage
+        if ((current in ProfileBadge.OQEE || current == homePkg() || badgeEnd != null) && !badgeSelected) scheduleBadge(500)
         // Profil par défaut choisi par le parent : appliqué d'office à l'allumage, sans « Qui regarde ? »
         if (interactive && allRules.enabled && profile == null && !overlays.whoVisible) allRules.startProfile()?.let { def ->
             store.setActiveProfile(def.id); lastBlockPkg = null; lastInteraction = now
             BoxLog.log("PROFIL", "${def.name} appliqué d'office à l'allumage (profil par défaut)")
-            overlays.showBanner("${def.emoji} ${def.name} · changer : appli Télécommande Box")
+            overlays.showBanner("${def.emoji} ${def.name} · changer : pastille en haut à droite de l'accueil")
             server.push(JSONObject().put("event", "profile").put("id", def.id).put("name", def.name).put("emoji", def.emoji))
             addDiag("profile", "Profil par défaut appliqué à l'allumage : ${def.name}")
             profile = def
@@ -1686,6 +1724,8 @@ class GuardService : AccessibilityService() {
             .put("rulesVersion", store.rules().version)
             .put("profile", activeProfile(store.rules())?.toJson() ?: JSONObject.NULL)
             .put("profileUsage", profileUsage(now))
+            .put("badge", JSONObject().put("visible", overlays.badgeVisible).put("selected", badgeSelected)
+                .put("home", badgeHome).put("who", overlays.whoVisible).put("homeApp", homePkg() ?: ""))
     }
 
     /** Temps restant d'un profil aujourd'hui (ms), ou null s'il n'a pas de limite. */

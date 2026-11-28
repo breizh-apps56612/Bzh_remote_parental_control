@@ -121,7 +121,7 @@ class Overlays(private val ctx: Context) {
 
     /**
      * Place du bandeau « Bonne séance… » : en haut à droite, ou juste SOUS la pastille de profil quand elle est
-     * affichée (accueil Freebox) — avant, il recouvrait la pastille et le bandeau d'Oqee.
+     * affichée (accueil de la box) — avant, il recouvrait la pastille et le bandeau d'Oqee.
      */
     private fun bannerParams() = params(focusable = false, fullscreen = false, gravity = Gravity.TOP or Gravity.END).apply {
         val bp = badgeParams
@@ -544,7 +544,7 @@ class Overlays(private val ctx: Context) {
         tickDown.run()
     }
 
-    // ---------- Pastille de profil (accueil Freebox) ----------
+    // ---------- Pastille de profil (accueil de toutes les box, bandeau d'Oqee) ----------
 
     private var badge: View? = null
     private var badgeKey: String? = null
@@ -553,7 +553,7 @@ class Overlays(private val ctx: Context) {
     val badgeVisible get() = badge != null
 
     /**
-     * Pastille ronde avec l'emoji du profil, placée juste après l'avatar d'Oqee.
+     * Pastille ronde avec l'emoji du profil, placée juste après l'avatar d'Oqee, ou à gauche des icônes du coin haut droit de l'accueil.
      * [centerX] / [centerY] : centre voulu (pixels écran). Sélectionnée : liseré blanc, plus grande,
      * et « Léo · changer de profil » dessous.
      */

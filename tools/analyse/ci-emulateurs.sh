@@ -103,6 +103,28 @@ try:
     print(("OUI " if ok else "NON ") + str(len(s) if isinstance(s, list) else "absent"))
 except Exception as e: print("NON " + str(e)[:80])')
   [[ $r == OUI* ]] && ok "Activité : détail des séances envoyé par la TV" "${r#OUI } séance(s)" || ko "Activité : détail des séances envoyé par la TV" "$r"
+
+  # Pastille de profil sur l'accueil de toutes les box + changement de profil sans l'appli (Box 1.4.57)
+  touche() { for k in "$@"; do timeout 20 adb -s $TV shell input keyevent KEYCODE_$k; sleep 0.8; done; }
+  pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
+try:
+    d=json.loads(sys.stdin.read()); b=d.get("badge") or {}; p=d.get("profile") or {}
+    print(" ".join(k for k in ("visible","selected","home","who") if b.get(k)) + " | profil=" + str(p.get("name","aucun")) + " | accueil=" + str(b.get("homeApp","")))
+except Exception as e: print("erreur " + str(e)[:80])'; }
+  cli set_rules '{"rules":{"enabled":true,"protectSettings":false,"stillThereMin":0,"version":9001,"profiles":[{"id":"leo","name":"Léo","emoji":"🦖"},{"id":"zoe","name":"Zoé","emoji":"🦄"}]}}' >/dev/null
+  sleep 4; cap $TV 05-tv-qui-regarde; touche DPAD_CENTER; sleep 3
+  touche HOME; sleep 5; b=$(pastille); cap $TV 06-tv-pastille-accueil
+  [[ $b == *visible* && $b == *home* && $b != *"profil=aucun"* ]] && ok "Pastille de profil sur l'accueil de la box" "${b:0:140}" || ko "Pastille de profil sur l'accueil de la box" "${b:0:160}"
+  touche DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT
+  sleep 1; b=$(pastille); cap $TV 07-tv-pastille-selection
+  [[ $b == *selected* ]] && ok "Pastille atteinte à la télécommande (haut puis droite)" "${b:0:140}" || ko "Pastille atteinte à la télécommande (haut puis droite)" "${b:0:160}"
+  avant=${b#*profil=}; avant=${avant%% |*}
+  touche DPAD_CENTER; sleep 2; b=$(pastille); cap $TV 08-tv-changer-profil
+  [[ $b == *who* ]] && ok "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:140}" || ko "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:160}"
+  touche DPAD_RIGHT DPAD_CENTER; sleep 3; b=$(pastille)
+  apres=${b#*profil=}; apres=${apres%% |*}
+  [[ $b != *who* && $apres != aucun && $apres != "$avant" ]] && ok "Profil changé depuis la TV" "$avant → $apres" "${b:0:140}" || ko "Profil changé depuis la TV" "${b:0:160}"
+  cli set_rules '{"rules":{"enabled":false,"version":9002}}' >/dev/null; sleep 2; touche HOME
 else
   info "Appairage non testé" "code illisible sur la capture (lecture automatique), voir 02-tv-code-appairage.png"
 fi
