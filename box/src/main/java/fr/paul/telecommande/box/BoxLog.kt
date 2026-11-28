@@ -28,7 +28,44 @@ object BoxLog {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             runCatching { append(line("CRASH", "Thread ${t.name} : " + android.util.Log.getStackTraceString(e))) }
+            // Fil secondaire (réseau, minuterie…) : seul ce fil s'arrête, la protection continue.
+            // Un plantage tue sinon toute l'appli, et après deux plantages en une minute Android
+            // ne relance plus le service de protection tant que personne n'ouvre l'appli (vu au stress test du 28/11).
+            if (t !== android.os.Looper.getMainLooper().thread && survivre()) return@setDefaultUncaughtExceptionHandler
             previous?.uncaughtException(t, e)
+        }
+        gardeFilPrincipal()
+    }
+
+    // ---------- Survie aux erreurs ----------
+    private val erreurs = ArrayDeque<Long>()
+    /** Au plus 20 erreurs rattrapées par minute : au-delà, l'appli est vraiment cassée et on laisse Android la relancer. */
+    @Synchronized private fun survivre(): Boolean {
+        val now = android.os.SystemClock.elapsedRealtime()
+        while (erreurs.isNotEmpty() && now - erreurs.first() > 60_000) erreurs.removeFirst()
+        erreurs.addLast(now)
+        return erreurs.size <= 20
+    }
+
+    /** Nombre d'erreurs rattrapées depuis le démarrage (statut et banc de test). */
+    @Volatile var rattrapees = 0; private set
+
+    /**
+     * Fil principal : une erreur pendant le traitement d'un message (évènement d'écran, minuterie…) est notée
+     * puis la boucle repart, au lieu d'arrêter l'appli et donc la protection.
+     */
+    private fun gardeFilPrincipal() {
+        if (Build.FINGERPRINT == "robolectric") return   // tests sur ordinateur : la boucle est pilotée par le test
+        val main = android.os.Looper.getMainLooper()
+        android.os.Handler(main).post {
+            while (true) {
+                try { android.os.Looper.loop(); return@post }
+                catch (e: Throwable) {
+                    rattrapees++
+                    runCatching { append(line("CRASH", "Erreur rattrapée (protection maintenue) : " + android.util.Log.getStackTraceString(e).take(4_000))) }
+                    if (!survivre()) throw e
+                }
+            }
         }
     }
 

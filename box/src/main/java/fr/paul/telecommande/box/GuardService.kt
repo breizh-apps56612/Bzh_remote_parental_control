@@ -1736,6 +1736,7 @@ class GuardService : AccessibilityService() {
         val totals = log.totals(day, now).filterKeys { it !in exempt }
         val pkg = current
         return JSONObject().put("ok", true)
+            .put("errorsCaught", BoxLog.rattrapees)   // erreurs rattrapées sans arrêter la protection
             .put("pkg", pkg ?: "").put("label", pkg?.let { label(it) } ?: "")
             .put("interactive", (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive)
             .put("todayTotal", totals.values.sum())

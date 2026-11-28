@@ -25,7 +25,8 @@ attendre_box() { # attendre_box <secondes max> → durée dans $ATTENTE ; 0 si l
   while [ $((SECONDS - t0)) -lt "$1" ]; do box_repond && { ATTENTE=$((SECONDS - t0)); return 0; }; sleep 2; done
   ATTENTE=$1; return 1
 }
-service_lie() { timeout 30 adb -s $TV shell dumpsys accessibility 2>/dev/null | grep -q "GuardService"; }
+# Service de protection réellement lié (« Bound services »), pas seulement cité dans « Crashed services »
+service_lie() { timeout 30 adb -s $TV shell dumpsys accessibility 2>/dev/null | tr -d '\r' | grep -iE "bound services" | grep -q "GuardService"; }
 remettre_ports() {
   timeout 20 adb -s $TV forward tcp:7363 tcp:7363 >/dev/null 2>&1
   timeout 20 adb -s $TV emu redir del tcp:7364 >/dev/null 2>&1; timeout 20 adb -s $TV emu redir add tcp:7364:7363 >/dev/null 2>&1
@@ -85,25 +86,26 @@ ROOT=0; r=$(timeout 30 adb -s $TV root 2>&1 | tr -d '\r' | head -1); sleep 5; ti
 [ "$(timeout 20 adb -s $TV shell id -u 2>/dev/null | tr -d '\r')" = 0 ] && ROOT=1
 info "S10 Accès administrateur sur la TV" "$([ $ROOT = 1 ] && echo oui || echo "non : ${r:0:80}")"
 remettre_ports
-# Délai mesuré à chaque fois : nouveau processus, puis serveur de la Box qui répond. Android espace les relances
-# après des plantages rapprochés (1 s, 4 s, 16 s…) : on note chaque délai et l'état « Crashed services » d'Android.
-delais=""; rates=0; premier=""
+# Box 1.4.61 : une erreur dans l'appli est rattrapée (journal CRASH), la Box reste en marche.
+# Avant : après deux plantages en une minute, Android ne relançait plus la protection (« Crashed services »).
+p0=$(box_pid); vivants=0; delais=""
 for i in 1 2 3 4 5; do
-  p=$(box_pid); t0=$SECONDS
-  if [ $ROOT = 1 ] && [ -n "$p" ]; then timeout 20 adb -s $TV shell kill -9 "$p"; else timeout 20 adb -s $TV shell am crash $PKG_TV >/dev/null 2>&1; fi
-  # attendre que l'ancien processus ait vraiment disparu (sinon on mesurerait « 0 s » à tort)
-  for j in $(seq 1 20); do q=$(box_pid); [ "$q" != "$p" ] && break; sleep 0.5; done
-  if attendre_box 240; then d=$((SECONDS - t0)); else d="> 240"; rates=$((rates+1)); fi
-  [ -z "$premier" ] && premier=$d
-  etat=$(timeout 30 adb -s $TV shell dumpsys accessibility 2>/dev/null | grep -iE "crashed" | head -2 | tr -s ' \r\n' ' ' | cut -c1-120)
-  delais="$delais $d s ;"; info "S10 Plantage $i : retour de la Box" "$d s (pid $p → $(box_pid)) — ${etat:-rien}"
+  timeout 20 adb -s $TV shell am crash $PKG_TV >/dev/null 2>&1; t0=$SECONDS; sleep 2
+  attendre_box 240 && d=$((SECONDS - t0)) || d="> 240"; delais="$delais $d s ;"
+  [ "$(box_pid)" = "$p0" ] && vivants=$((vivants+1))
   timeout 20 adb -s $TV shell input keyevent KEYCODE_BACK >/dev/null 2>&1   # ferme un éventuel « l'appli s'est arrêtée »
 done
-[ $rates = 0 ] && ok "S10 5 plantages forcés de la Box : relancée à chaque fois" "délais :${delais} ($([ $ROOT = 1 ] && echo kill -9 || echo am crash))" \
-  || ko "S10 5 plantages forcés de la Box : relancée à chaque fois" "$rates fois sur 5 sans retour en 4 min — délais :${delais}"
-[[ $premier =~ ^[0-9]+$ ]] && [ "$premier" -le 30 ] && ok "S10 Premier plantage : protection revenue en moins de 30 s" "$premier s" \
-  || ko "S10 Premier plantage : protection revenue en moins de 30 s" "$premier s"
-service_lie && ok "S10 Service de protection toujours lié" || ko "S10 Service de protection toujours lié" "GuardService absent de dumpsys accessibility"
+etat=$(timeout 30 adb -s $TV shell dumpsys accessibility 2>/dev/null | grep -iE "crashed services" | head -1 | tr -s ' \r\n' ' ' | cut -c1-120)
+nerr=$(stress_json errorsCaught "$(timeout 90 python3 -I "$HERE/boxcli.py" status 2>/dev/null)")
+info "S10 5 erreurs forcées (am crash)" "délais :${delais} même processus $vivants/5, erreurs rattrapées : ${nerr:-?} — ${etat:-}"
+[ $vivants = 5 ] && ok "S10 5 erreurs forcées : la Box reste en marche (erreur rattrapée)" "même processus 5/5, ${nerr:-?} erreur(s) notée(s)" \
+  || ko "S10 5 erreurs forcées : la Box reste en marche (erreur rattrapée)" "processus changé $((5 - vivants)) fois — délais :${delais}"
+[[ $delais != *">"* ]] && ok "S10 Après chaque erreur : la Box répond" "délais :${delais}" || ko "S10 Après chaque erreur : la Box répond" "délais :${delais} — ${etat:-}"
+service_lie && ok "S10 Service de protection toujours lié" || ko "S10 Service de protection toujours lié" "${etat:-absent de « Bound services »}"
+if [ $ROOT = 1 ]; then   # vrai arrêt du processus (impossible à rattraper) : Android doit relancer la Box
+  p=$(box_pid); timeout 20 adb -s $TV shell kill -9 "$p"; sleep 2
+  attendre_box 120 && ok "S10 Processus tué (kill -9) : Box relancée par Android" "${ATTENTE} s" || ko "S10 Processus tué (kill -9) : Box relancée par Android" "pas de retour en 120 s"
+fi
 timeout 20 adb -s $TV logcat -b crash -c 2>/dev/null   # plantages volontaires : on ne les compte pas ensuite
 
 # --- S11. Changement d'heure : passage de minuit et fuseau horaire ---
