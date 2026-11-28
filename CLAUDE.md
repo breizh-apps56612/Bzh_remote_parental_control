@@ -14,5 +14,7 @@ Le propriétaire du projet ne teste plus lui-même : c'est le banc qui teste.
 - Publication (site, version.json) **seulement si le run du commit à publier est vert**. Un échec se corrige puis se reteste.
 - Chaque nouvelle fonction visible ou correctif ajoute sa vérification dans `ci-emulateurs.sh`
   (une ligne `ok` / `ko` par comportement attendu), pour que tout soit testé automatiquement.
+- Stress test complet (≈ 25 min de plus, `tools/analyse/stress.sh`) : envoyer sur une branche `stress/…`, mettre `[stress]`
+  dans le message du commit, ou « Run workflow » avec stress = oui. À faire avant une grosse publication.
 - Règles du banc : `timeout` sur chaque commande adb, aucun secret, aucune donnée personnelle dans les résultats.
 - Le résumé dit ce qui a été testé ; ce qui ne peut l'être qu'avec une vraie TV (Freebox, Oqee…) est signalé à part.

@@ -206,6 +206,12 @@ vivant $TV $PKG_TV && ok "Navigation télécommande sur la TV" || ko "Navigation
 video_fin
 n=$(ls "$OUT/videos"/*.mp4 2>/dev/null | wc -l); [ "$n" -gt 0 ] && info "Vidéos du passage" "$n fichier(s) dans videos/" || info "Vidéos du passage" "aucune vidéo enregistrée"
 
+# ---------- 5b. Stress test complet (STRESS=1 : branche stress/…, [stress] dans le commit ou « Run workflow ») ----------
+if [ "${STRESS:-0}" = 1 ]; then
+  if [ "${appaire:-0}" = 1 ]; then source "$HERE/stress.sh"
+  else ko "Stress test complet" "non lancé : le téléphone de test n'a pas pu être appairé"; fi
+fi
+
 # ---------- 6. Plantages ----------
 for d in $PH $TV; do
   n=$([ $d = $PH ] && echo telephone || echo tv)

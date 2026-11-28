@@ -28,6 +28,11 @@ on:
         type: choice
         options: [ "30", "29", "33", "34" ]
         default: "30"
+      stress:
+        description: "Stress test complet (≈ 25 min de plus)"
+        type: choice
+        options: [ "non", "oui" ]
+        default: "non"
 
 permissions:
   contents: read
@@ -42,7 +47,7 @@ jobs:
       github.repository_owner == 'breizh-apps56612' &&
       (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -69,14 +74,16 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tesseract-ocr >/dev/null
 
+      # Stress test : « Run workflow » avec stress = oui, branche stress/…, ou [stress] dans le message du commit
       - name: Banc d'essai
-        timeout-minutes: 25
+        timeout-minutes: ${{ (inputs.stress == 'oui' || startsWith(github.ref_name, 'stress/') || contains(github.event.head_commit.message, '[stress]')) && 60 || 25 }}
         env:
           APK_PHONE: app/build/outputs/apk/release/app-release.apk
           APK_BOX: box/build/outputs/apk/release/box-release.apk
           API_TV: ${{ inputs.api_tv || '30' }}
           API_PHONE: ${{ inputs.api_phone || '30' }}
           OUT: ${{ runner.temp }}/emu-resultats
+          STRESS: ${{ (inputs.stress == 'oui' || startsWith(github.ref_name, 'stress/') || contains(github.event.head_commit.message, '[stress]')) && '1' || '0' }}
         run: bash tools/analyse/ci-emulateurs.sh
 
       - name: Résumé
