@@ -90,3 +90,5 @@ echo "$LIEN" > "$OUT/lien.txt"
   echo "Identifiant : \`telecommande\` — mot de passe : celui du secret EMULATEUR_MOT_DE_PASSE."; echo
   echo "Le lien s'arrête à la fin de la session (annulez le run pour arrêter plus tôt)."; } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 echo "LIEN DIRECT : $LIEN"
+# Annotation du run : l'appli téléphone (menu Administrateur › Atelier) la lit par l'API publique et ouvre le lien
+echo "::notice title=Lien des émulateurs::$LIEN"

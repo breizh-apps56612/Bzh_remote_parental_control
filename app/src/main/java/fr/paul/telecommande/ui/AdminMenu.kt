@@ -165,6 +165,11 @@ object AdminMenu {
             )
         }
 
+        // ----- Atelier : émulateurs en direct sur GitHub (easter egg) -----
+        section("Atelier")
+        group(Triple("🧪", "Émulateur en direct", "Téléphone + TV virtuels dans le navigateur, lancés sur GitHub"),
+            actions = listOf({ EmulatorLive.open(a) }))
+
         // ----- Appli -----
         section("Appli")
         group(
