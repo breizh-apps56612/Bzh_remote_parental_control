@@ -12,8 +12,8 @@ android {
         minSdk = 21          // Android 5.0 : ~99 % des appareils en circulation
         targetSdk = 34
         // Numéro de version fixé ici (et non par GitHub) : on l'augmente à chaque publication.
-        versionCode = 201
-        versionName = "2.6.9"
+        versionCode = 202
+        versionName = "2.6.10"
         vectorDrawables.useSupportLibrary = true
     }
 

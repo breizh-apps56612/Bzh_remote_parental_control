@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
  * et d'envoyer des commandes (passer l'annonce, aller à un instant, vitesse…).
  * Fonctionne via Internet : le téléphone n'a pas besoin d'être sur le même Wi-Fi.
  */
-class LoungeClient(private val deviceId: String, private val name: String = "Télécommande Android") {
+class LoungeClient(private val deviceId: String, private val name: String = "Entente") {
     var screenId: String? = null
     var loungeToken: String? = null
     var screenName: String? = null

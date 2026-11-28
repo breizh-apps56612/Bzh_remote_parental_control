@@ -151,7 +151,7 @@ object BtMouse {
                     val h = proxy as BluetoothHidDevice
                     hid = h
                     val sdp = BluetoothHidDeviceAppSdpSettings(
-                        "Souris Télécommande", "Souris et pavé tactile", "Télécommande",
+                        "Souris Entente", "Souris et pavé tactile", "Entente",
                         BluetoothHidDevice.SUBCLASS1_MOUSE, DESCRIPTOR
                     )
                     val ok = runCatching { h.registerApp(sdp, null, null, Executors.newSingleThreadExecutor(), callback) }.getOrDefault(false)

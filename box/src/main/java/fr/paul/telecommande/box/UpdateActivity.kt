@@ -63,22 +63,22 @@ class UpdateActivity : Activity() {
         when (state) {
             "checking" -> { root.addView(text("Recherche de mise à jour…", 26f, bold = true)); root.addView(ProgressBar(this), LinearLayout.LayoutParams(dp(48), dp(48)).apply { topMargin = dp(20) }) }
             "none" -> {
-                root.addView(text("Télécommande Box est à jour", 26f, bold = true))
+                root.addView(text("Entente TV est à jour", 26f, bold = true))
                 root.addView(text("Version ${versionName()}", 16f, BoxUi.SOFT), lp(8))
                 addButtons(button("Fermer", true) { finish() })
             }
             "ready" -> {
                 root.addView(text("Mise à jour disponible", 28f, bold = true))
-                root.addView(text("Télécommande Box ${versionName()} → ${r?.versionName}", 18f, BoxUi.SOFT), lp(8))
+                root.addView(text("Entente TV ${versionName()} → ${r?.versionName}", 18f, BoxUi.SOFT), lp(8))
                 r?.notes?.takeIf { it.isNotBlank() }?.let { root.addView(text(it, 16f, BoxUi.SOFT), lp(16)) }
                 root.addView(text("Vos réglages et la liaison avec le téléphone sont conservés.", 14f, BoxUi.MUTED), lp(16))
                 addButtons(button("Installer maintenant", true) { startDownload() }, button("Plus tard", false) { finish() })
             }
             "permission" -> {
                 root.addView(text("Une autorisation est nécessaire (une seule fois)", 24f, bold = true))
-                root.addView(text("Autorisez « Télécommande Box » à installer ses mises à jour, puis revenez avec ↩.\n\n" +
+                root.addView(text("Autorisez « Entente TV » à installer ses mises à jour, puis revenez avec ↩.\n\n" +
                     "Si le réglage ne s'ouvre pas : Paramètres › Applications › Accès spécifiques des applications › " +
-                    "Installer des applis inconnues › Télécommande Box › Autoriser.", 16f, BoxUi.SOFT), lp(16))
+                    "Installer des applis inconnues › Entente TV › Autoriser.", 16f, BoxUi.SOFT), lp(16))
                 addButtons(button("Ouvrir le réglage", true) { updater.openInstallPermission(this) }, button("Plus tard", false) { finish() })
             }
             "downloading" -> {

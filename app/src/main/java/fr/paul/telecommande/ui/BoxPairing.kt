@@ -24,7 +24,7 @@ object BoxPairing {
         AlertDialog.Builder(a)
             .setTitle("Appli Box sur la TV")
             .setMessage(
-                "1. Sur la TV, installez « Télécommande Box » et ouvrez-la.\n" +
+                "1. Sur la TV, installez « Entente TV » et ouvrez-la.\n" +
                     "2. Activez la protection (une seule étape, guidée à l'écran).\n" +
                     "3. Appuyez sur « Continuer » : un code s'affichera sur la TV."
             )

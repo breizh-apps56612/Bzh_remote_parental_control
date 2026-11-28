@@ -86,7 +86,7 @@ class AssistantService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notif)
-            .setContentTitle("Télécommande")
+            .setContentTitle("Entente")
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
