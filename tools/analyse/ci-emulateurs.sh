@@ -140,7 +140,7 @@ except Exception as e: print("NON " + str(e)[:80])')
 import json, sys
 usage = {"DPAD_UP": 82, "DPAD_DOWN": 81, "DPAD_LEFT": 80, "DPAD_RIGHT": 79}
 desc = [5,1,9,6,161,1,5,7,25,224,41,231,21,0,37,1,117,1,149,8,129,2,149,1,117,8,129,1,149,6,117,8,21,0,37,101,5,7,25,0,41,101,129,0,192]
-out = [{"id": 1, "command": "register", "name": "Telecommande du banc", "vid": 6353, "pid": 11328, "bus": "usb", "descriptor": desc},
+out = [{"id": 1, "command": "register", "name": "Telecommande du banc", "vid": 4660, "pid": 22136, "bus": "usb", "descriptor": desc},
        {"id": 1, "command": "delay", "duration": 1500}]
 for k in sys.argv[1:]:
     out += [{"id": 1, "command": "report", "report": [0, 0, usage.get(k, 40), 0, 0, 0, 0, 0]}, {"id": 1, "command": "delay", "duration": 80},
