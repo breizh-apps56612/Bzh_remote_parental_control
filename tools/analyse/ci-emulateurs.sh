@@ -132,6 +132,10 @@ except Exception as e: print("NON " + str(e)[:80])')
 
   # Pastille de profil sur l'accueil de toutes les box + changement de profil sans l'appli (Box 1.4.58)
   touche() { for k in "$@"; do timeout 20 adb -s $TV shell input keyevent KEYCODE_$k; sleep 0.8; done; }
+  # Vraie télécommande : appuis envoyés par la console de l'émulateur (clavier virtuel). Les touches « adb input »
+  # sont simulées et Android ne les montre pas au service de la Box, contrairement à une vraie télécommande.
+  telecommande() { local c; for k in "$@"; do case $k in DPAD_UP) c=KEY_UP;; DPAD_DOWN) c=KEY_DOWN;; DPAD_LEFT) c=KEY_LEFT;; DPAD_RIGHT) c=KEY_RIGHT;; *) c=KEY_ENTER;; esac
+    timeout 20 adb -s $TV emu event send EV_KEY:$c:1 EV_SYN:0:0 >/dev/null; sleep 0.1; timeout 20 adb -s $TV emu event send EV_KEY:$c:0 EV_SYN:0:0 >/dev/null; sleep 0.8; done; }
   pastille() { timeout 90 python3 -I "$HERE/boxcli.py" status 2>&1 | python3 -I -c 'import json,sys
 try:
     d=json.loads(sys.stdin.read()); b=d.get("badge") or {}; p=d.get("profile") or {}
@@ -141,19 +145,19 @@ except Exception as e: print("erreur " + str(e)[:80])'; }
   sleep 4; cap $TV 05-tv-qui-regarde; touche DPAD_CENTER; sleep 3
   touche HOME; sleep 5; b=$(pastille); cap $TV 06-tv-pastille-accueil
   [[ $b == *visible* && $b == *home* && $b != *"profil=aucun"* ]] && ok "Pastille de profil sur l'accueil de la box" "${b:0:140}" || ko "Pastille de profil sur l'accueil de la box" "${b:0:160}"
-  touche DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT
+  telecommande DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_UP DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT DPAD_RIGHT
   sleep 1; b=$(pastille); cap $TV 07-tv-pastille-selection
   # Relevé : ce que la Box a vu des flèches (journal Box) et l'arbre de l'écran TV (émulateur, aucune donnée personnelle)
   timeout 90 python3 -I "$HERE/boxcli.py" box_log '{"max":20000}' 2>/dev/null | python3 -I -c 'import json,sys
 try: print("\n".join(l for l in json.loads(sys.stdin.read()).get("log","").splitlines() if "PASTILLE" in l or "PROFIL" in l or "TOUCHE" in l))
 except Exception as e: print("journal illisible", e)' > "$OUT/journaux/pastille.txt"
   timeout 30 adb -s $TV shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; timeout 20 adb -s $TV exec-out cat /sdcard/ui.xml > "$OUT/journaux/ecran-tv-accueil.xml" 2>/dev/null
-  info "Relevé pastille" "$(grep PASTILLE "$OUT/journaux/pastille.txt" | tail -2 | cut -c1-200 | tr '\n|' '  ')"
+  info "Relevé pastille" "$(grep -E "PASTILLE|TOUCHE" "$OUT/journaux/pastille.txt" | tail -3 | cut -c1-200 | tr '\n|' '  ')"
   [[ $b == *selected* ]] && ok "Pastille atteinte à la télécommande (haut puis droite)" "${b:0:140}" || ko "Pastille atteinte à la télécommande (haut puis droite)" "${b:0:160}"
   avant=${b#*profil=}; avant=${avant%% |*}
-  touche DPAD_CENTER; sleep 2; b=$(pastille); cap $TV 08-tv-changer-profil
+  telecommande DPAD_CENTER; sleep 2; b=$(pastille); cap $TV 08-tv-changer-profil
   [[ $b == *who* ]] && ok "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:140}" || ko "OK sur la pastille : « Qui regarde ? » sans passer par l'appli" "${b:0:160}"
-  touche DPAD_RIGHT DPAD_CENTER; sleep 3; b=$(pastille)
+  telecommande DPAD_RIGHT DPAD_CENTER; sleep 3; b=$(pastille)
   apres=${b#*profil=}; apres=${apres%% |*}
   [[ $b != *who* && $apres != aucun && $apres != "$avant" ]] && ok "Profil changé depuis la TV" "$avant → $apres" "${b:0:140}" || ko "Profil changé depuis la TV" "${b:0:160}"
   cli set_rules '{"rules":{"enabled":false,"version":9002}}' >/dev/null; sleep 2; touche HOME
