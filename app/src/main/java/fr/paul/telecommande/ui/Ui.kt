@@ -287,9 +287,9 @@ object Ui {
         val store = ParentalStore(a)
         if (!store.hasPin) { ok(); return }
         val fa = a as? androidx.fragment.app.FragmentActivity
-        if (fa == null || !ParentAuth.available(a)) { askPinCode(a, reason, cancel, ok); return }
+        if (fa == null || !ParentAuth.available(a)) { askPinCode(a, reason, cancel, ok = ok); return }
         ParentAuth.prompt(fa, "Code parent", reason, onOk = ok,
-            onCode = { askPinCode(a, reason, cancel, ok) },
+            onCode = { askPinCode(a, reason, cancel, ok = ok) },
             onNewFingerprint = {
                 askPinCode(a, "Une nouvelle empreinte a été ajoutée sur ce téléphone. Tapez le code parent une fois pour la confirmer.\n\n$reason", cancel) {
                     ParentAuth.reset(); ok()
