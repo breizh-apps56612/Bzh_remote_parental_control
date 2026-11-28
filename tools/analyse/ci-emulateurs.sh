@@ -94,24 +94,24 @@ r=$(cli nocert); [[ $r == *"refusé"* ]] && ok "Connexion sans certificat refus�
 r=$(cli status); [[ $r == *'"ok": false'* || $r == *"non appairé"* ]] && ok "Téléphone inconnu refusé" "${r:0:120}" || ko "Téléphone inconnu refusé" "$r"
 
 r=$(cli pair_start); info "Demande d'appairage" "${r:0:120}"
-sleep 4; cap $TV 02-tv-code-appairage
-code=""
-if command -v tesseract >/dev/null; then
-  code=$(tesseract "$OUT/captures/02-tv-code-appairage.png" - --psm 11 2>/dev/null | grep -oE '[0-9]{3} *[0-9]{3}' | head -1 | tr -d ' ')
-fi
-if [ ${#code} = 6 ]; then
-  faux=$(printf '%06d' $(( (10#$code + 1) % 1000000 )))
-  r=$(cli pair "$faux"); [[ $r == *'"ok": false'* || $r != *'"ok": true'* ]] && ok "Mauvais code d'appairage refusé" || ko "Mauvais code d'appairage refusé" "$r"
+# Code lu sur l'écran TV (lecture automatique, parfois fausse ou illisible) : jusqu'à 3 codes affichés, 3 lectures
+appaire=0; faux_fait=0; code=""
+for essai in 1 2 3; do
+  [ $essai = 1 ] || { sleep 5; cli pair_start >/dev/null; }
+  nom=02-tv-code-appairage; [ $essai = 1 ] || nom=$nom-$essai
+  sleep 4; cap $TV $nom
+  code=""; command -v tesseract >/dev/null && code=$(tesseract "$OUT/captures/$nom.png" - --psm $([ $essai = 2 ] && echo 6 || echo 11) 2>/dev/null | grep -oE '[0-9]{3} *[0-9]{3}' | head -1 | tr -d ' ')
+  if [ ${#code} != 6 ]; then info "Code illisible, nouvel essai" "essai $essai"; continue; fi
+  if [ $faux_fait = 0 ]; then
+    faux=$(printf '%06d' $(( (10#$code + 1) % 1000000 ))); faux_fait=1
+    r=$(cli pair "$faux"); [[ $r == *'"ok": false'* || $r != *'"ok": true'* ]] && ok "Mauvais code d'appairage refusé" || ko "Mauvais code d'appairage refusé" "$r"
+  fi
   r=$(cli pair "$code")
-  # Lecture automatique du code parfois fausse (un chiffre mal lu) : nouveau code affiché, nouvelle lecture (2 essais de plus)
-  for essai in 2 3; do
-    [[ $r == *'"ok": true'* ]] && break
-    info "Code mal lu, nouvel essai" "essai $essai (lu : $code)"
-    sleep 5; cli pair_start >/dev/null; sleep 4; cap $TV 02-tv-code-appairage-$essai
-    code=$(tesseract "$OUT/captures/02-tv-code-appairage-$essai.png" - --psm $([ $essai = 2 ] && echo 6 || echo 11) 2>/dev/null | grep -oE '[0-9]{3} *[0-9]{3}' | head -1 | tr -d ' ')
-    [ ${#code} = 6 ] && r=$(cli pair "$code")
-  done
-  if [[ $r == *'"ok": true'* && $r == *'"box_prouve_le_code": true'* ]]; then ok "Appairage SPAKE2 avec le code affiché"; else ko "Appairage SPAKE2 avec le code affiché" "$r"; fi
+  [[ $r == *'"ok": true'* ]] && { appaire=1; break; }
+  info "Code mal lu, nouvel essai" "essai $essai (lu : $code)"
+done
+if [ $appaire = 1 ]; then
+  if [[ $r == *'"box_prouve_le_code": true'* ]]; then ok "Appairage SPAKE2 avec le code affiché"; else ko "Appairage SPAKE2 avec le code affiché" "$r"; fi
   r=$(cli status); [[ $r == *'"ok": true'* ]] && ok "Téléphone appairé accepté" || ko "Téléphone appairé accepté" "${r:0:160}"
   # Activité : la TV envoie le détail des séances [appli, début, fin] (diagrammes du téléphone, Box 1.4.56)
   maint=$(( $(date +%s) * 1000 ))
@@ -152,7 +152,7 @@ except Exception as e: print("journal illisible", e)' > "$OUT/journaux/pastille.
   [[ $b != *who* && $apres != aucun && $apres != "$avant" ]] && ok "Profil changé depuis la TV" "$avant → $apres" "${b:0:140}" || ko "Profil changé depuis la TV" "${b:0:160}"
   cli set_rules '{"rules":{"enabled":false,"version":9002}}' >/dev/null; sleep 2; touche HOME
 else
-  info "Appairage non testé" "code illisible sur la capture (lecture automatique), voir 02-tv-code-appairage.png"
+  ko "Appairage SPAKE2 avec le code affiché" "code illisible ou faux après 3 essais (voir captures 02-tv-code-appairage*.png) : tests appairés non faits"
 fi
 
 # Un autre appareil ouvre 12 connexions muettes : le téléphone du parent doit toujours passer
